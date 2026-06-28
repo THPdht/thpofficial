@@ -30,7 +30,7 @@ export function Features() {
               className="brackets group relative overflow-hidden bg-ink-soft"
             >
               <span className="bracket-b" />
-              <div className="relative h-64 overflow-hidden sm:h-72">
+              <div className="relative aspect-[4/3] overflow-hidden">
                 <Image
                   src={f.image}
                   alt={f.title.replace("\n", " ")}
