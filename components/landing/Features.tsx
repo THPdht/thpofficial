@@ -15,7 +15,7 @@ export function Features() {
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 md:px-8">
         <div className="mb-12 text-center">
-          <h2 className="display text-3xl text-white sm:text-4xl md:text-5xl lg:text-6xl">
+          <h2 className="display text-3xl text-white sm:text-4xl md:text-5xl">
             Your Look Inside
           </h2>
           <p className="mt-4 font-mono text-xs uppercase tracking-[0.16em] text-white/60 sm:text-sm">

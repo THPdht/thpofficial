@@ -24,7 +24,7 @@ export function Booking() {
       <div className="mx-auto max-w-5xl px-4 md:px-8">
         <div className="mb-10 text-center">
           <p className="eyebrow mb-4">Book your call</p>
-          <h2 className="display text-3xl text-white sm:text-4xl md:text-5xl lg:text-6xl">
+          <h2 className="display text-3xl text-white sm:text-4xl md:text-5xl">
             All-In-One Guidance
           </h2>
           <p className="mt-4 font-mono text-xs uppercase tracking-[0.16em] text-white/60 sm:text-sm">

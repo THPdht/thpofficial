@@ -3,10 +3,17 @@ import Link from "next/link";
 import { Socials } from "./Socials";
 import { site } from "@/lib/site";
 
+const legalLinks = [
+  { label: "Privacy Policy", href: "/privacy" },
+  { label: "Terms of Service", href: "/terms" },
+  { label: "Medical Disclaimer", href: "/disclaimer" },
+  { label: "Refund Policy", href: "/refunds" },
+];
+
 export function Footer() {
   return (
     <footer className="relative z-10 border-t border-white/10 bg-ink text-white">
-      <div className="mx-auto flex max-w-7xl flex-col gap-8 px-6 py-14 md:flex-row md:items-center md:justify-between md:px-8">
+      <div className="mx-auto flex max-w-7xl flex-col gap-10 px-6 py-14 md:flex-row md:justify-between md:px-8">
         <div className="flex flex-col gap-4">
           <Image
             src="/images/thprebrandlogo2.png"
@@ -23,13 +30,19 @@ export function Footer() {
         </div>
 
         <div className="flex flex-col gap-3 font-mono text-xs uppercase tracking-[0.18em] text-white/60">
-          <Link href={site.applyHref} className="hover:text-white">Apply</Link>
-          <a href={site.bookingUrl} target="_blank" rel="noopener noreferrer" className="hover:text-white">
-            Book a Call
-          </a>
-          <span className="text-white/30">
-            © {new Date().getFullYear()} {site.domain}
-          </span>
+          <span className="text-white/30">Legal</span>
+          {legalLinks.map((l) => (
+            <Link key={l.href} href={l.href} className="hover:text-white">
+              {l.label}
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      <div className="border-t border-white/10">
+        <div className="mx-auto max-w-7xl px-6 py-6 font-mono text-[11px] uppercase tracking-[0.16em] text-white/30 md:px-8">
+          © {new Date().getFullYear()} {site.domain} · The Hormone Prophet. Not
+          medical advice — see our Medical Disclaimer.
         </div>
       </div>
     </footer>

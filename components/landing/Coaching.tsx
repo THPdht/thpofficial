@@ -1,52 +1,65 @@
 import Image from "next/image";
-import { Button } from "@/components/ui/Button";
 import { site } from "@/lib/site";
+import { SmokeBg } from "@/components/ui/SmokeBg";
 
 export function Coaching() {
-  // Checkout link if set (Stripe Payment Link), else send them to apply.
   const ctaHref = site.checkoutUrl || site.applyHref;
   const ctaExternal = Boolean(site.checkoutUrl);
 
   return (
-    <section className="relative overflow-hidden bg-ink-soft py-20 md:py-28">
-      <div className="mx-auto max-w-7xl px-4 md:px-8">
+    <section className="relative overflow-hidden py-20 md:py-28">
+      <SmokeBg opacity={85} />
+      <div className="relative z-10 mx-auto max-w-6xl px-4 md:px-8">
         <div className="mb-12 text-center">
-          <h2 className="display mx-auto max-w-4xl text-4xl text-white sm:text-5xl md:text-6xl">
+          <h2 className="display mx-auto max-w-3xl text-3xl text-white sm:text-4xl md:text-5xl">
             Enough guessing. It&apos;s time to{" "}
             <span className="text-red">optimize.</span>
           </h2>
         </div>
 
-        <div className="grid items-center gap-10 overflow-hidden rounded-lg border border-white/10 bg-ink lg:grid-cols-2">
-          <div className="brackets relative aspect-square w-full lg:aspect-auto lg:h-full lg:min-h-[480px]">
+        <div className="grid items-stretch gap-px overflow-hidden border border-white/10 bg-white/10 lg:grid-cols-2">
+          {/* Left: full THP logo, contained so nothing is cropped. */}
+          <div className="brackets relative flex items-center justify-center bg-ink p-10 md:p-14">
             <span className="bracket-b" />
-            <Image
-              src="/images/1-1thp.png"
-              alt="1-on-1 coaching with The Hormone Prophet"
-              fill
-              sizes="(max-width: 1024px) 100vw, 50vw"
-              className="object-cover"
-            />
+            <div className="relative h-48 w-full sm:h-60 lg:h-72">
+              <Image
+                src="/images/1-1thp.png"
+                alt="1-on-1 with The Hormone Prophet"
+                fill
+                sizes="(max-width: 1024px) 100vw, 50vw"
+                className="object-contain"
+              />
+            </div>
           </div>
 
-          <div className="px-6 py-10 md:px-10">
-            <p className="eyebrow mb-4">1-on-1 Coaching</p>
-            <h3 className="display text-3xl text-white sm:text-4xl lg:text-5xl">
-              The last all-in-one coaching program that actually works.
+          {/* Right: copy replicated word-for-word + price + Apply Now. */}
+          <div className="bg-ink px-7 py-10 md:px-10 md:py-12">
+            <h3 className="display text-3xl leading-[1.05] text-white sm:text-4xl">
+              1:1 With THP
             </h3>
-            <p className="mt-5 font-mono text-sm leading-relaxed text-white/70">
-              Bloodwork-driven protocols, daily check-ins, three calls a week, and
-              real-time adjustments. A complete biological recalibration — no
-              templates, no guesswork, built entirely around you.
+            <p className="mt-5 font-mono text-sm font-bold uppercase leading-relaxed tracking-[0.06em] text-white">
+              The last powerful all in one coaching program that actually works.
             </p>
-            <div className="mt-8 flex flex-col gap-4 sm:flex-row">
-              <Button href={ctaHref} variant="primary" external={ctaExternal}>
-                Apply Now
-              </Button>
-              <Button href={site.bookingUrl} variant="outlineLight" external>
-                Book a Call
-              </Button>
-            </div>
+            <p className="mt-4 font-mono text-xs uppercase leading-relaxed tracking-[0.06em] text-white/60">
+              No pills. No fake hacks. Just raw, structured transformation through
+              backed studies and ancestral truth, built to make you feel powerful
+              again.
+            </p>
+
+            <p className="mt-8">
+              <span className="display text-5xl text-white sm:text-6xl">$1500</span>
+              <span className="font-mono text-lg text-white/50">/month</span>
+            </p>
+
+            <a
+              href={ctaHref}
+              {...(ctaExternal
+                ? { target: "_blank", rel: "noopener noreferrer" }
+                : {})}
+              className="mt-8 flex w-full items-center justify-center gap-3 bg-white px-6 py-4 font-mono text-sm font-bold uppercase tracking-[0.16em] text-ink transition-colors duration-300 hover:bg-cream"
+            >
+              Apply Now <span className="text-red">&raquo;</span>
+            </a>
           </div>
         </div>
       </div>
