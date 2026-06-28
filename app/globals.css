@@ -1,26 +1,45 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   THP brand system — cream / black / red / white.
+   Tailwind v4 is CSS-first: brand tokens live here in @theme and become
+   utilities (bg-cream, text-red, font-display, etc.).
+--------------------------------------------------------------------------- */
+@theme {
+  --color-cream: #f4efe6;
+  --color-cream-dark: #e9e1d3;
+  --color-ink: #0e0e0e;
+  --color-ink-soft: #1a1a1a;
+  --color-red: #c8102e;
+  --color-red-dark: #9e0c24;
+  --color-white: #ffffff;
+  --color-muted: #6b6359;
+
+  --font-display: var(--font-playfair), Georgia, serif;
+  --font-mono: var(--font-dm-mono), ui-monospace, monospace;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: var(--color-cream);
+  --foreground: var(--color-ink);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-mono);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Editorial uppercase eyebrow label used above section headings. */
+.eyebrow {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-size: 0.72rem;
+  color: var(--color-red);
 }
