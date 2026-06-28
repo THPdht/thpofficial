@@ -25,9 +25,24 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://thpofficial.com"),
   title: "THP — The Hormone Prophet",
   description:
     "Rebuild your hormones, physique, and energy from the ground up. A biological transformation system built on bloodwork, metabolism, and human chemistry.",
+  openGraph: {
+    title: "THP — The Hormone Prophet",
+    description:
+      "Rebuild your hormones, physique, and energy from the ground up.",
+    url: "https://thpofficial.com",
+    siteName: "The Hormone Prophet",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "THP — The Hormone Prophet",
+    description:
+      "Rebuild your hormones, physique, and energy from the ground up.",
+  },
 };
 
 export default function RootLayout({
