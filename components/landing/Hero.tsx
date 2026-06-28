@@ -2,12 +2,13 @@ import Image from "next/image";
 import { Button } from "@/components/ui/Button";
 import { site } from "@/lib/site";
 
+// Pinned hero: fixed to the viewport (z-0). The page content below has a
+// 100vh spacer then scrolls up over it (see app/page.tsx), fully covering it.
 export function Hero() {
   return (
-    <section className="relative flex min-h-[100svh] items-end justify-center overflow-hidden bg-ink text-center text-white">
-      {/* Full-bleed background image. */}
+    <section className="fixed inset-0 z-0 flex items-end justify-center overflow-hidden bg-ink text-center text-white">
       <Image
-        src="/images/thprebrandbackground.png"
+        src="/images/thprealbackgroun.png"
         alt=""
         fill
         priority

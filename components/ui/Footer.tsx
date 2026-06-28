@@ -5,7 +5,7 @@ import { site } from "@/lib/site";
 
 export function Footer() {
   return (
-    <footer className="border-t border-white/10 bg-ink text-white">
+    <footer className="relative z-10 border-t border-white/10 bg-ink text-white">
       <div className="mx-auto flex max-w-7xl flex-col gap-8 px-6 py-14 md:flex-row md:items-center md:justify-between md:px-8">
         <div className="flex flex-col gap-4">
           <Image

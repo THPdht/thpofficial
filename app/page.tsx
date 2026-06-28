@@ -8,12 +8,21 @@ import { Faq } from "@/components/landing/Faq";
 export default function Home() {
   return (
     <>
+      {/* Pinned hero stays fixed in the background. */}
       <Hero />
-      <Transformations />
-      <Features />
-      <Coaching />
-      <Booking />
-      <Faq />
+
+      {/* Spacer reveals the hero for the first viewport. */}
+      <div className="h-screen" aria-hidden />
+
+      {/* Everything below scrolls up over the hero, fully covering it.
+          relative + z-10 + solid bg = the curtain that hides the hero. */}
+      <div className="relative z-10 bg-ink shadow-[0_-40px_80px_rgba(0,0,0,0.6)]">
+        <Transformations />
+        <Features />
+        <Coaching />
+        <Booking />
+        <Faq />
+      </div>
     </>
   );
 }
