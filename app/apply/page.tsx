@@ -15,10 +15,10 @@ export default function ApplyPage() {
     <section className="bg-cream py-28 md:py-36">
       <Container className="max-w-2xl text-center">
         <p className="eyebrow mb-5">Application</p>
-        <h1 className="font-display text-4xl leading-tight text-ink md:text-5xl">
+        <h1 className="display text-4xl leading-tight text-ink md:text-5xl">
           The application opens here soon.
         </h1>
-        <p className="mt-6 text-lg leading-relaxed text-muted">
+        <p className="mt-6 font-mono text-sm leading-relaxed text-ink/60">
           We&apos;re putting the finishing touches on the qualification form. In the
           meantime, book a call directly and we&apos;ll start the conversation.
         </p>
@@ -26,7 +26,7 @@ export default function ApplyPage() {
           <Button href={site.bookingUrl} variant="primary" external>
             Book a Call
           </Button>
-          <Button href="/" variant="ghost">
+          <Button href="/" variant="outlineDark">
             Back Home
           </Button>
         </div>

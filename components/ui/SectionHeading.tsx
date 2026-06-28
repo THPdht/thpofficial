@@ -4,32 +4,24 @@ export function SectionHeading({
   eyebrow,
   title,
   intro,
-  align = "left",
-  dark = false,
+  align = "center",
+  className = "",
 }: {
   eyebrow?: string;
   title: ReactNode;
   intro?: ReactNode;
   align?: "left" | "center";
-  dark?: boolean;
+  className?: string;
 }) {
-  const alignment = align === "center" ? "text-center mx-auto" : "text-left";
+  const alignment = align === "center" ? "text-center mx-auto items-center" : "text-left";
   return (
-    <div className={`max-w-3xl ${alignment}`}>
+    <div className={`flex flex-col ${alignment} ${className}`}>
       {eyebrow && <p className="eyebrow mb-4">{eyebrow}</p>}
-      <h2
-        className={`font-display text-4xl md:text-5xl leading-[1.05] ${
-          dark ? "text-cream" : "text-ink"
-        }`}
-      >
+      <h2 className="display text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-white max-w-4xl">
         {title}
       </h2>
       {intro && (
-        <p
-          className={`mt-6 text-base md:text-lg leading-relaxed ${
-            dark ? "text-cream/70" : "text-muted"
-          }`}
-        >
+        <p className="mt-5 max-w-2xl font-mono text-sm uppercase tracking-[0.12em] text-white/60">
           {intro}
         </p>
       )}

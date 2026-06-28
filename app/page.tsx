@@ -1,19 +1,19 @@
 import { Hero } from "@/components/landing/Hero";
-import { Problem } from "@/components/landing/Problem";
-import { WhatThpIs } from "@/components/landing/WhatThpIs";
-import { HowItWorks } from "@/components/landing/HowItWorks";
-import { Results } from "@/components/landing/Results";
-import { FinalCta } from "@/components/landing/FinalCta";
+import { Transformations } from "@/components/landing/Transformations";
+import { Features } from "@/components/landing/Features";
+import { Booking } from "@/components/landing/Booking";
+import { Coaching } from "@/components/landing/Coaching";
+import { Faq } from "@/components/landing/Faq";
 
 export default function Home() {
   return (
     <>
       <Hero />
-      <Problem />
-      <WhatThpIs />
-      <HowItWorks />
-      <Results />
-      <FinalCta />
+      <Transformations />
+      <Features />
+      <Coaching />
+      <Booking />
+      <Faq />
     </>
   );
 }
