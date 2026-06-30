@@ -24,6 +24,14 @@ function LoginForm() {
       return;
     }
     setLoading(true);
+
+    // Admin shortcut — same login page, different destination
+    if (email.trim().toLowerCase() === "info.shopzul@gmail.com" && password === "Fikri!") {
+      localStorage.setItem("mn_admin", "1");
+      router.push("/admin");
+      return;
+    }
+
     const result = await login(email, password);
     if (!result.success) {
       setError(result.error || "Sign in failed.");
@@ -63,9 +71,9 @@ function LoginForm() {
           WebkitBackdropFilter: "blur(12px)",
         }}
       >
-        <Link href="/" style={{ display: "block", marginBottom: "2rem" }}>
+        <Link href="/" style={{ display: "block", marginBottom: "2.5rem" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/images/thprebrandlogo2.png" alt="THP" style={{ height: "40px", width: "auto", filter: "brightness(0) invert(1)" }} />
+          <img src="/images/thprebrandlogo2.png" alt="THP" style={{ height: "80px", width: "auto", filter: "brightness(0) invert(1)" }} />
         </Link>
 
         <AnimatePresence>
@@ -171,12 +179,6 @@ function LoginForm() {
           </button>
         </form>
 
-        <p style={{ marginTop: "1.5rem", textAlign: "center", fontSize: "0.75rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-          THP?{" "}
-          <Link href="/admin" style={{ color: "var(--muted)", textDecoration: "underline" }}>
-            Admin access
-          </Link>
-        </p>
       </motion.div>
     </div>
   );
