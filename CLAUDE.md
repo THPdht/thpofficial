@@ -9,7 +9,6 @@ This file is read automatically at the start of every Claude Code session in ~/t
 The unified THP (The Hormone Prophet) platform at **thpofficial.com**. One Next.js 16 App Router repo containing the public marketing site (already live) plus a full coaching portal (auth, onboarding, dashboard, admin, AI protocols, daily tracker, push, messaging).
 
 **Stack:** Next.js 16 / TypeScript / Tailwind v4 / Supabase / Anthropic claude-sonnet-4-6 / Stripe / Web Push  
-**Hosted:** Vercel (auto-deploys from GitHub main branch)  
 **Supabase project:** `mzqguefjrsvpgycutanu.supabase.co`  
 **Path alias:** `@/*` → project root (`./`)
 
@@ -17,142 +16,63 @@ The unified THP (The Hormone Prophet) platform at **thpofficial.com**. One Next.
 
 ## Build Status
 
-**PASSING** — `npm run build` → 34 pages, 0 TypeScript errors. Last commit: `f12614a`.
+**PASSING** — `npm run build` → 34 pages, 0 TypeScript errors. Last commit: `cc28c38` (2026-06-30).
+
+---
+
+## Deployment — IMPORTANT
+
+**GitHub auto-deploy is broken.** Vercel Hobby plan blocks commits from non-owner GitHub accounts (Taz = h1azi, but Vercel owner = Ali/infoshopzul). Making repo public didn't fix it.
+
+**Always deploy via CLI after every git push:**
+```bash
+npx vercel@latest --token $VERCEL_DEPLOY_TOKEN --prod --yes --scope thp-digital
+```
+Run from `/home/t8z1/thpofficial`. Takes ~30 seconds. Uses Ali's token → deploys as project owner.
+
+---
+
+## Admin Access
+
+- URL: thpofficial.com/login (same page as clients)
+- Email: `info.shopzul@gmail.com`
+- Password: `Fikri!`
+- Result: redirects to /admin (Command Center)
+
+Hardcoded in `app/admin/page.tsx` (lines 15-16) AND `app/login/page.tsx` (handleSubmit admin check).
 
 ---
 
 ## .env.local Status
 
-File exists at `~/thpofficial/.env.local`. Gitignored (`.env*` rule). **Do not commit it.**
+File exists at `~/thpofficial/.env.local`. Gitignored. **Never commit it.**  
+All vars also set in Vercel dashboard ✓ (done 2026-06-30).
 
 ### Filled in
 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (test), `STRIPE_SECRET_KEY` (test — live keys commented in file), `NOTION_TOKEN`, `NOTION_DATABASE_ID`, `NEXT_PUBLIC_EMAILJS_*`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `CRON_SECRET`, `INTERNAL_API_KEY`, `NEXT_PUBLIC_INTERNAL_API_KEY`, `NEXT_PUBLIC_APP_URL`, `ADMIN_PASSWORD`
 
-### Intentionally blank — do not touch
+### Intentionally blank
 | Var | Reason |
 |---|---|
-| `STRIPE_WEBHOOK_SECRET` | Only exists after adding webhook endpoint in Stripe Dashboard post-deploy |
-| `NOTION_PROTOCOLS_PAGE_ID` | Optional — parent Notion page for protocol sub-pages; fill when THP provides it |
+| `STRIPE_WEBHOOK_SECRET` | Add after creating webhook in Stripe Dashboard |
+| `NOTION_PROTOCOLS_PAGE_ID` | Optional — fill when THP provides parent page ID |
 
 ---
 
-## Exact Next Steps (in order)
+## Current State (as of 2026-06-30)
 
-### 1. Run SQL schema in Supabase
-Dashboard → https://mzqguefjrsvpgycutanu.supabase.co → SQL Editor → paste and run:
+### Live and working
+- Landing page, /apply (creates account at end), /login (unified admin+client), /onboarding, /dashboard, /admin
+- 3 clients in Supabase: Vasilije Radovanovic, Jay Algoe, Elias Christensen (default password in .env.local)
+- Missing: Jonah Campbell + Diego Zavala (need emails from THP)
+- CSS vars fully defined in globals.css (portal design system)
+- Admin: THP logo, Command Center heading, visible section dividers
 
-```sql
-create table if not exists users (
-  email text primary key,
-  name text not null,
-  password text not null,
-  status text not null default 'new',
-  streak int default 0,
-  longest_streak int default 0,
-  joined_at date default current_date,
-  diagnostic_data jsonb default '{}'
-);
-create table if not exists presence (
-  email text primary key references users(email),
-  last_seen timestamptz default now()
-);
-create table if not exists messages (
-  id uuid primary key default gen_random_uuid(),
-  user_email text references users(email),
-  "from" text not null,
-  text text not null,
-  ts timestamptz default now(),
-  read boolean default false,
-  attachment_url text,
-  attachment_type text,
-  attachment_name text
-);
-create table if not exists protocols (
-  id uuid primary key default gen_random_uuid(),
-  user_email text references users(email),
-  stage int default 1,
-  title text,
-  content jsonb,
-  notion_page_id text,
-  created_at timestamptz default now()
-);
-create table if not exists tracker_questions (
-  id uuid primary key default gen_random_uuid(),
-  user_email text references users(email),
-  label text not null,
-  hint text,
-  type text not null,
-  category text not null,
-  weight numeric default 1,
-  optional boolean default false
-);
-create table if not exists tracker_responses (
-  id uuid primary key default gen_random_uuid(),
-  user_email text references users(email),
-  question_id uuid references tracker_questions(id),
-  value jsonb,
-  date date default current_date
-);
-create table if not exists push_subscriptions (
-  id uuid primary key default gen_random_uuid(),
-  user_email text references users(email),
-  subscription jsonb not null,
-  endpoint text,
-  created_at timestamptz default now()
-);
-create table if not exists application_forms (
-  id uuid primary key default gen_random_uuid(),
-  full_name text, gender text, current_state_goals text[],
-  other_goal text, most_important_goal text, current_weight text,
-  height text, age text, body_fat_current text, body_fat_goal text,
-  body_fat_duration text, symptom_severities jsonb, other_symptom text,
-  symptom_duration text, bloodwork_status text, testosterone_level text,
-  last_labs_date text, previous_attempts text[], supplements_used text,
-  what_tried text, how_long_stuck text, why_stopped_working text,
-  why_still_looking text, hours_per_week text, current_training_program text,
-  medical_conditions text, stress_sleep_situation text, consequences text,
-  life_solved text, how_found_us text, commitment_level int,
-  investment_range text, was_referred text, referred_by text,
-  email text, phone text, instagram text,
-  created_at timestamptz default now()
-);
-create table if not exists referrals (
-  id uuid primary key default gen_random_uuid(),
-  code text,
-  referred_email text,
-  referrer_email text,
-  created_at timestamptz default now(),
-  paid_out_at timestamptz
-);
-create table if not exists access_logs (
-  id uuid primary key default gen_random_uuid(),
-  email text,
-  ip text,
-  user_agent text,
-  reason text,
-  ts timestamptz default now()
-);
-alter publication supabase_realtime add table users;
-alter publication supabase_realtime add table messages;
-```
-
-### 2. Test locally
-```bash
-npm run dev
-```
-Check: http://localhost:3000/apply, /register, /login, /dashboard, /admin
-
-### 3. Deploy to Vercel
-Add all filled vars from `.env.local` to Vercel → Settings → Environment Variables. Push to GitHub → auto-deploys.
-
-### 4. Add Stripe webhook (post-deploy only)
-Stripe Dashboard → Developers → Webhooks → Add endpoint:
-- URL: `https://thpofficial.com/api/webhooks/stripe`
-- Event: `checkout.session.completed`
-- Copy `whsec_...` → add as `STRIPE_WEBHOOK_SECRET` in Vercel env vars
-
-### 5. Client migration (future — not urgent)
-Import existing clients from Skool CSV + Stripe + Notion. Script `scripts/migrate.ts` not yet written.
+### Pending — next session
+1. **Skool + Stripe client import** (~100 clients) — scripts not yet written
+2. **Telegram automation retrofit** — existing n8n flows in ~/Zanoto-Auto/ use Telegram; need to wire to portal instead (protocol delivery via push notification to /dashboard)
+3. **Stripe data in admin** — show per-client subscription/payment status pulled from Stripe API
+4. **Verify client dashboard** — test login as Vasilije/Jay/Elias, confirm dashboard loads correctly
 
 ---
 
@@ -160,20 +80,20 @@ Import existing clients from Skool CSV + Stripe + Notion. Script `scripts/migrat
 
 ```
 PUBLIC
-/                  Landing (live)
-/apply             14-step coaching application → application_forms + EmailJS
+/                  Landing
+/apply             15-step application → creates user account at end
 /referral          ?ref=CODE → localStorage → /apply
 
-AUTH
-/register  /login
-/onboarding        40-field THP intake form (post-payment)
+AUTH  
+/login             Unified: clients → /dashboard, admin → /admin
+/onboarding        40-field THP intake form
 /onboarding/pending
 
 PORTAL
-/dashboard         Today tracker / Protocol / Book / Chat
-/admin             Admin panel (ADMIN_PASSWORD protected)
+/dashboard         Protocol / Tracker / Book / Chat
+/admin             Command Center (THP admin only)
 
-API (13 routes under /api/)
+API (routes under /api/)
 generate-protocol, webhooks/stripe, chat, transcribe,
 tracker-submit/response/questions/summary/generate/daily/cron,
 push-subscribe/push-send, log-access, notion-protocol
@@ -185,19 +105,22 @@ push-subscribe/push-send, log-access, notion-protocol
 
 | File | Purpose |
 |---|---|
-| `lib/auth.ts` | Auth + full DiagnosticData type (40 THP intake fields) |
-| `lib/supabase.ts` | Lazy anon client |
+| `lib/auth.ts` | Auth + DiagnosticData type (40 intake fields) |
+| `lib/supabase.ts` | Lazy anon Supabase client |
 | `lib/supabaseAdmin.ts` | Lazy service-role client (server routes only) |
 | `lib/protocols.ts` | PROTOCOLS map + DEFAULT_TRACKER_FIELDS |
-| `lib/apiAuth.ts` | requireApiKey() for internal routes |
-| `app/globals.css` | Brand CSS vars |
+| `lib/site.ts` | Brand strings, cal.com link, nav links |
+| `app/globals.css` | Brand CSS vars + portal design system vars |
+| `app/admin/page.tsx` | Full admin Command Center |
+| `scripts/import-notion-clients.ts` | One-time Notion client import (already run) |
 
 ---
 
 ## Brand Rules
 
-- Primary: `var(--color-red)` = `#c8102e`
+- THP red: `var(--color-red)` = `#c8102e` / `var(--primary)` in portal
 - Background: `var(--color-ink)` = `#0a0a0a`
-- Never use `oklch()` inline — always use CSS vars or hex
+- Portal CSS vars defined in `:root` in globals.css (--bg, --surface, --border, --dim, --muted, --ink etc.)
 - Fonts: Holtwood One SC (display), Libre Franklin (body), DM Mono (mono)
-- Language: English only unless Taz explicitly asks for French
+- Language: English only
+- Logo image: `/images/thprebrandlogo2.png`
