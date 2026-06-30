@@ -60,6 +60,12 @@ export function Nav() {
         </nav>
 
         <div className="hidden items-center gap-3 sm:flex">
+          <Link
+            href="/login"
+            className="font-mono text-xs uppercase tracking-[0.18em] text-white/60 transition-colors hover:text-white/90"
+          >
+            Sign In
+          </Link>
           <Button
             onClick={() => document.getElementById("booking")?.scrollIntoView({ behavior: "smooth" })}
             variant="outlineLight"
@@ -99,6 +105,7 @@ export function Nav() {
             <div className="mt-2 flex flex-col gap-3">
               <Button href={site.applyHref} variant="primary">Apply Now</Button>
               <Button onClick={() => { setMenuOpen(false); document.getElementById("booking")?.scrollIntoView({ behavior: "smooth" }); }} variant="outlineLight" className="cursor-pointer">Book a Call</Button>
+              <Link href="/login" onClick={() => setMenuOpen(false)} className="font-mono text-sm uppercase tracking-[0.18em] text-white/60 hover:text-white/90 text-center py-1">Sign In</Link>
             </div>
             <Socials className="mt-2" />
           </div>
