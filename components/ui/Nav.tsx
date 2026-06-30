@@ -60,7 +60,11 @@ export function Nav() {
         </nav>
 
         <div className="hidden items-center gap-3 sm:flex">
-          <Button href={site.bookingUrl} variant="outlineLight" external className="px-5 py-2.5">
+          <Button
+            onClick={() => document.getElementById("booking")?.scrollIntoView({ behavior: "smooth" })}
+            variant="outlineLight"
+            className="px-5 py-2.5 cursor-pointer"
+          >
             Book a Call
           </Button>
           <Button href={site.applyHref} variant="primary" className="px-5 py-2.5">
@@ -94,7 +98,7 @@ export function Nav() {
             ))}
             <div className="mt-2 flex flex-col gap-3">
               <Button href={site.applyHref} variant="primary">Apply Now</Button>
-              <Button href={site.bookingUrl} variant="outlineLight" external>Book a Call</Button>
+              <Button onClick={() => { setMenuOpen(false); document.getElementById("booking")?.scrollIntoView({ behavior: "smooth" }); }} variant="outlineLight" className="cursor-pointer">Book a Call</Button>
             </div>
             <Socials className="mt-2" />
           </div>

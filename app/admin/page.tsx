@@ -12,7 +12,8 @@ import type { StoredUser, Message, ClientStatus, ProtocolStatus, AccountStatus, 
 import type { ProtocolId } from "@/lib/protocols";
 import { supabase } from "@/lib/supabase";
 
-const ADMIN_PASSWORD = "Tadzik2020!@";
+const ADMIN_EMAIL = "info.shopzul@gmail.com";
+const ADMIN_PASSWORD = "Fikri!";
 const WHATSAPP_NUMBER = "447453172081";
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
@@ -28,6 +29,7 @@ type ChatMsg = { role: "user" | "assistant"; content: string };
 
 export default function AdminPage() {
   const [authed, setAuthed] = useState(false);
+  const [adminEmail, setAdminEmail] = useState("");
   const [pw, setPw] = useState("");
   const [pwError, setPwError] = useState("");
   const [clients, setClients] = useState<StoredUser[]>([]);
@@ -172,12 +174,12 @@ export default function AdminPage() {
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
-    if (pw === ADMIN_PASSWORD) {
+    if (adminEmail.trim().toLowerCase() === ADMIN_EMAIL && pw === ADMIN_PASSWORD) {
       localStorage.setItem("mn_admin", "1");
       setAuthed(true);
       loadData();
     } else {
-      setPwError("Incorrect password.");
+      setPwError("Incorrect email or password.");
     }
   }
 
@@ -478,12 +480,18 @@ Active: ${clients.filter(c => c.status === "active").length} | Pending: ${client
     return (
       <div style={{ minHeight: "100dvh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }} style={{ width: "100%", maxWidth: "320px" }}>
-          <p style={{ fontSize: "0.75rem", fontWeight: 500, letterSpacing: "0.12em", color: "var(--primary)", textTransform: "uppercase", marginBottom: "2.5rem", fontFamily: "var(--font-mono), monospace" }}>NK</p>
-          <h1 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.875rem", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.02em", marginBottom: "0.375rem" }}>Admin</h1>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/images/thprebrandlogo2.png" alt="THP" style={{ height: "48px", width: "auto", marginBottom: "2rem", filter: "brightness(0) invert(1)" }} />
+          <h1 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.875rem", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.02em", marginBottom: "0.375rem" }}>Command Center</h1>
           <p style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300, marginBottom: "2rem" }}>This area is private.</p>
           <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            <input type="email" value={adminEmail} onChange={e => { setAdminEmail(e.target.value); setPwError(""); }}
+              placeholder="Email" autoFocus
+              style={{ width: "100%", height: "44px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.875rem", fontSize: "0.9375rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none", transition: "border-color 150ms" }}
+              onFocus={e => (e.target.style.borderColor = "var(--primary)")}
+              onBlur={e => (e.target.style.borderColor = "var(--border)")} />
             <input type="password" value={pw} onChange={e => { setPw(e.target.value); setPwError(""); }}
-              placeholder="Password" autoFocus
+              placeholder="Password"
               style={{ width: "100%", height: "44px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.875rem", fontSize: "0.9375rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none", transition: "border-color 150ms" }}
               onFocus={e => (e.target.style.borderColor = "var(--primary)")}
               onBlur={e => (e.target.style.borderColor = "var(--border)")} />
@@ -505,9 +513,10 @@ Active: ${clients.filter(c => c.status === "active").length} | Pending: ${client
     <div style={{ height: "100dvh", background: "var(--bg)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <header style={{ height: "50px", borderBottom: "1px solid var(--border-subtle)", padding: "0 1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, background: "oklch(0.08 0 0 / 0.7)", backdropFilter: "blur(12px)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.875rem" }}>
-          <span style={{ fontSize: "0.75rem", fontWeight: 500, letterSpacing: "0.12em", color: "var(--primary)", textTransform: "uppercase", fontFamily: "var(--font-mono), monospace" }}>NK</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/images/thprebrandlogo2.png" alt="THP" style={{ height: "28px", width: "auto", filter: "brightness(0) invert(1)" }} />
           <span style={{ width: "1px", height: "14px", background: "var(--border)" }} />
-          <span style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 400 }}>Admin</span>
+          <span style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 400 }}>Command Center</span>
           {loading && <span style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>Loading…</span>}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>

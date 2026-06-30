@@ -14,12 +14,14 @@ const variants: Record<Variant, string> = {
 
 export function Button({
   href,
+  onClick,
   children,
   variant = "primary",
   external = false,
   className = "",
 }: {
-  href: string;
+  href?: string;
+  onClick?: () => void;
   children: ReactNode;
   variant?: Variant;
   external?: boolean;
@@ -27,6 +29,13 @@ export function Button({
 }) {
   const classes = `${base} ${variants[variant]} ${className}`;
 
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={classes}>
+        {children}
+      </button>
+    );
+  }
   if (external) {
     return (
       <a href={href} target="_blank" rel="noopener noreferrer" className={classes}>
@@ -35,7 +44,7 @@ export function Button({
     );
   }
   return (
-    <Link href={href} className={classes}>
+    <Link href={href!} className={classes}>
       {children}
     </Link>
   );
