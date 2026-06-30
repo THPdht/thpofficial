@@ -1,9 +1,11 @@
 "use client";
 import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function RegisterRedirect() {
+  const router = useRouter();
   useEffect(() => {
-    window.location.replace("https://onboarding.thp.coach");
-  }, []);
+    router.replace("/apply");
+  }, [router]);
   return null;
 }

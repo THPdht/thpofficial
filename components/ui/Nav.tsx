@@ -1,15 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "./Button";
 import { Socials } from "./Socials";
 import { site, navLinks } from "@/lib/site";
 
+const PORTAL_ROUTES = ["/admin", "/dashboard", "/login", "/register", "/onboarding"];
+
 export function Nav() {
+  const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const isPortal = PORTAL_ROUTES.some(r => pathname === r || pathname.startsWith(r + "/"));
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -17,6 +23,8 @@ export function Nav() {
     window.addEventListener("scroll", onScroll);
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  if (isPortal) return null;
 
   return (
     <header

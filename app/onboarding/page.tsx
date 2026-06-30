@@ -158,7 +158,7 @@ export default function OnboardingPage() {
   const [section, setSection] = useState(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
-  const [authMode, setAuthMode] = useState<"check" | "register" | "login">("check");
+  const [authMode, setAuthMode] = useState<"check" | "register" | "login" | "nudge">("check");
   const [authForm, setAuthForm] = useState({ name: "", email: "", password: "" });
   const [authError, setAuthError] = useState("");
 
@@ -168,7 +168,7 @@ export default function OnboardingPage() {
     if (cached.status === "pending") { router.replace("/onboarding/pending"); return; }
     if (cached.status === "active" || cached.status === "alumni") { router.replace("/dashboard"); return; }
     setUser({ email: cached.email, password: cached.password, name: cached.name });
-    setAuthMode("check");
+    setAuthMode("nudge");
     if (cached.diagnosticData && Object.keys(cached.diagnosticData).length > 0) {
       setForm(prev => ({ ...prev, ...cached.diagnosticData }));
     }
@@ -232,6 +232,34 @@ export default function OnboardingPage() {
   const err = (k: keyof FormData) => errors[k] ? (
     <p style={{ color: "#ef4444", fontSize: "0.75rem", marginTop: "0.25rem" }}>{errors[k]}</p>
   ) : null;
+
+  if (authMode === "nudge" && user) {
+    return (
+      <div style={{ minHeight: "100dvh", background: bg, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
+        <div style={{ width: "100%", maxWidth: "420px" }}>
+          <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "0.72rem", letterSpacing: "0.22em", color: "var(--color-gold)", textTransform: "uppercase", marginBottom: "1.5rem" }}>THP Client Portal</p>
+          <h1 style={{ fontFamily: "var(--font-display), sans-serif", fontSize: "1.75rem", fontWeight: 400, color: ink, marginBottom: "0.5rem", textTransform: "uppercase" }}>
+            Welcome back, {user.name.split(" ")[0]}.
+          </h1>
+          <p style={{ color: muted, fontSize: "0.9rem", marginBottom: "2rem", fontFamily: "var(--font-body), sans-serif", lineHeight: 1.6 }}>
+            Your application is in. The faster you complete your intake profile, the sooner THP can review and reach out.
+          </p>
+          <button
+            onClick={() => setAuthMode("check")}
+            style={{ width: "100%", padding: "0.875rem", background: primary, color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body), sans-serif" }}
+          >
+            Complete My Intake →
+          </button>
+          <button
+            onClick={() => { signOut(); router.replace("/"); }}
+            style={{ display: "block", margin: "1rem auto 0", background: "none", border: "none", color: muted, fontSize: "0.8rem", cursor: "pointer", fontFamily: "var(--font-body), sans-serif" }}
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (authMode === "register" || authMode === "login") {
     return (

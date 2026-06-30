@@ -57,7 +57,7 @@ export default function PendingPage() {
                 <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)", marginBottom: "0.2rem" }}>Curious what your dashboard will look like?</p>
                 <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>See a preview while you wait.</p>
               </div>
-              <a href="/demo" style={{ flexShrink: 0, height: "36px", padding: "0 1rem", background: "none", border: "1px solid var(--border)", borderRadius: "7px", color: "var(--muted)", fontSize: "0.8125rem", fontWeight: 500, textDecoration: "none", display: "inline-flex", alignItems: "center", transition: "border-color 150ms, color 150ms" }}
+              <a href="/dashboard" style={{ flexShrink: 0, height: "36px", padding: "0 1rem", background: "none", border: "1px solid var(--border)", borderRadius: "7px", color: "var(--muted)", fontSize: "0.8125rem", fontWeight: 500, textDecoration: "none", display: "inline-flex", alignItems: "center", transition: "border-color 150ms, color 150ms" }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--primary)"; e.currentTarget.style.color = "var(--primary)"; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--muted)"; }}>
                 Preview →

@@ -123,7 +123,7 @@ function LoginForm() {
           fontFamily: "var(--font-ui), system-ui, sans-serif",
         }}>
           New here?{" "}
-          <Link href="/register" style={{ color: "var(--primary)", textDecoration: "none" }}>
+          <Link href="/apply" style={{ color: "var(--primary)", textDecoration: "none" }}>
             Create an account
           </Link>
         </p>

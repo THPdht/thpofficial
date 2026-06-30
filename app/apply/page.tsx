@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
+import { register } from "@/lib/auth";
 import emailjs from "@emailjs/browser";
 
 const EMAILJS_SERVICE = "service_y2wv9j9";
@@ -86,6 +87,8 @@ type FormState = {
   email: string;
   phone: string;
   instagram: string;
+  password: string;
+  confirmPassword: string;
 };
 
 const EMPTY: FormState = {
@@ -97,6 +100,7 @@ const EMPTY: FormState = {
   hoursPerWeek: "", currentTrainingProgram: "", medicalConditions: "", stressSleepSituation: "",
   consequences: "", lifeSolved: "", howFoundUs: "", commitmentLevel: 7,
   investmentRange: "", wasReferred: "", referredBy: "", email: "", phone: "", instagram: "",
+  password: "", confirmPassword: "",
 };
 
 const bg = "var(--color-ink)";
@@ -202,6 +206,7 @@ const STEP_TITLES = [
   "Commitment",
   "Investment",
   "Contact",
+  "Create your account",
 ];
 
 export default function ApplyPage() {
@@ -243,7 +248,10 @@ export default function ApplyPage() {
       [step === 8 && !form.lifeSolved, "Required"],
       [step === 12 && !form.investmentRange, "Please select a range"],
       [step === 13 && !form.email, "Email is required"],
-      [step === 13 && !form.phone, "Phone is required"],
+      [step === 13 && !form.phone, "Phone number is required"],
+      [step === 14 && !form.password, "Password is required"],
+      [step === 14 && form.password.length < 8, "Password must be at least 8 characters"],
+      [step === 14 && form.password !== form.confirmPassword, "Passwords do not match"],
     ];
     for (const [condition, msg] of checks) {
       if (condition) e.push(msg);
@@ -269,6 +277,15 @@ export default function ApplyPage() {
     if (!validate()) return;
     setSubmitting(true);
 
+    // Create user account
+    const accountResult = await register(form.fullName.trim(), form.email.trim(), form.password);
+    if (!accountResult.success) {
+      setErrors([accountResult.error ?? "Could not create account. This email may already be registered."]);
+      setSubmitting(false);
+      return;
+    }
+
+    // Save application
     const { error } = await supabase.from("application_forms").insert({
       full_name: form.fullName,
       gender: form.gender,
@@ -337,9 +354,16 @@ export default function ApplyPage() {
             <span style={{ color: "#fff", fontSize: "1.5rem" }}>✓</span>
           </div>
           <h2 style={{ fontFamily: "var(--font-display), sans-serif", fontSize: "1.75rem", color: ink, textTransform: "uppercase", marginBottom: "1rem" }}>Application Received</h2>
-          <p style={{ color: muted, fontFamily: "var(--font-body), sans-serif", lineHeight: 1.6 }}>
-            We have your application. THP reviews personally and will be in touch within 48 hours if you are a fit.
+          <p style={{ color: muted, fontFamily: "var(--font-body), sans-serif", lineHeight: 1.6, marginBottom: "2rem" }}>
+            THP reviews personally and will be in touch within 48 hours if you are a fit. Your account is ready — you can sign in any time.
           </p>
+          <a href="/login" style={{
+            display: "inline-block", padding: "0.875rem 2rem", background: primary, color: "#fff",
+            borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, textDecoration: "none",
+            fontFamily: "var(--font-body), sans-serif",
+          }}>
+            Sign In to Your Account
+          </a>
         </motion.div>
       </div>
     );
@@ -606,6 +630,17 @@ export default function ApplyPage() {
               </div>
             )}
 
+            {/* Step 14: Create account */}
+            {step === 14 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                <p style={{ color: muted, fontSize: "0.875rem", fontFamily: "var(--font-body), sans-serif", lineHeight: 1.6, marginBottom: "0.5rem" }}>
+                  Almost done. Set a password to create your account — you'll use it to log in and track your progress once accepted.
+                </p>
+                <div><Label>Password</Label><TInput value={form.password} onChange={set("password")} placeholder="Min. 8 characters" type="password" /></div>
+                <div><Label>Confirm password</Label><TInput value={form.confirmPassword} onChange={set("confirmPassword")} placeholder="Repeat your password" type="password" /></div>
+              </div>
+            )}
+
           </motion.div>
         </AnimatePresence>
 
@@ -622,7 +657,7 @@ export default function ApplyPage() {
             </button>
           ) : (
             <button onClick={handleSubmit} disabled={submitting} style={{ flex: 2, padding: "0.875rem", background: primary, color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1, fontFamily: "var(--font-body), sans-serif" }}>
-              {submitting ? "Submitting..." : "See If I'm A Fit"}
+              {submitting ? "Submitting..." : "Submit Application"}
             </button>
           )}
         </div>

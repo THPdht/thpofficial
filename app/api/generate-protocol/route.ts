@@ -174,7 +174,8 @@ export async function POST(req: Request) {
       }
     }
 
-    const parsed = JSON.parse(fullText);
+    const cleaned = fullText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+    const parsed = JSON.parse(cleaned);
     const sections: { heading: string; text: string }[] = parsed.sections ?? [];
     const todos: string[] = parsed.todos ?? [];
     const title = `${name} — Protocol Stage 1`;
