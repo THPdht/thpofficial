@@ -63,21 +63,9 @@ function LoginForm() {
           WebkitBackdropFilter: "blur(12px)",
         }}
       >
-        <Link
-          href="/"
-          style={{
-            display: "block",
-            fontSize: "0.75rem",
-            fontWeight: 600,
-            letterSpacing: "0.12em",
-            color: "var(--primary)",
-            textTransform: "uppercase",
-            textDecoration: "none",
-            marginBottom: "2.5rem",
-            fontFamily: "var(--font-mono), monospace",
-          }}
-        >
-          NK
+        <Link href="/" style={{ display: "block", marginBottom: "2rem" }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/images/thprebrandlogo2.png" alt="THP" style={{ height: "40px", width: "auto", filter: "brightness(0) invert(1)" }} />
         </Link>
 
         <AnimatePresence>
@@ -182,6 +170,13 @@ function LoginForm() {
             {loading ? <><Spinner />Signing in...</> : "Sign in"}
           </button>
         </form>
+
+        <p style={{ marginTop: "1.5rem", textAlign: "center", fontSize: "0.75rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+          THP?{" "}
+          <Link href="/admin" style={{ color: "var(--muted)", textDecoration: "underline" }}>
+            Admin access
+          </Link>
+        </p>
       </motion.div>
     </div>
   );
