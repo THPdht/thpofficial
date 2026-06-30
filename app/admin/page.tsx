@@ -1073,8 +1073,8 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
         ))}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-        <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>Protocol</p>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
+        <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem" }}>Protocol</p>
 
         {/* No Notion protocol yet - generate or link */}
         {!client.notionPageId && (
@@ -1194,8 +1194,8 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
       </div>
 
       {/* Account controls */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-        <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>Account</p>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
+        <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem" }}>Account</p>
         {(() => {
           const as = client.diagnosticData?.accountStatus ?? 'active';
           const asMeta: Record<string, { label: string; color: string }> = {
@@ -1244,8 +1244,8 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
       </div>
 
       {/* Payments */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-        <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>Payments</p>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
+        <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem" }}>Payments</p>
         {(client.diagnosticData?.payments ?? []).length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem", marginBottom: "0.25rem" }}>
             {(client.diagnosticData?.payments ?? []).map((p: Payment) => (
@@ -1368,10 +1368,10 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
       )}
 
       {client.diagnosticData && (
-        <div>
+        <div style={{ paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
           <button onClick={onToggleDiagnostic}
-            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: "0.5rem 0", cursor: "pointer" }}>
-            <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em" }}>Diagnostic</p>
+            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: "0.125rem 0 0.5rem", cursor: "pointer" }}>
+            <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em" }}>Diagnostic</p>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: diagnosticOpen ? "rotate(180deg)" : "none", transition: "transform 200ms", color: "var(--dim)" }} aria-hidden>
               <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>

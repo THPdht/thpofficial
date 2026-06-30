@@ -21,6 +21,22 @@
 :root {
   --background: var(--color-ink);
   --foreground: #ffffff;
+
+  /* ── Portal design system (admin + dashboard + auth) ── */
+  --bg:             #0a0a0a;
+  --ink:            #f0ede8;
+  --muted:          rgba(240, 237, 232, 0.60);
+  --dim:            rgba(240, 237, 232, 0.32);
+  --surface:        #141414;
+  --surface-2:      #1c1c1c;
+  --surface-hover:  #1a1a1a;
+  --border:         rgba(255, 255, 255, 0.10);
+  --border-subtle:  rgba(255, 255, 255, 0.055);
+  --primary:        #c8102e;
+  --primary-hover:  #9e0c24;
+  --danger:         #ef4444;
+  --accent:         #c9a24b;
+  --font-ui:        system-ui, -apple-system, sans-serif;
 }
 
 html {
