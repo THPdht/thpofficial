@@ -24,7 +24,7 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 if (!STRIPE_KEY) { console.error('❌  Set STRIPE_KEY env var (pass the live key)'); process.exit(1); }
 if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) { console.error('❌  Missing Supabase env vars'); process.exit(1); }
 
-const stripe = new Stripe(STRIPE_KEY, { apiVersion: '2025-06-30.basil' });
+const stripe = new Stripe(STRIPE_KEY, { apiVersion: '2026-06-24.dahlia' });
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 const isLive = STRIPE_KEY.startsWith('sk_live_');
