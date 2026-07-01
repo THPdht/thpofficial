@@ -312,11 +312,13 @@ export async function isClientActive(email: string): Promise<boolean> {
 }
 
 export async function removeClient(email: string): Promise<void> {
+  await supabase.from('diagnostics').delete().eq('user_email', email);
   await supabase.from('messages').delete().eq('user_email', email);
   await supabase.from('push_subscriptions').delete().eq('user_email', email);
   await supabase.from('tracker_responses').delete().eq('user_email', email);
   await supabase.from('tracker_questions').delete().eq('user_email', email);
   await supabase.from('protocols').delete().eq('user_email', email);
+  await supabase.from('invites').delete().eq('email', email);
   await supabase.from('users').delete().eq('email', email);
 }
 
