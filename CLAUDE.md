@@ -29,6 +29,7 @@ The unified THP (The Hormone Prophet) platform at **thpofficial.com**. One Next.
 npx vercel@latest --token $VERCEL_DEPLOY_TOKEN --prod --yes --scope thp-digital
 ```
 Run from `/home/t8z1/thpofficial`. Takes ~30 seconds. Uses Ali's token → deploys as project owner.
+Token is in `.env.local` as `VERCEL_DEPLOY_TOKEN` (gitignored).
 
 ---
 
@@ -36,7 +37,7 @@ Run from `/home/t8z1/thpofficial`. Takes ~30 seconds. Uses Ali's token → deplo
 
 - URL: thpofficial.com/login (same page as clients)
 - Email: `info.shopzul@gmail.com`
-- Password: `Fikri!`
+- Password: in `.env.local` as `ADMIN_PASSWORD`
 - Result: redirects to /admin (Command Center)
 
 Hardcoded in `app/admin/page.tsx` (lines 15-16) AND `app/login/page.tsx` (handleSubmit admin check).
