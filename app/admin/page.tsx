@@ -1292,7 +1292,7 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
               onMouseEnter={e => { if (!generating) e.currentTarget.style.background = "oklch(0.60 0.18 165 / 0.2)"; }}
               onMouseLeave={e => { if (!generating) e.currentTarget.style.background = "oklch(0.60 0.18 165 / 0.12)"; }}>
               <SparkleIcon />
-              {generating ? "Generating…" : clientProtocols.length === 0 ? "Generate stage 1 with AI" : `Regenerate stage ${clientProtocols[clientProtocols.length - 1].stage} with AI`}
+              {generating ? "Generating…" : clientProtocols.length === 0 ? "Generate protocol with AI" : `Regenerate protocol stage ${clientProtocols[clientProtocols.length - 1].stage} with AI`}
             </button>
           </>
         )}
@@ -1711,7 +1711,7 @@ function TrackerSection({ protocols, summary, loading, regenerating, onLoadSumma
             onMouseEnter={e => (e.currentTarget.style.background = "oklch(0.60 0.18 165 / 0.2)")}
             onMouseLeave={e => (e.currentTarget.style.background = "oklch(0.60 0.18 165 / 0.12)")}>
             <SparkleIcon />
-            Generate stage {nextStage} with AI
+            Generate protocol stage {nextStage} with AI
           </button>
         </>
       )}
