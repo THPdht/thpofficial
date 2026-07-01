@@ -6,9 +6,9 @@ import {
   getAllUsers, updateUser, linkNotionPage, setProtocolStatus,
   setAccountStatus, setClientType, addPayment, removePayment, removeClient, createClient,
   getMessages, addMessage, uploadMessageAttachment, markClientMessagesRead, getAllUnreadCounts, setSuspended,
-  updatePresence, isClientActive, getClientProtocols,
+  updatePresence, isClientActive, getClientProtocols, getAdminDiagnostics, publishDiagnosis,
 } from "@/lib/auth";
-import type { StoredUser, Message, ClientStatus, ProtocolStatus, AccountStatus, Payment, AttachmentType, ClientProtocol } from "@/lib/auth";
+import type { StoredUser, Message, ClientStatus, ProtocolStatus, AccountStatus, Payment, AttachmentType, ClientProtocol, ClientDiagnostic } from "@/lib/auth";
 import type { ProtocolId } from "@/lib/protocols";
 import { supabase } from "@/lib/supabase";
 
@@ -987,9 +987,12 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
   } | null>(null);
   const [trackerLoading, setTrackerLoading] = useState(false);
   const [regeneratingQuestions, setRegeneratingQuestions] = useState(false);
+  const [adminDiagnostics, setAdminDiagnostics] = useState<ClientDiagnostic[]>([]);
+  const [publishingDiagId, setPublishingDiagId] = useState<string | null>(null);
 
   useEffect(() => {
     getClientProtocols(client.email).then(setClientProtocols).catch(() => {});
+    getAdminDiagnostics(client.email).then(setAdminDiagnostics).catch(() => {});
     setTrackerSummary(null);
     setInviteUrl(null);
     setInviteCopied(false);
@@ -997,6 +1000,13 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
     setPaymentLinkCopied(false);
     setPaymentLinkError("");
   }, [client.email]);
+
+  async function handlePublishDiagnosis(diagId: string) {
+    setPublishingDiagId(diagId);
+    await publishDiagnosis(diagId);
+    setAdminDiagnostics(prev => prev.map(d => d.id === diagId ? { ...d, published: true } : d));
+    setPublishingDiagId(null);
+  }
 
   async function handleGenerateInvite() {
     setInviteLoading(true);
@@ -1177,6 +1187,39 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
             );
           })}
         </div>
+      </div>
+
+      {/* Diagnosis — THP review & send */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem", paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
+        <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em" }}>Diagnosis</p>
+        {adminDiagnostics.length === 0 ? (
+          <p style={{ fontSize: "0.8rem", color: "var(--dim)", fontWeight: 300 }}>No diagnosis generated yet.</p>
+        ) : (
+          adminDiagnostics.map(diag => (
+            <div key={diag.id} style={{ background: "var(--surface)", border: `1px solid ${diag.published ? "oklch(0.7 0.15 145 / 0.3)" : "oklch(0.75 0.15 80 / 0.3)"}`, borderRadius: "8px", padding: "0.75rem" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.375rem" }}>
+                <p style={{ fontSize: "0.8rem", fontWeight: 500, color: "var(--ink)" }}>Stage {diag.stage}</p>
+                <span style={{ fontSize: "0.65rem", fontWeight: 600, padding: "2px 7px", borderRadius: "4px", background: diag.published ? "oklch(0.7 0.15 145 / 0.12)" : "oklch(0.75 0.15 80 / 0.12)", color: diag.published ? "oklch(0.7 0.15 145)" : "oklch(0.75 0.15 80)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  {diag.published ? "Sent" : "Draft"}
+                </span>
+              </div>
+              {diag.content?.sections.map(s => (
+                <details key={s.heading} style={{ marginBottom: "0.25rem" }}>
+                  <summary style={{ fontSize: "0.75rem", color: "var(--muted)", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", userSelect: "none" }}>{s.heading}</summary>
+                  <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, lineHeight: 1.6, marginTop: "0.375rem", whiteSpace: "pre-wrap" }}>{s.text}</p>
+                </details>
+              ))}
+              {!diag.published && (
+                <button
+                  onClick={() => handlePublishDiagnosis(diag.id)}
+                  disabled={publishingDiagId === diag.id}
+                  style={{ marginTop: "0.625rem", width: "100%", height: "36px", background: publishingDiagId === diag.id ? "var(--surface-2)" : "var(--primary)", border: "none", borderRadius: "7px", color: publishingDiagId === diag.id ? "var(--dim)" : "#fff", fontSize: "0.8125rem", fontWeight: 600, cursor: publishingDiagId === diag.id ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "background 150ms" }}>
+                  {publishingDiagId === diag.id ? "Sending…" : "Send diagnosis to client →"}
+                </button>
+              )}
+            </div>
+          ))
+        )}
       </div>
 
       {/* Invite link */}

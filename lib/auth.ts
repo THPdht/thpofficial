@@ -54,6 +54,7 @@ export type ClientDiagnostic = {
   title: string;
   content?: { sections: { heading: string; text: string }[] };
   pdfUrl?: string;
+  published?: boolean;
   createdAt: string;
 };
 
@@ -341,7 +342,30 @@ export async function getClientProtocols(email: string): Promise<ClientProtocol[
   }));
 }
 
+// Used by client dashboard — only shows published diagnoses
 export async function getClientDiagnostics(email: string): Promise<ClientDiagnostic[]> {
+  const { data, error } = await supabase
+    .from('diagnostics')
+    .select('*')
+    .eq('user_email', email)
+    .eq('published', true)
+    .order('stage', { ascending: true });
+  if (error || !data) return [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return data.map((row: any) => ({
+    id: row.id,
+    userEmail: row.user_email,
+    stage: row.stage,
+    title: row.title,
+    content: row.content ?? undefined,
+    pdfUrl: row.pdf_url ?? undefined,
+    published: row.published ?? false,
+    createdAt: row.created_at,
+  }));
+}
+
+// Used by admin — returns ALL diagnostics including unpublished drafts
+export async function getAdminDiagnostics(email: string): Promise<ClientDiagnostic[]> {
   const { data, error } = await supabase
     .from('diagnostics')
     .select('*')
@@ -356,8 +380,13 @@ export async function getClientDiagnostics(email: string): Promise<ClientDiagnos
     title: row.title,
     content: row.content ?? undefined,
     pdfUrl: row.pdf_url ?? undefined,
+    published: row.published ?? false,
     createdAt: row.created_at,
   }));
+}
+
+export async function publishDiagnosis(diagId: string): Promise<void> {
+  await supabase.from('diagnostics').update({ published: true }).eq('id', diagId);
 }
 
 export async function setSuspended(email: string, suspended: boolean): Promise<void> {

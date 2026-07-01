@@ -142,13 +142,14 @@ export async function POST(req: Request) {
     const diagnosticSections = sections.filter(s => DIAGNOSTIC_HEADINGS.has(s.heading.toUpperCase()));
     const protocolSections = sections.filter(s => !DIAGNOSTIC_HEADINGS.has(s.heading.toUpperCase()));
 
-    // Insert into diagnostics table
+    // Insert diagnostic as unpublished draft — THP must send manually from admin
     await supabaseAdmin.from('diagnostics').insert({
       user_email: email,
       stage,
       title: diagTitle,
       content: { sections: diagnosticSections },
       pdf_url: pdfUrl,
+      published: false,
     });
 
     // Insert into protocols table

@@ -210,12 +210,13 @@ export async function POST(req: Request) {
     const protTitle = `${name} — Protocol Stage ${stage}`;
     const title = protTitle;
 
-    // Save diagnostic to diagnostics table
+    // Save diagnostic as unpublished draft — THP must review and send manually from admin
     await supabase.from('diagnostics').insert({
       user_email: clientEmail,
       stage,
       title: diagTitle,
       content: { sections: diagnosticSections },
+      published: false,
     });
 
     // Save protocol to protocols table
