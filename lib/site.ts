@@ -17,7 +17,7 @@ export const site = {
 export const social = {
   youtube: "https://www.youtube.com/@THPDIGITAL",
   tiktok: "https://www.tiktok.com/@thehormoneprophet",
-  instagram: "https://www.instagram.com/thehormoneprophet",
+  instagram: "https://www.instagram.com/thp.dht/",
 } as const;
 
 export const navLinks = [
