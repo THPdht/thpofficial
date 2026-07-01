@@ -24,7 +24,6 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   hold:    { bg: "oklch(0.62 0.20 25 / 0.15)",   color: "var(--danger)" },
 };
 
-type StatusFilter = "all" | "pending" | "active" | "alumni" | "new";
 type ChatMsg = { role: "user" | "assistant"; content: string };
 
 export default function AdminPage() {
@@ -34,7 +33,7 @@ export default function AdminPage() {
   const [pwError, setPwError] = useState("");
   const [clients, setClients] = useState<StoredUser[]>([]);
   const [selected, setSelected] = useState<StoredUser | null>(null);
-  const [filter, setFilter] = useState<StatusFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [compose, setCompose] = useState("");
   const [composeFocused, setComposeFocused] = useState(false);
@@ -476,14 +475,17 @@ Active: ${clients.filter(c => c.status === "active").length} | Pending: ${client
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
   }
 
-  const filtered = filter === "all" ? clients : clients.filter(c => c.status === filter);
-  const counts: Record<StatusFilter, number> = {
-    all: clients.length,
-    pending: clients.filter(c => c.status === "pending").length,
-    active: clients.filter(c => c.status === "active").length,
-    alumni: clients.filter(c => c.status === "alumni").length,
-    new: clients.filter(c => c.status === "new").length,
-  };
+  const q = searchQuery.toLowerCase().trim();
+  const searchFiltered = q
+    ? clients.filter(c =>
+        c.name.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q) ||
+        (c.diagnosticData?.contactInfo ?? "").toLowerCase().includes(q)
+      )
+    : clients;
+  const paying1on1 = searchFiltered.filter(c => (c.status === "active" || c.status === "alumni") && c.diagnosticData?.clientType !== "skool");
+  const applicants = searchFiltered.filter(c => c.status === "new" || c.status === "pending");
+  const skoolClients = searchFiltered.filter(c => c.diagnosticData?.clientType === "skool");
 
   if (!authed) {
     return (
@@ -557,64 +559,58 @@ Active: ${clients.filter(c => c.status === "active").length} | Pending: ${client
               </button>
             </div>
           )}
-          <div style={{ padding: "0.875rem 0.875rem 0.5rem", borderBottom: "1px solid var(--border-subtle)" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
-              <div style={{ display: "flex", gap: "0.25rem", flexWrap: "wrap", flex: 1 }}>
-                {(["all", "new", "pending", "active", "alumni"] as StatusFilter[]).map(f => (
-                  <button key={f} onClick={() => setFilter(f)}
-                    style={{ height: "26px", padding: "0 0.625rem", borderRadius: "6px", border: "none", background: filter === f ? "var(--surface-2)" : "none", color: filter === f ? "var(--ink)" : "var(--dim)", fontSize: "0.75rem", fontWeight: filter === f ? 500 : 400, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "all 150ms", display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                    {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
-                    {counts[f] > 0 && <span style={{ color: "var(--dim)", fontWeight: 300 }}>{counts[f]}</span>}
-                  </button>
-                ))}
-              </div>
-              <button onClick={() => { setShowCreate(true); setCreateName(""); setCreateEmail(""); setCreatePassword(""); setCreateError(""); }}
-                title="Add client manually"
-                style={{ width: "26px", height: "26px", borderRadius: "6px", border: "1px solid var(--border-subtle)", background: "none", color: "var(--dim)", fontSize: "1rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "border-color 150ms, color 150ms" }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--primary)"; e.currentTarget.style.color = "var(--primary)"; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border-subtle)"; e.currentTarget.style.color = "var(--dim)"; }}>
-                +
-              </button>
-            </div>
+          <div style={{ padding: "0.625rem 0.875rem", borderBottom: "1px solid var(--border-subtle)", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search name, email, phone…"
+              style={{ flex: 1, height: "30px", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "7px", padding: "0 0.625rem", fontSize: "0.8rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }}
+              onFocus={e => (e.target.style.borderColor = "var(--primary)")}
+              onBlur={e => (e.target.style.borderColor = "var(--border-subtle)")}
+            />
+            <button onClick={() => { setShowCreate(true); setCreateName(""); setCreateEmail(""); setCreatePassword(""); setCreateError(""); }}
+              title="Add client manually"
+              style={{ width: "30px", height: "30px", borderRadius: "6px", border: "1px solid var(--border-subtle)", background: "none", color: "var(--dim)", fontSize: "1rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "border-color 150ms, color 150ms" }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--primary)"; e.currentTarget.style.color = "var(--primary)"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border-subtle)"; e.currentTarget.style.color = "var(--dim)"; }}>
+              +
+            </button>
           </div>
 
-          <div style={{ flex: 1, overflowY: "auto", padding: "0.5rem" }}>
-            {filtered.length === 0 && (
-              <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, padding: "1.5rem 1rem", textAlign: "center" }}>No clients</p>
+          <div style={{ flex: 1, overflowY: "auto", padding: "0.5rem 0.5rem 1rem" }}>
+            {searchFiltered.length === 0 && (
+              <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, padding: "1.5rem 1rem", textAlign: "center" }}>No clients found</p>
             )}
-            {filtered.map(u => {
-              const unread = unreadCounts[u.email] ?? 0;
-              const isSelected = selected?.email === u.email;
-              const initials = u.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
-              return (
-                <button key={u.email} onClick={() => selectClient(u)}
-                  style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.75rem 0.625rem", borderRadius: "9px", border: "none", borderLeft: isSelected ? "3px solid var(--primary)" : "3px solid transparent", background: isSelected ? "var(--surface-hover)" : "none", cursor: "pointer", textAlign: "left", transition: "background 150ms, border-color 150ms" }}>
-                  <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "var(--surface-2)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: "0.7rem", fontWeight: 600, color: statusColor(u.status), fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-                    {initials}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{u.name}</p>
-                      {unread > 0 && (
-                        <span style={{ width: "17px", height: "17px", borderRadius: "50%", background: "var(--primary)", color: "#ffffff", fontSize: "0.625rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{unread}</span>
-                      )}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginTop: "0.1rem" }}>
-                      <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: statusColor(u.status), flexShrink: 0 }} />
-                      <span style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {u.diagnosticData?.protocolStatus || u.status}
-                        {u.streak > 0 ? ` · ${u.streak >= 7 ? "🔥" : "⚡"}${u.streak}` : ""}
-                      </span>
-                      {u.diagnosticData?.clientType && (
-                        <span style={{ fontSize: "0.6rem", fontWeight: 600, color: u.diagnosticData.clientType === 'skool' ? "oklch(0.72 0.15 260)" : "oklch(0.72 0.14 145)", background: u.diagnosticData.clientType === 'skool' ? "oklch(0.72 0.15 260 / 0.12)" : "oklch(0.72 0.14 145 / 0.12)", borderRadius: "4px", padding: "1px 5px", flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                          {u.diagnosticData.clientType === 'skool' ? 'Skool' : '1:1'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+
+            {/* APPLICANTS */}
+            {applicants.length > 0 && (
+              <>
+                <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", padding: "0.75rem 0.625rem 0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                  Applicants <span style={{ fontWeight: 300 }}>{applicants.length}</span>
+                </p>
+                {applicants.map(u => <ClientRow key={u.email} u={u} selected={selected} unreadCounts={unreadCounts} onSelect={selectClient} />)}
+              </>
+            )}
+
+            {/* PAYING 1:1 CLIENTS */}
+            {paying1on1.length > 0 && (
+              <>
+                <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", padding: "0.75rem 0.625rem 0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                  Paying 1:1 <span style={{ fontWeight: 300 }}>{paying1on1.length}</span>
+                </p>
+                {paying1on1.map(u => <ClientRow key={u.email} u={u} selected={selected} unreadCounts={unreadCounts} onSelect={selectClient} />)}
+              </>
+            )}
+
+            {/* SKOOL CLIENTS */}
+            {skoolClients.length > 0 && (
+              <>
+                <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", padding: "0.75rem 0.625rem 0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                  Skool <span style={{ fontWeight: 300 }}>{skoolClients.length}</span>
+                </p>
+                {skoolClients.map(u => <ClientRow key={u.email} u={u} selected={selected} unreadCounts={unreadCounts} onSelect={selectClient} />)}
+              </>
+            )}
           </div>
         </aside>
 
@@ -1149,6 +1145,10 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
         </div>
       </div>
 
+      {(client.status === "new" || client.status === "pending") && (
+        <PromoteButton client={client} onSetStatus={onSetStatus} onClientTypeChange={onClientTypeChange} />
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
         {[
           { label: "Status", value: <span style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}><span style={{ width: "6px", height: "6px", borderRadius: "50%", background: statusColor(client.status) }} />{client.status}</span> },
@@ -1673,6 +1673,63 @@ function TrackerSection({ protocols, summary, loading, regenerating, onLoadSumma
         </>
       )}
     </div>
+  );
+}
+
+function PromoteButton({ client, onSetStatus, onClientTypeChange }: { client: StoredUser; onSetStatus: (s: ClientStatus) => void; onClientTypeChange: (t: 'skool' | '1on1') => void }) {
+  const [promoting, setPromoting] = useState(false);
+  async function handlePromote() {
+    setPromoting(true);
+    await updateUser(client.email, { status: 'active' as ClientStatus });
+    await setClientType(client.email, '1on1');
+    onSetStatus('active' as ClientStatus);
+    onClientTypeChange('1on1');
+    setPromoting(false);
+  }
+  return (
+    <button
+      onClick={handlePromote}
+      disabled={promoting}
+      style={{ width: "100%", height: "42px", background: promoting ? "var(--surface-2)" : "var(--primary)", border: "none", borderRadius: "8px", color: promoting ? "var(--dim)" : "#fff", fontSize: "0.875rem", fontWeight: 600, cursor: promoting ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "background 150ms" }}
+      onMouseEnter={e => { if (!promoting) e.currentTarget.style.background = "var(--primary-hover)"; }}
+      onMouseLeave={e => { if (!promoting) e.currentTarget.style.background = "var(--primary)"; }}
+    >
+      {promoting ? "Promoting…" : "Promote to Paying Client →"}
+    </button>
+  );
+}
+
+function ClientRow({ u, selected, unreadCounts, onSelect }: { u: StoredUser; selected: StoredUser | null; unreadCounts: Record<string, number>; onSelect: (u: StoredUser) => void }) {
+  const unread = unreadCounts[u.email] ?? 0;
+  const isSelected = selected?.email === u.email;
+  const initials = u.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+  return (
+    <button key={u.email} onClick={() => onSelect(u)}
+      style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.75rem 0.625rem", borderRadius: "9px", border: "none", borderLeft: isSelected ? "3px solid var(--primary)" : "3px solid transparent", background: isSelected ? "var(--surface-hover)" : "none", cursor: "pointer", textAlign: "left", transition: "background 150ms, border-color 150ms" }}>
+      <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "var(--surface-2)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: "0.7rem", fontWeight: 600, color: statusColor(u.status), fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+        {initials}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{u.name}</p>
+          {unread > 0 && (
+            <span style={{ width: "17px", height: "17px", borderRadius: "50%", background: "var(--primary)", color: "#ffffff", fontSize: "0.625rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{unread}</span>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginTop: "0.1rem" }}>
+          <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: statusColor(u.status), flexShrink: 0 }} />
+          <span style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {u.diagnosticData?.protocolStatus || u.status}
+            {u.streak > 0 ? ` · ${u.streak >= 7 ? "🔥" : "⚡"}${u.streak}` : ""}
+          </span>
+          {u.diagnosticData?.clientType && (
+            <span style={{ fontSize: "0.6rem", fontWeight: 600, color: u.diagnosticData.clientType === 'skool' ? "oklch(0.72 0.15 260)" : "oklch(0.72 0.14 145)", background: u.diagnosticData.clientType === 'skool' ? "oklch(0.72 0.15 260 / 0.12)" : "oklch(0.72 0.14 145 / 0.12)", borderRadius: "4px", padding: "1px 5px", flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              {u.diagnosticData.clientType === 'skool' ? 'Skool' : '1:1'}
+            </span>
+          )}
+        </div>
+      </div>
+    </button>
   );
 }
 

@@ -214,7 +214,6 @@ export default function ApplyPage() {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState(false);
 
   const set = (key: keyof FormState) => (v: unknown) => setForm(f => ({ ...f, [key]: v }));
 
@@ -326,6 +325,9 @@ export default function ApplyPage() {
       instagram: form.instagram,
     });
 
+    // Update status to pending now that application is submitted
+    await supabase.from('users').update({ status: 'pending' }).eq('email', form.email.trim().toLowerCase());
+
     if (!error) {
       try {
         await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
@@ -343,30 +345,7 @@ export default function ApplyPage() {
     }
 
     setSubmitting(false);
-    setDone(true);
-  }
-
-  if (done) {
-    return (
-      <div style={{ minHeight: "100dvh", background: bg, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={{ textAlign: "center", maxWidth: "480px" }}>
-          <div style={{ width: "56px", height: "56px", borderRadius: "50%", background: primary, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1.5rem" }}>
-            <span style={{ color: "#fff", fontSize: "1.5rem" }}>✓</span>
-          </div>
-          <h2 style={{ fontFamily: "var(--font-display), sans-serif", fontSize: "1.75rem", color: ink, textTransform: "uppercase", marginBottom: "1rem" }}>Application Received</h2>
-          <p style={{ color: muted, fontFamily: "var(--font-body), sans-serif", lineHeight: 1.6, marginBottom: "2rem" }}>
-            THP reviews personally and will be in touch within 48 hours if you are a fit. Your account is ready — you can sign in any time.
-          </p>
-          <a href="/login" style={{
-            display: "inline-block", padding: "0.875rem 2rem", background: primary, color: "#fff",
-            borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, textDecoration: "none",
-            fontFamily: "var(--font-body), sans-serif",
-          }}>
-            Sign In to Your Account
-          </a>
-        </motion.div>
-      </div>
-    );
+    window.location.href = "https://cal.com/ali-filali-uks4xi/30min";
   }
 
   const progress = ((step + 1) / STEP_TITLES.length) * 100;

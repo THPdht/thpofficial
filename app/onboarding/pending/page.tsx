@@ -2,19 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import Link from "next/link";
 import { getCurrentUser, signOut } from "@/lib/auth";
 import type { StoredUser } from "@/lib/auth";
 
+const CAL_LINK = "https://cal.com/ali-filali-uks4xi/30min";
+const STRIPE_LINK = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK ?? "";
 
 export default function PendingPage() {
   const router = useRouter();
   const [user, setUser] = useState<StoredUser | null>(null);
+
   useEffect(() => {
     const u = getCurrentUser();
     if (!u) { router.replace("/login"); return; }
-    if (u.status === "new") { router.replace("/onboarding"); return; }
     if (u.status === "active" || u.status === "alumni") { router.replace("/dashboard"); return; }
     setUser(u);
   }, [router]);
@@ -23,57 +23,88 @@ export default function PendingPage() {
 
   if (!user) return null;
 
+  const firstName = user.name?.split(" ")[0] ?? "";
+
   return (
-    <div style={{ minHeight: "100dvh", background: "var(--bg)", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
+    <div style={{ minHeight: "100dvh", background: "var(--color-ink)", display: "flex", flexDirection: "column" }}>
       {/* Subtle glow */}
-      <div aria-hidden style={{ position: "absolute", top: "-10%", right: "0", width: "50%", height: "60%", background: "radial-gradient(ellipse, color-mix(in srgb, var(--color-red) 5%, transparent) 0%, transparent 60%)", pointerEvents: "none" }} />
+      <div aria-hidden style={{ position: "fixed", top: "-10%", right: "0", width: "50%", height: "60%", background: "radial-gradient(ellipse, rgba(200,16,46,0.06) 0%, transparent 60%)", pointerEvents: "none" }} />
 
       <header style={{ padding: "1.25rem clamp(1.5rem, 4vw, 3rem)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontSize: "0.75rem", fontWeight: 500, letterSpacing: "0.12em", color: "var(--primary)", textTransform: "uppercase" }}>THP</span>
-        <button onClick={handleSignOut} style={{ background: "none", border: "none", color: "var(--dim)", fontSize: "0.8125rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Sign out</button>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/images/thprebrandlogo2.png" alt="THP" style={{ height: "36px", width: "auto", filter: "brightness(0) invert(1)" }} />
+        <button onClick={handleSignOut} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: "0.8125rem", cursor: "pointer", fontFamily: "var(--font-body), sans-serif" }}>
+          Sign out
+        </button>
       </header>
 
-      <main style={{ flex: 1, padding: "3rem clamp(1.5rem, 5vw, 4rem)", maxWidth: "680px", width: "100%", margin: "0 auto" }}>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}>
-          {/* Status badge */}
-          <div style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0.375rem 0.875rem", background: "color-mix(in srgb, var(--color-red) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--color-red) 20%, transparent)", borderRadius: "100px", marginBottom: "2rem" }}>
-            <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--accent)", animation: "pulse 2s ease infinite" }} />
-            <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
-            <span style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--primary)", letterSpacing: "0.04em" }}>Profile received</span>
-          </div>
-
-          <h1 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "clamp(1.75rem, 4vw, 2.75rem)", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.02em", lineHeight: 1.1, marginBottom: "0.875rem", textWrap: "balance" }}>
-            THP is reviewing<br />your profile now.
-          </h1>
-          <p style={{ fontSize: "1rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.7, marginBottom: "2.5rem", maxWidth: "52ch", textWrap: "pretty" }}>
-            Based on what you have shared, your protocol is being built. You will have access to your custom daily tracker as soon as it is live.
+      <main style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem clamp(1.5rem, 5vw, 4rem)" }}>
+        <div style={{ width: "100%", maxWidth: "520px" }}>
+          {/* Tag */}
+          <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "0.7rem", letterSpacing: "0.2em", color: "var(--color-red)", textTransform: "uppercase", marginBottom: "1rem" }}>
+            Application received
           </p>
 
-          {/* Actions */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            {/* Dashboard preview */}
-            <div style={{ padding: "1rem 1.25rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
-              <div>
-                <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)", marginBottom: "0.2rem" }}>Curious what your dashboard will look like?</p>
-                <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>See a preview while you wait.</p>
-              </div>
-              <a href="/dashboard" style={{ flexShrink: 0, height: "36px", padding: "0 1rem", background: "none", border: "1px solid var(--border)", borderRadius: "7px", color: "var(--muted)", fontSize: "0.8125rem", fontWeight: 500, textDecoration: "none", display: "inline-flex", alignItems: "center", transition: "border-color 150ms, color 150ms" }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--primary)"; e.currentTarget.style.color = "var(--primary)"; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--muted)"; }}>
-                Preview →
-              </a>
-            </div>
+          {/* Headline */}
+          <h1 style={{ fontFamily: "var(--font-display), sans-serif", fontSize: "clamp(2rem, 5vw, 3rem)", fontWeight: 400, color: "#fff", textTransform: "uppercase", lineHeight: 1.05, marginBottom: "1.25rem" }}>
+            {firstName ? `${firstName}, you're` : "You're"}<br />one step away.
+          </h1>
 
-            <div style={{ padding: "1rem 1.25rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px" }}>
-              <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.6 }}>
-                Once your protocol is ready, you&apos;ll have full access to message THP directly through the portal.
-              </p>
-            </div>
+          {/* CTA body */}
+          <p style={{ fontSize: "1rem", color: "rgba(255,255,255,0.6)", fontFamily: "var(--font-body), sans-serif", lineHeight: 1.75, marginBottom: "2rem", maxWidth: "46ch" }}>
+            If you are ready to get one on one right away with THP, make your payment below and he will send you the intake form for the deep diagnostic before we start working together.
+          </p>
 
-          </div>
-        </motion.div>
+          {/* Primary CTA */}
+          {STRIPE_LINK ? (
+            <a
+              href={STRIPE_LINK}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: "100%", height: "54px", background: "var(--color-red)",
+                color: "#fff", borderRadius: "8px", fontSize: "1rem", fontWeight: 700,
+                textDecoration: "none", fontFamily: "var(--font-body), sans-serif",
+                letterSpacing: "0.02em", marginBottom: "0.875rem",
+              }}
+            >
+              Make payment now →
+            </a>
+          ) : (
+            <a
+              href={`https://wa.me/447453172081?text=Hi%20THP%2C%20I%27ve%20just%20submitted%20my%20application%20and%20I%27m%20ready%20to%20get%20started.`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: "100%", height: "54px", background: "var(--color-red)",
+                color: "#fff", borderRadius: "8px", fontSize: "1rem", fontWeight: 700,
+                textDecoration: "none", fontFamily: "var(--font-body), sans-serif",
+                letterSpacing: "0.02em", marginBottom: "0.875rem",
+              }}
+            >
+              Message THP directly →
+            </a>
+          )}
+
+          {/* Secondary: book a call */}
+          <a
+            href={CAL_LINK}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: "100%", height: "48px", background: "transparent",
+              border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.5)",
+              borderRadius: "8px", fontSize: "0.9rem", fontWeight: 500,
+              textDecoration: "none", fontFamily: "var(--font-body), sans-serif",
+            }}
+          >
+            Or book a discovery call first
+          </a>
+        </div>
       </main>
     </div>
   );
 }
-

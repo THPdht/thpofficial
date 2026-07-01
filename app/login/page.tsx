@@ -39,8 +39,7 @@ function LoginForm() {
       return;
     }
     const user = result.user!;
-    if (user.status === "new") router.push("/onboarding");
-    else if (user.status === "pending") router.push("/onboarding/pending");
+    if (user.status === "new" || user.status === "pending") router.push("/onboarding/pending");
     else router.push("/dashboard");
   };
 
