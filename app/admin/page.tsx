@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   getAllUsers, updateUser, linkNotionPage, setProtocolStatus,
-  setAccountStatus, addPayment, removePayment, removeClient, createClient,
+  setAccountStatus, setClientType, addPayment, removePayment, removeClient, createClient,
   getMessages, addMessage, uploadMessageAttachment, markClientMessagesRead, getAllUnreadCounts, setSuspended,
   updatePresence, isClientActive, getClientProtocols,
 } from "@/lib/auth";
@@ -382,6 +382,15 @@ Libido: ${d.libido || 'not provided'}` : `Client: ${selected.name}`;
     await refreshClients();
   }
 
+  async function handleClientTypeChange(clientType: 'skool' | '1on1') {
+    if (!selected) return;
+    await setClientType(selected.email, clientType);
+    const updatedDiag = { ...(selected.diagnosticData || {}), clientType };
+    const updated = { ...selected, diagnosticData: updatedDiag };
+    setSelected(updated);
+    await refreshClients();
+  }
+
   async function handleRemoveClient() {
     if (!selected) return;
     if (!window.confirm(`Remove ${selected.name} permanently? This cannot be undone.`)) return;
@@ -537,6 +546,17 @@ Active: ${clients.filter(c => c.status === "active").length} | Pending: ${client
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* Sidebar */}
         <aside style={{ width: "260px", borderRight: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden" }}>
+          {selected && (
+            <div style={{ padding: "0.5rem 0.875rem", borderBottom: "1px solid var(--border-subtle)" }}>
+              <button
+                onClick={() => setSelected(null)}
+                style={{ display: "flex", alignItems: "center", gap: "0.375rem", background: "none", border: "none", color: "var(--dim)", fontSize: "0.8125rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", padding: "0.25rem 0", transition: "color 150ms" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--muted)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "var(--dim)")}>
+                ← Home
+              </button>
+            </div>
+          )}
           <div style={{ padding: "0.875rem 0.875rem 0.5rem", borderBottom: "1px solid var(--border-subtle)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
               <div style={{ display: "flex", gap: "0.25rem", flexWrap: "wrap", flex: 1 }}>
@@ -585,6 +605,11 @@ Active: ${clients.filter(c => c.status === "active").length} | Pending: ${client
                         {u.diagnosticData?.protocolStatus || u.status}
                         {u.streak > 0 ? ` · ${u.streak >= 7 ? "🔥" : "⚡"}${u.streak}` : ""}
                       </span>
+                      {u.diagnosticData?.clientType && (
+                        <span style={{ fontSize: "0.6rem", fontWeight: 600, color: u.diagnosticData.clientType === 'skool' ? "oklch(0.72 0.15 260)" : "oklch(0.72 0.14 145)", background: u.diagnosticData.clientType === 'skool' ? "oklch(0.72 0.15 260 / 0.12)" : "oklch(0.72 0.14 145 / 0.12)", borderRadius: "4px", padding: "1px 5px", flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                          {u.diagnosticData.clientType === 'skool' ? 'Skool' : '1:1'}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </button>
@@ -619,6 +644,7 @@ Active: ${clients.filter(c => c.status === "active").length} | Pending: ${client
                     }}
                     onProtocolStatusChange={handleProtocolStatusChange}
                     onAccountStatusChange={handleAccountStatusChange}
+                    onClientTypeChange={handleClientTypeChange}
                     onRemoveClient={handleRemoveClient}
                     onSuspendClient={handleSuspendClient}
                     onAddPayment={handleAddPayment}
@@ -923,7 +949,7 @@ Active: ${clients.filter(c => c.status === "active").length} | Pending: ${client
   );
 }
 
-function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, onSetStatus, onAssignProtocol, onProtocolGenerated, onProtocolStatusChange, onAccountStatusChange, onRemoveClient, onSuspendClient, onAddPayment, onRemovePayment, whatsappNumber }: {
+function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, onSetStatus, onAssignProtocol, onProtocolGenerated, onProtocolStatusChange, onAccountStatusChange, onClientTypeChange, onRemoveClient, onSuspendClient, onAddPayment, onRemovePayment, whatsappNumber }: {
   client: StoredUser;
   diagnosticOpen: boolean;
   onToggleDiagnostic: () => void;
@@ -933,6 +959,7 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
   onProtocolGenerated: (notionPageId: string) => void;
   onProtocolStatusChange: (status: ProtocolStatus) => void;
   onAccountStatusChange: (status: AccountStatus) => void;
+  onClientTypeChange: (t: 'skool' | '1on1') => void;
   onRemoveClient: () => void;
   onSuspendClient: () => void;
   onAddPayment: (p: Omit<Payment, 'id'>) => void;
@@ -952,6 +979,10 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
+  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [paymentLinkLoading, setPaymentLinkLoading] = useState(false);
+  const [paymentLinkCopied, setPaymentLinkCopied] = useState(false);
+  const [paymentLinkError, setPaymentLinkError] = useState("");
   const [trackerSummary, setTrackerSummary] = useState<{
     trends: { category: string; avgScore: number; direction: string; delta: number }[];
     flagged: { date: string; questionLabel: string; value: string | number | boolean; category: string }[];
@@ -966,6 +997,9 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
     setTrackerSummary(null);
     setInviteUrl(null);
     setInviteCopied(false);
+    setPaymentUrl(null);
+    setPaymentLinkCopied(false);
+    setPaymentLinkError("");
   }, [client.email]);
 
   async function handleGenerateInvite() {
@@ -987,6 +1021,35 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
     navigator.clipboard.writeText(inviteUrl).then(() => {
       setInviteCopied(true);
       setTimeout(() => setInviteCopied(false), 2000);
+    });
+  }
+
+  async function handleGeneratePaymentLink() {
+    setPaymentLinkLoading(true);
+    setPaymentLinkError("");
+    try {
+      const res = await fetch('/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: client.email, adminPw: ADMIN_PASSWORD }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        setPaymentUrl(data.url);
+      } else {
+        setPaymentLinkError(data.error ?? "Failed to create payment link");
+      }
+    } catch {
+      setPaymentLinkError("Network error. Please try again.");
+    }
+    setPaymentLinkLoading(false);
+  }
+
+  function copyPaymentUrl() {
+    if (!paymentUrl) return;
+    navigator.clipboard.writeText(paymentUrl).then(() => {
+      setPaymentLinkCopied(true);
+      setTimeout(() => setPaymentLinkCopied(false), 2000);
     });
   }
 
@@ -1100,6 +1163,22 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
         ))}
       </div>
 
+      {/* Client type */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
+        <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem" }}>Client Type</p>
+        <div style={{ display: "flex", gap: "0.375rem" }}>
+          {(['skool', '1on1'] as const).map(t => {
+            const active = client.diagnosticData?.clientType === t;
+            return (
+              <button key={t} onClick={() => onClientTypeChange(t)}
+                style={{ flex: 1, height: "32px", borderRadius: "6px", border: "1px solid", borderColor: active ? (t === 'skool' ? "oklch(0.72 0.15 260 / 0.5)" : "oklch(0.72 0.14 145 / 0.5)") : "var(--border)", background: active ? (t === 'skool' ? "oklch(0.72 0.15 260 / 0.1)" : "oklch(0.72 0.14 145 / 0.1)") : "none", color: active ? (t === 'skool' ? "oklch(0.72 0.15 260)" : "oklch(0.72 0.14 145)") : "var(--dim)", fontSize: "0.75rem", fontWeight: active ? 600 : 400, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "all 150ms" }}>
+                {t === 'skool' ? 'Skool' : '1:1 Coaching'}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Invite link */}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
         <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem" }}>Portal Access</p>
@@ -1126,6 +1205,37 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
         )}
       </div>
 
+      {/* Payment link */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
+        <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem" }}>Payment Link</p>
+        {!paymentUrl ? (
+          <>
+            <button
+              onClick={handleGeneratePaymentLink}
+              disabled={paymentLinkLoading}
+              style={{ height: "36px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: paymentLinkLoading ? "var(--dim)" : "var(--muted)", fontSize: "0.8125rem", fontWeight: 500, cursor: paymentLinkLoading ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+              {paymentLinkLoading ? "Generating…" : "Generate Stripe payment link"}
+            </button>
+            {paymentLinkError && (
+              <p style={{ fontSize: "0.75rem", color: "var(--danger)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{paymentLinkError}</p>
+            )}
+          </>
+        ) : (
+          <div style={{ display: "flex", gap: "0.375rem" }}>
+            <input
+              readOnly
+              value={paymentUrl}
+              style={{ flex: 1, height: "34px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.625rem", fontSize: "0.75rem", color: "var(--dim)", fontFamily: "var(--font-mono), monospace", outline: "none" }}
+            />
+            <button
+              onClick={copyPaymentUrl}
+              style={{ height: "34px", padding: "0 0.75rem", background: paymentLinkCopied ? "oklch(0.60 0.18 165 / 0.12)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: paymentLinkCopied ? "var(--primary)" : "var(--muted)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+              {paymentLinkCopied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+        )}
+      </div>
+
       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
         <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem" }}>Protocol</p>
 
@@ -1141,20 +1251,6 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
               <SparkleIcon />
               {generating ? "Generating…" : clientProtocols.length === 0 ? "Generate stage 1 with AI" : `Regenerate stage ${clientProtocols[clientProtocols.length - 1].stage} with AI`}
             </button>
-            <div style={{ display: "flex", gap: "0.375rem" }}>
-              <input
-                value={linkUrl}
-                onChange={e => setLinkUrl(e.target.value)}
-                placeholder="Or paste Notion page URL / ID"
-                style={{ flex: 1, height: "36px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }}
-              />
-              <button
-                onClick={handleLinkNotion}
-                disabled={linking || !linkUrl.trim()}
-                style={{ height: "36px", padding: "0 0.75rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: linkUrl.trim() ? "var(--muted)" : "var(--dim)", fontSize: "0.8125rem", fontWeight: 500, cursor: linking || !linkUrl.trim() ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
-                {linking ? "Linking…" : "Link"}
-              </button>
-            </div>
           </>
         )}
 
@@ -1172,14 +1268,6 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
               <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", padding: "0.625rem 0.875rem", background: sm.bg, border: `1px solid ${sm.color}40`, borderRadius: "8px" }}>
                 <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: sm.color, animation: ps !== 'active' ? "pulse 2s ease infinite" : "none", flexShrink: 0 }} aria-hidden />
                 <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: sm.color, flex: 1 }}>Protocol {sm.label}</p>
-                <a
-                  href={`https://notion.so/${client.notionPageId!.replace(/-/g, "")}`}
-                  target="_blank" rel="noopener noreferrer"
-                  style={{ fontSize: "0.75rem", color: "var(--dim)", textDecoration: "underline", fontWeight: 300, transition: "color 150ms" }}
-                  onMouseEnter={e => (e.currentTarget.style.color = "var(--muted)")}
-                  onMouseLeave={e => (e.currentTarget.style.color = "var(--dim)")}>
-                  Open in Notion
-                </a>
               </div>
               {/* Protocol status controls */}
               <div style={{ display: "flex", gap: "0.375rem" }}>

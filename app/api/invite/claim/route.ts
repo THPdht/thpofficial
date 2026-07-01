@@ -20,7 +20,7 @@ export async function POST(req: Request) {
       return Response.json({ error: 'This invite link has expired. Ask THP to send a new one.' }, { status: 400 });
     }
 
-    // Set the password and mark invite as used
+    // Set the password
     const { error: updateError } = await supabase
       .from('users')
       .update({ password })
@@ -28,9 +28,22 @@ export async function POST(req: Request) {
 
     if (updateError) return Response.json({ error: 'Failed to set password' }, { status: 500 });
 
-    await supabase.from('invites').update({ used: true }).eq('token', token);
+    // Fetch user status to determine redirect
+    const { data: userRow } = await supabase
+      .from('users')
+      .select('status')
+      .eq('email', invite.email)
+      .maybeSingle();
+    const userStatus = userRow?.status ?? 'new';
 
-    return Response.json({ success: true, email: invite.email });
+    // Only mark token as used for active-status users (they skip /onboarding).
+    // For new-status users the token stays valid — it gets consumed when they
+    // submit the /onboarding form via /api/generate-onboarding-protocol.
+    if (userStatus === 'active' || userStatus === 'alumni') {
+      await supabase.from('invites').update({ used: true }).eq('token', token);
+    }
+
+    return Response.json({ success: true, email: invite.email, status: userStatus });
   } catch (err) {
     console.error('[invite/claim]', err);
     return Response.json({ error: 'Internal server error' }, { status: 500 });

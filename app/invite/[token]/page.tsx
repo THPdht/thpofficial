@@ -41,8 +41,12 @@ export default function InvitePage() {
         return;
       }
       setDone(true);
-      // Redirect to login after brief pause
-      setTimeout(() => router.push("/login"), 2000);
+      // Active/alumni clients skip intake and go straight to dashboard.
+      // New clients go to /onboarding with the token in the URL so the paywall passes.
+      const destination = (data.status === 'active' || data.status === 'alumni')
+        ? '/dashboard'
+        : `/onboarding?token=${encodeURIComponent(token)}`;
+      setTimeout(() => router.push(destination), 2000);
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -73,7 +77,7 @@ export default function InvitePage() {
               You&apos;re set.
             </p>
             <p style={{ fontSize: "0.9rem", color: "var(--muted)", fontWeight: 300 }}>
-              Taking you to sign in…
+              Taking you to your portal…
             </p>
           </div>
         ) : (

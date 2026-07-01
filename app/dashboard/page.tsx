@@ -44,6 +44,26 @@ export default function Dashboard() {
       }
       // Only populate user state after confirming account is active
       setUser(u);
+
+      // First-time imported client: if active but has never been welcomed,
+      // redirect to /welcome so they can upload their existing protocol PDF
+      if (u.status === 'active' && !localStorage.getItem(`thp_welcomed_${u.email}`)) {
+        // Check if they already have a protocol in the DB
+        import('@/lib/auth').then(({ getClientProtocols }) => {
+          getClientProtocols(u.email).then(protocols => {
+            if (!isMounted) return;
+            if (protocols.length === 0) {
+              // No protocol yet — show welcome/upload page
+              router.replace('/welcome');
+            } else {
+              // Already has a protocol, mark welcomed and stay
+              localStorage.setItem(`thp_welcomed_${u.email}`, '1');
+            }
+          }).catch(() => {});
+        });
+        return;
+      }
+
       if (!u.diagnosticData?.notionPageId) {
         setActiveTab("protocol");
       }
@@ -78,7 +98,7 @@ export default function Dashboard() {
       const hour = new Date().getHours();
       if ((hour >= 8) && !localStorage.getItem(notifKey)) {
         try {
-          new Notification('NK Portal', { body: "Log your tracker and complete today's challenge.", icon: '/thp.jpg', tag: 'daily-reminder' });
+          new Notification('THP', { body: "Log your tracker and complete today's challenge.", icon: '/thp.jpg', tag: 'daily-reminder' });
           localStorage.setItem(notifKey, '1');
         } catch { /* blocked */ }
       }
@@ -134,7 +154,8 @@ export default function Dashboard() {
     return (
       <div style={{ minHeight: "100dvh", background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem", textAlign: "center" }}>
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}>
-          <p style={{ fontSize: "0.75rem", fontWeight: 500, letterSpacing: "0.12em", color: "var(--primary)", textTransform: "uppercase", marginBottom: "2.5rem", fontFamily: "var(--font-mono), monospace" }}>NK</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/images/thprebrandlogo2.png" alt="THP" style={{ height: "36px", width: "auto", filter: "brightness(0) invert(1)", marginBottom: "2.5rem" }} />
           <p style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.75rem", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.02em", marginBottom: "0.75rem" }}>Your access has been removed</p>
           <p style={{ fontSize: "0.9375rem", color: "var(--muted)", fontWeight: 300, maxWidth: "34ch", lineHeight: 1.75, marginBottom: "2.5rem" }}>
             Message THP to get set up again
@@ -162,7 +183,8 @@ export default function Dashboard() {
   if (accountStatus === 'hold') {
     return (
       <div style={{ minHeight: "100dvh", background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem", textAlign: "center" }}>
-        <span style={{ fontSize: "0.75rem", fontWeight: 500, letterSpacing: "0.12em", color: "var(--primary)", textTransform: "uppercase", marginBottom: "2.5rem" }}>NK</span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/images/thprebrandlogo2.png" alt="THP" style={{ height: "36px", width: "auto", filter: "brightness(0) invert(1)", marginBottom: "2.5rem" }} />
         <p style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.75rem", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.02em", marginBottom: "0.75rem" }}>Your account is on hold</p>
         <p style={{ fontSize: "0.9375rem", color: "var(--muted)", fontWeight: 300, maxWidth: "38ch", lineHeight: 1.7, marginBottom: "2rem" }}>
           THP has temporarily paused your access. Reach out to him directly to resolve this.
@@ -218,14 +240,8 @@ export default function Dashboard() {
         justifyContent: "space-between",
         height: "56px",
       }}>
-        <span style={{
-          fontSize: "0.75rem",
-          fontWeight: 600,
-          letterSpacing: "0.12em",
-          color: "var(--primary)",
-          textTransform: "uppercase",
-          fontFamily: "var(--font-mono), monospace",
-        }}>NK</span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/images/thprebrandlogo2.png" alt="THP" style={{ height: "28px", width: "auto", filter: "brightness(0) invert(1)" }} />
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
           {user.streak > 0 && (
             <div style={{

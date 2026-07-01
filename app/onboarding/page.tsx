@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { getCurrentUser, submitDiagnostic, signOut, register, login } from "@/lib/auth";
+import { getCurrentUser, signOut, register, login } from "@/lib/auth";
 
 type FormData = {
   fullName: string;
@@ -151,16 +151,24 @@ const SECTIONS = [
   "Final Details",
 ];
 
-export default function OnboardingPage() {
+function OnboardingInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get("session_id") ?? "";
+  const tokenParam = searchParams.get("token") ?? "";
+
   const [user, setUser] = useState<{ email: string; password: string; name: string } | null>(null);
   const [form, setForm] = useState<FormData>(EMPTY);
   const [section, setSection] = useState(0);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<"idle" | "saving" | "generating" | "done" | "error">("idle");
+  const [submitError, setSubmitError] = useState("");
   const [authMode, setAuthMode] = useState<"check" | "register" | "login" | "nudge">("check");
   const [authForm, setAuthForm] = useState({ name: "", email: "", password: "" });
   const [authError, setAuthError] = useState("");
+  const [accessVerified, setAccessVerified] = useState<boolean | null>(null); // null = checking
+  const accessChecked = useRef(false);
 
   useEffect(() => {
     const cached = getCurrentUser();
@@ -173,6 +181,30 @@ export default function OnboardingPage() {
       setForm(prev => ({ ...prev, ...cached.diagnosticData }));
     }
   }, [router]);
+
+  // Verify payment / invite access once user is confirmed
+  useEffect(() => {
+    if (!user || accessChecked.current) return;
+    accessChecked.current = true;
+
+    if (!sessionId && !tokenParam) {
+      // No proof of payment — block
+      router.replace("/");
+      return;
+    }
+
+    const params = new URLSearchParams();
+    if (sessionId) params.set("session_id", sessionId);
+    if (tokenParam) params.set("token", tokenParam);
+
+    fetch(`/api/verify-onboarding-access?${params}`)
+      .then(r => r.json())
+      .then(({ valid }) => {
+        if (!valid) { router.replace("/"); return; }
+        setAccessVerified(true);
+      })
+      .catch(() => router.replace("/"));
+  }, [user, sessionId, tokenParam, router]);
 
   const set = (key: keyof FormData) => (v: string) => setForm(prev => ({ ...prev, [key]: v }));
 
@@ -225,13 +257,65 @@ export default function OnboardingPage() {
     if (!validateSection()) return;
     if (!user) return;
     setSubmitting(true);
-    await submitDiagnostic(user.email, form);
-    router.push("/onboarding/pending");
+    setSubmitStatus("saving");
+    setSubmitError("");
+
+    try {
+      setSubmitStatus("generating");
+      const res = await fetch("/api/generate-onboarding-protocol", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: user.email, formData: form, token: tokenParam || undefined }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Protocol generation failed");
+      }
+
+      setSubmitStatus("done");
+      router.replace("/dashboard");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+      setSubmitError(msg);
+      setSubmitStatus("error");
+      setSubmitting(false);
+    }
   }
 
   const err = (k: keyof FormData) => errors[k] ? (
     <p style={{ color: "#ef4444", fontSize: "0.75rem", marginTop: "0.25rem" }}>{errors[k]}</p>
   ) : null;
+
+  // While verifying access
+  if (user && accessVerified === null && (sessionId || tokenParam)) {
+    return (
+      <div style={{ minHeight: "100dvh", background: bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <p style={{ color: muted, fontFamily: "var(--font-body), sans-serif", fontSize: "0.9rem" }}>Verifying access...</p>
+      </div>
+    );
+  }
+
+  // Protocol generating overlay
+  if (submitting && submitStatus !== "error") {
+    return (
+      <div style={{ minHeight: "100dvh", background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1.5rem", padding: "2rem" }}>
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+          style={{ width: "40px", height: "40px", borderRadius: "50%", border: `3px solid ${border}`, borderTopColor: primary }}
+        />
+        <div style={{ textAlign: "center" }}>
+          <p style={{ color: ink, fontFamily: "var(--font-body), sans-serif", fontSize: "1rem", fontWeight: 500, marginBottom: "0.5rem" }}>
+            {submitStatus === "saving" ? "Saving your intake..." : "Building your protocol..."}
+          </p>
+          <p style={{ color: muted, fontFamily: "var(--font-body), sans-serif", fontSize: "0.82rem" }}>
+            THP AI is analysing your intake. This takes about 30 seconds.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (authMode === "nudge" && user) {
     return (
@@ -432,9 +516,16 @@ export default function OnboardingPage() {
               Continue
             </button>
           ) : (
-            <button onClick={handleSubmit} disabled={submitting} style={{ flex: 2, padding: "0.875rem", background: primary, color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1, fontFamily: "var(--font-body), sans-serif" }}>
-              {submitting ? "Sending..." : "Send It"}
-            </button>
+            <>
+              <button onClick={handleSubmit} disabled={submitting} style={{ flex: 2, padding: "0.875rem", background: primary, color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1, fontFamily: "var(--font-body), sans-serif" }}>
+                Send It
+              </button>
+              {submitError && (
+                <p style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.5rem", width: "100%", textAlign: "center", fontFamily: "var(--font-body), sans-serif" }}>
+                  {submitError}
+                </p>
+              )}
+            </>
           )}
         </div>
 
@@ -444,5 +535,13 @@ export default function OnboardingPage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100dvh", background: "var(--color-ink)" }} />}>
+      <OnboardingInner />
+    </Suspense>
   );
 }

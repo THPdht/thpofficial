@@ -111,6 +111,7 @@ export type DiagnosticData = {
   // Admin-managed fields
   protocolStatus?: ProtocolStatus;
   accountStatus?: AccountStatus;
+  clientType?: 'skool' | '1on1';
   payments?: Payment[];
   notionPageId?: string;
   suspended?: boolean;
@@ -269,6 +270,12 @@ export async function setAccountStatus(email: string, status: AccountStatus): Pr
   const { data } = await supabase.from('users').select('diagnostic_data').eq('email', email).maybeSingle();
   const diag = data?.diagnostic_data || {};
   await supabase.from('users').update({ diagnostic_data: { ...diag, accountStatus: status } }).eq('email', email);
+}
+
+export async function setClientType(email: string, clientType: 'skool' | '1on1'): Promise<void> {
+  const { data } = await supabase.from('users').select('diagnostic_data').eq('email', email).maybeSingle();
+  const diag = data?.diagnostic_data || {};
+  await supabase.from('users').update({ diagnostic_data: { ...diag, clientType } }).eq('email', email);
 }
 
 export async function addPayment(email: string, payment: Omit<Payment, 'id'>): Promise<void> {
