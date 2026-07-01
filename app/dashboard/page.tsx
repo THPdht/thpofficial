@@ -3,16 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { getCurrentUser, signOut, recordCheckIn, hasCheckedInToday, getMessages, addMessage, uploadMessageAttachment, rowToUser, cacheUser, updatePresence, isAdminActive, getClientProtocols } from "@/lib/auth";
-import type { Message, AttachmentType, ClientProtocol, TrackerQuestion } from "@/lib/auth";
+import { getCurrentUser, signOut, recordCheckIn, hasCheckedInToday, getMessages, addMessage, uploadMessageAttachment, rowToUser, cacheUser, updatePresence, isAdminActive, getClientProtocols, getClientDiagnostics } from "@/lib/auth";
+import type { Message, AttachmentType, ClientProtocol, ClientDiagnostic, TrackerQuestion } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import type { StoredUser } from "@/lib/auth";
 import type { Protocol, TrackerField } from "@/lib/protocols";
+import ProtocolDocumentComponent from "@/components/portal/ProtocolDocument";
+import DiagnosticDocumentComponent from "@/components/portal/DiagnosticDocument";
 
 const WHATSAPP_NUMBER = "447453172081";
 const CAL_LINK = "https://www.cal.eu/thp/call";
 
-type Tab = "today" | "protocol" | "book" | "thp";
+type Tab = "today" | "diagnosis" | "protocol" | "book" | "thp";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -300,7 +302,7 @@ export default function Dashboard() {
         WebkitOverflowScrolling: "touch" as "touch",
         scrollbarWidth: "none" as "none",
       }}>
-        {(["today", "protocol", "book", "thp"] as Tab[])
+        {(["today", "diagnosis", "protocol", "book", "thp"] as Tab[])
           .filter(tab => tab !== "today" || user.status === "active" || user.status === "alumni")
           .filter(tab => !isLimited || tab === "thp")
           .map(tab => (
@@ -324,7 +326,7 @@ export default function Dashboard() {
                 flexShrink: 0,
               }}
             >
-              {tab === "today" ? "Today" : tab === "protocol" ? (
+              {tab === "today" ? "Today" : tab === "diagnosis" ? "Diagnosis" : tab === "protocol" ? (
                 <span style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
                   Protocol
                   {user.diagnosticData?.protocolStatus === "active" && (
@@ -378,6 +380,7 @@ export default function Dashboard() {
         <AnimatePresence mode="wait">
           <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}>
             {activeTab === "today" && !isLimited && (user.status === "active" || user.status === "alumni") && <TodayTab user={user} protocol={protocol} firstName={firstName} greeting={greeting} alreadyCheckedIn={alreadyCheckedIn} todayFormatted={todayFormatted} onComplete={onCheckInComplete} isAlumni={user.status === "alumni"} />}
+            {activeTab === "diagnosis" && !isLimited && <DiagnosisTab user={user} />}
             {activeTab === "protocol" && !isLimited && <ProtocolTab user={user} protocol={protocol} notionPageId={user.notionPageId} />}
             {activeTab === "book" && !isLimited && <BookTab isAlumni={user.status === "alumni"} />}
             {(activeTab === "thp" || isLimited) && <NikodmTab user={user} isAlumni={user.status === "alumni"} />}
@@ -815,113 +818,127 @@ function NotionRenderer({ blocks }: { blocks: NotionBlock[] }) {
   );
 }
 
-function ProtocolTab({ user, protocol, notionPageId }: { user: StoredUser; protocol: Protocol | null; notionPageId?: string }) {
-  const [stages, setStages] = useState<ClientProtocol[]>([]);
-  const [activeStage, setActiveStage] = useState<ClientProtocol | null>(null);
-  const [blocks, setBlocks] = useState<NotionBlock[]>([]);
-  const [loading, setLoading] = useState(false);
+// ─── DIAGNOSIS TAB ──────────────────────────────────────────────────────────
+
+function DiagnosisTab({ user }: { user: StoredUser }) {
+  const [stages, setStages] = useState<ClientDiagnostic[]>([]);
+  const [activeStage, setActiveStage] = useState<ClientDiagnostic | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getClientProtocols(user.email).then(protocols => {
-      if (protocols.length > 0) {
-        setStages(protocols);
-        setActiveStage(protocols[protocols.length - 1]);
-      } else if (notionPageId) {
-        const legacy: ClientProtocol = {
-          id: 'legacy',
-          userEmail: user.email,
-          stage: 1,
-          notionPageId,
-          title: 'Protocol',
-          createdAt: user.joinedAt,
-        };
-        setStages([legacy]);
-        setActiveStage(legacy);
-      }
-    }).catch(() => {
-      if (notionPageId) {
-        const legacy: ClientProtocol = { id: 'legacy', userEmail: user.email, stage: 1, notionPageId, title: 'Protocol', createdAt: user.joinedAt };
-        setStages([legacy]);
-        setActiveStage(legacy);
-      }
-    });
-  }, [user.email, notionPageId]);
+    getClientDiagnostics(user.email).then(diags => {
+      setStages(diags);
+      if (diags.length > 0) setActiveStage(diags[diags.length - 1]);
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, [user.email]);
 
-  useEffect(() => {
-    if (!activeStage) return;
-    setLoading(true);
-    setBlocks([]);
-    fetch(`/api/notion-protocol?pageId=${activeStage.notionPageId}`)
-      .then(r => r.json())
-      .then(data => { if (data.blocks) setBlocks(data.blocks); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [activeStage?.notionPageId]);
-
-  if (!protocol && !notionPageId && stages.length === 0) {
+  if (loading) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", padding: "2rem" }}>
-        <p style={{ fontSize: "0.9375rem", color: "var(--dim)", fontWeight: 300, textAlign: "center", lineHeight: 1.6 }}>
-          Your protocol is being prepared. Check back soon.
-        </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        {[1, 2, 3].map(i => <div key={i} style={{ height: "80px", background: "var(--surface)", borderRadius: "8px", opacity: 0.4 }} />)}
       </div>
     );
   }
 
-  const protocolStatus = user.diagnosticData?.protocolStatus;
-  if (notionPageId && (protocolStatus === "building" || protocolStatus === "updating") && stages.length === 0) {
+  if (stages.length === 0 || !activeStage) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", padding: "2rem" }}>
         <p style={{ fontSize: "0.9375rem", color: "var(--dim)", fontWeight: 300, textAlign: "center", lineHeight: 1.6 }}>
-          {protocolStatus === "building" ? "Your protocol is being built." : "Your protocol is being updated."}
+          Your diagnosis is being prepared. Check back soon.
         </p>
       </div>
     );
   }
 
   return (
-    <div style={{ height: "100%", overflowY: "auto", padding: "1.5rem 1.25rem" }}>
+    <div>
       {stages.length > 1 && (
-        <div style={{ display: "flex", gap: "0.375rem", marginBottom: "1.25rem", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "0.375rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
           {stages.map(s => (
-            <button
-              key={s.id}
-              onClick={() => setActiveStage(s)}
-              style={{
-                height: "28px", padding: "0 0.875rem", borderRadius: "99px",
-                border: "1px solid",
-                borderColor: activeStage?.id === s.id ? "var(--primary)" : "var(--border-subtle)",
-                background: activeStage?.id === s.id ? "oklch(0.60 0.18 165 / 0.12)" : "none",
-                color: activeStage?.id === s.id ? "var(--primary)" : "var(--dim)",
-                fontSize: "0.75rem", fontWeight: activeStage?.id === s.id ? 500 : 400,
-                cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif",
-                transition: "all 150ms",
-              }}>
-              Stage {s.stage}
-            </button>
+            <button key={s.id} onClick={() => setActiveStage(s)} style={{
+              height: "28px", padding: "0 0.875rem", borderRadius: "99px", border: "1px solid",
+              borderColor: activeStage?.id === s.id ? "var(--primary)" : "var(--border-subtle)",
+              background: activeStage?.id === s.id ? "oklch(0.60 0.18 165 / 0.12)" : "none",
+              color: activeStage?.id === s.id ? "var(--primary)" : "var(--dim)",
+              fontSize: "0.75rem", fontWeight: activeStage?.id === s.id ? 500 : 400,
+              cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "all 150ms",
+            }}>Stage {s.stage}</button>
           ))}
         </div>
       )}
+      {activeStage.content?.sections && (
+        <DiagnosticDocumentComponent
+          title={activeStage.title}
+          stage={activeStage.stage}
+          sections={activeStage.content.sections}
+          createdAt={activeStage.createdAt}
+          clientName={user.name}
+        />
+      )}
+    </div>
+  );
+}
 
-      {loading && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          {[1, 2, 3].map(i => (
-            <div key={i} style={{ height: "60px", background: "var(--surface)", borderRadius: "8px", opacity: 0.5 }} />
+// ─── PROTOCOL TAB ────────────────────────────────────────────────────────────
+
+function ProtocolTab({ user, protocol, notionPageId }: { user: StoredUser; protocol: Protocol | null; notionPageId?: string }) {
+  const [stages, setStages] = useState<ClientProtocol[]>([]);
+  const [activeStage, setActiveStage] = useState<ClientProtocol | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getClientProtocols(user.email).then(protocols => {
+      if (protocols.length > 0) {
+        setStages(protocols);
+        setActiveStage(protocols[protocols.length - 1]);
+      }
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, [user.email]);
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        {[1, 2, 3].map(i => <div key={i} style={{ height: "80px", background: "var(--surface)", borderRadius: "8px", opacity: 0.4 }} />)}
+      </div>
+    );
+  }
+
+  if (stages.length === 0) {
+    const protocolStatus = user.diagnosticData?.protocolStatus;
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", padding: "2rem" }}>
+        <p style={{ fontSize: "0.9375rem", color: "var(--dim)", fontWeight: 300, textAlign: "center", lineHeight: 1.6 }}>
+          {protocolStatus === "building" ? "Your protocol is being built." : protocolStatus === "updating" ? "Your protocol is being updated." : "Your protocol is being prepared. Check back soon."}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {stages.length > 1 && (
+        <div style={{ display: "flex", gap: "0.375rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
+          {stages.map(s => (
+            <button key={s.id} onClick={() => setActiveStage(s)} style={{
+              height: "28px", padding: "0 0.875rem", borderRadius: "99px", border: "1px solid",
+              borderColor: activeStage?.id === s.id ? "var(--primary)" : "var(--border-subtle)",
+              background: activeStage?.id === s.id ? "oklch(0.60 0.18 165 / 0.12)" : "none",
+              color: activeStage?.id === s.id ? "var(--primary)" : "var(--dim)",
+              fontSize: "0.75rem", fontWeight: activeStage?.id === s.id ? 500 : 400,
+              cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "all 150ms",
+            }}>Stage {s.stage}</button>
           ))}
         </div>
       )}
-
-      {!loading && blocks.length > 0 && (
-        <NotionRenderer blocks={blocks} />
-      )}
-
-      {activeStage?.notionPageId && (
-        <a
-          href={`https://www.notion.so/${activeStage.notionPageId.replace(/-/g, "")}`}
-          target="_blank" rel="noopener noreferrer"
-          style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem", marginTop: "1.5rem", fontSize: "0.8rem", color: "var(--dim)", textDecoration: "none", fontWeight: 300 }}>
-          <NotionIcon /> Open in Notion
-        </a>
+      {activeStage?.content?.sections && (
+        <ProtocolDocumentComponent
+          title={activeStage.title}
+          stage={activeStage.stage}
+          sections={activeStage.content.sections}
+          todos={activeStage.content.todos ?? []}
+          createdAt={activeStage.createdAt}
+          clientName={user.name}
+        />
       )}
     </div>
   );

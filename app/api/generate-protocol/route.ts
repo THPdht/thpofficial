@@ -178,7 +178,6 @@ export async function POST(req: Request) {
     const parsed = JSON.parse(cleaned);
     const sections: { heading: string; text: string }[] = parsed.sections ?? [];
     const todos: string[] = parsed.todos ?? [];
-    const title = `${name} — Protocol Stage 1`;
 
     // Count existing protocols for stage number
     const { count } = await supabase
@@ -187,10 +186,32 @@ export async function POST(req: Request) {
       .eq('user_email', clientEmail);
     const stage = (count ?? 0) + 1;
 
-    // Save to Supabase
+    // Split sections: first 4 are diagnostic, last 4 are protocol
+    const DIAGNOSTIC_HEADINGS = new Set([
+      'WHERE YOU ARE RIGHT NOW',
+      'ROOT PROBLEM',
+      'WHY IT IS HAPPENING',
+      'WHY PREVIOUS ATTEMPTS FAILED',
+    ]);
+    const diagnosticSections = sections.filter(s => DIAGNOSTIC_HEADINGS.has(s.heading.toUpperCase()));
+    const protocolSections = sections.filter(s => !DIAGNOSTIC_HEADINGS.has(s.heading.toUpperCase()));
+
+    const diagTitle = `${name} — Diagnosis Stage ${stage}`;
+    const protTitle = `${name} — Protocol Stage ${stage}`;
+    const title = protTitle;
+
+    // Save diagnostic to diagnostics table
+    await supabase.from('diagnostics').insert({
+      user_email: clientEmail,
+      stage,
+      title: diagTitle,
+      content: { sections: diagnosticSections },
+    });
+
+    // Save protocol to protocols table
     const { data: protocol, error: insertError } = await supabase
       .from('protocols')
-      .insert({ user_email: clientEmail, stage, title, content: { sections, todos } })
+      .insert({ user_email: clientEmail, stage, title, content: { sections: protocolSections, todos } })
       .select()
       .single();
     if (insertError) return Response.json({ error: 'Failed to save protocol' }, { status: 500 });

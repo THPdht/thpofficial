@@ -949,6 +949,9 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
   const [paymentNote, setPaymentNote] = useState("");
   const [addingPayment, setAddingPayment] = useState(false);
   const [clientProtocols, setClientProtocols] = useState<ClientProtocol[]>([]);
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
   const [trackerSummary, setTrackerSummary] = useState<{
     trends: { category: string; avgScore: number; direction: string; delta: number }[];
     flagged: { date: string; questionLabel: string; value: string | number | boolean; category: string }[];
@@ -961,7 +964,31 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
   useEffect(() => {
     getClientProtocols(client.email).then(setClientProtocols).catch(() => {});
     setTrackerSummary(null);
+    setInviteUrl(null);
+    setInviteCopied(false);
   }, [client.email]);
+
+  async function handleGenerateInvite() {
+    setInviteLoading(true);
+    try {
+      const res = await fetch('/api/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD },
+        body: JSON.stringify({ email: client.email }),
+      });
+      const data = await res.json();
+      if (data.url) setInviteUrl(data.url);
+    } catch { /* ignore */ }
+    setInviteLoading(false);
+  }
+
+  function copyInviteUrl() {
+    if (!inviteUrl) return;
+    navigator.clipboard.writeText(inviteUrl).then(() => {
+      setInviteCopied(true);
+      setTimeout(() => setInviteCopied(false), 2000);
+    });
+  }
 
   async function loadTrackerSummary() {
     setTrackerLoading(true);
@@ -1071,6 +1098,32 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
             <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)" }}>{s.value}</p>
           </div>
         ))}
+      </div>
+
+      {/* Invite link */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
+        <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem" }}>Portal Access</p>
+        {!inviteUrl ? (
+          <button
+            onClick={handleGenerateInvite}
+            disabled={inviteLoading}
+            style={{ height: "36px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: inviteLoading ? "var(--dim)" : "var(--muted)", fontSize: "0.8125rem", fontWeight: 500, cursor: inviteLoading ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+            {inviteLoading ? "Generating…" : "Generate invite link"}
+          </button>
+        ) : (
+          <div style={{ display: "flex", gap: "0.375rem" }}>
+            <input
+              readOnly
+              value={inviteUrl}
+              style={{ flex: 1, height: "34px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.625rem", fontSize: "0.75rem", color: "var(--dim)", fontFamily: "var(--font-mono), monospace", outline: "none" }}
+            />
+            <button
+              onClick={copyInviteUrl}
+              style={{ height: "34px", padding: "0 0.75rem", background: inviteCopied ? "oklch(0.60 0.18 165 / 0.12)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: inviteCopied ? "var(--primary)" : "var(--muted)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+              {inviteCopied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+        )}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>

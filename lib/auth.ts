@@ -47,6 +47,16 @@ export type ClientProtocol = {
   createdAt: string;
 };
 
+export type ClientDiagnostic = {
+  id: string;
+  userEmail: string;
+  stage: number;
+  title: string;
+  content?: { sections: { heading: string; text: string }[] };
+  pdfUrl?: string;
+  createdAt: string;
+};
+
 export type WeeklyResponseSummary = {
   days: {
     date: string;
@@ -318,6 +328,25 @@ export async function getClientProtocols(email: string): Promise<ClientProtocol[
     notionPageId: row.notion_page_id ?? undefined,
     title: row.title,
     content: row.content ?? undefined,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function getClientDiagnostics(email: string): Promise<ClientDiagnostic[]> {
+  const { data, error } = await supabase
+    .from('diagnostics')
+    .select('*')
+    .eq('user_email', email)
+    .order('stage', { ascending: true });
+  if (error || !data) return [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return data.map((row: any) => ({
+    id: row.id,
+    userEmail: row.user_email,
+    stage: row.stage,
+    title: row.title,
+    content: row.content ?? undefined,
+    pdfUrl: row.pdf_url ?? undefined,
     createdAt: row.created_at,
   }));
 }
