@@ -979,6 +979,7 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
   const [paymentLinkLoading, setPaymentLinkLoading] = useState(false);
   const [paymentLinkCopied, setPaymentLinkCopied] = useState(false);
   const [paymentLinkError, setPaymentLinkError] = useState("");
+  const [checkoutAmount, setCheckoutAmount] = useState("2000");
   const [trackerSummary, setTrackerSummary] = useState<{
     trends: { category: string; avgScore: number; direction: string; delta: number }[];
     flagged: { date: string; questionLabel: string; value: string | number | boolean; category: string }[];
@@ -999,6 +1000,7 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
     setPaymentUrl(null);
     setPaymentLinkCopied(false);
     setPaymentLinkError("");
+    setCheckoutAmount("2000");
   }, [client.email]);
 
   async function handlePublishDiagnosis(diagId: string) {
@@ -1037,7 +1039,7 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
       const res = await fetch('/api/stripe/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: client.email, adminPw: ADMIN_PASSWORD }),
+        body: JSON.stringify({ email: client.email, adminPw: ADMIN_PASSWORD, amount: Number(checkoutAmount) }),
       });
       const data = await res.json();
       if (data.url) {
@@ -1250,32 +1252,53 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
 
       {/* Payment link */}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
-        <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem" }}>Payment Link</p>
+        <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem" }}>Send Payment Link</p>
         {!paymentUrl ? (
           <>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+              <span style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 500, flexShrink: 0 }}>$</span>
+              <input
+                type="number"
+                min="1"
+                value={checkoutAmount}
+                onChange={e => setCheckoutAmount(e.target.value)}
+                placeholder="2000"
+                style={{ flex: 1, height: "34px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.625rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }}
+                onFocus={e => (e.target.style.borderColor = "var(--primary)")}
+                onBlur={e => (e.target.style.borderColor = "var(--border)")}
+              />
+            </div>
+            <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300 }}>Standard: $2,000 · Min: $500. Type the agreed amount.</p>
             <button
               onClick={handleGeneratePaymentLink}
-              disabled={paymentLinkLoading}
-              style={{ height: "36px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: paymentLinkLoading ? "var(--dim)" : "var(--muted)", fontSize: "0.8125rem", fontWeight: 500, cursor: paymentLinkLoading ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-              {paymentLinkLoading ? "Generating…" : "Generate Stripe payment link"}
+              disabled={paymentLinkLoading || !checkoutAmount || Number(checkoutAmount) < 1}
+              style={{ height: "36px", background: (paymentLinkLoading || !checkoutAmount || Number(checkoutAmount) < 1) ? "var(--surface-2)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: (paymentLinkLoading || !checkoutAmount || Number(checkoutAmount) < 1) ? "var(--dim)" : "var(--muted)", fontSize: "0.8125rem", fontWeight: 500, cursor: (paymentLinkLoading || !checkoutAmount || Number(checkoutAmount) < 1) ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+              {paymentLinkLoading ? "Generating…" : `Generate $${checkoutAmount || '—'} link`}
             </button>
             {paymentLinkError && (
               <p style={{ fontSize: "0.75rem", color: "var(--danger)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{paymentLinkError}</p>
             )}
           </>
         ) : (
-          <div style={{ display: "flex", gap: "0.375rem" }}>
-            <input
-              readOnly
-              value={paymentUrl}
-              style={{ flex: 1, height: "34px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.625rem", fontSize: "0.75rem", color: "var(--dim)", fontFamily: "var(--font-mono), monospace", outline: "none" }}
-            />
-            <button
-              onClick={copyPaymentUrl}
-              style={{ height: "34px", padding: "0 0.75rem", background: paymentLinkCopied ? "oklch(0.60 0.18 165 / 0.12)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: paymentLinkCopied ? "var(--primary)" : "var(--muted)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
-              {paymentLinkCopied ? "Copied!" : "Copy"}
+          <>
+            <p style={{ fontSize: "0.75rem", color: "oklch(0.7 0.15 145)", fontWeight: 400 }}>${checkoutAmount} checkout link ready</p>
+            <div style={{ display: "flex", gap: "0.375rem" }}>
+              <input
+                readOnly
+                value={paymentUrl}
+                style={{ flex: 1, height: "34px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.625rem", fontSize: "0.75rem", color: "var(--dim)", fontFamily: "var(--font-mono), monospace", outline: "none" }}
+              />
+              <button
+                onClick={copyPaymentUrl}
+                style={{ height: "34px", padding: "0 0.75rem", background: paymentLinkCopied ? "oklch(0.60 0.18 165 / 0.12)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: paymentLinkCopied ? "var(--primary)" : "var(--muted)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+                {paymentLinkCopied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            <button onClick={() => { setPaymentUrl(null); setPaymentLinkCopied(false); }}
+              style={{ height: "28px", background: "none", border: "none", color: "var(--dim)", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", textAlign: "left" }}>
+              ← Generate different amount
             </button>
-          </div>
+          </>
         )}
       </div>
 
