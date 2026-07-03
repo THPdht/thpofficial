@@ -1546,26 +1546,42 @@ function CrmPanel({ client }: { client: StoredUser }) {
       )}
 
       {/* Blood work */}
-      <div>
-        {sectionLabel(bloodWork?.markers ? `Blood work · ${bloodWork.test_date ?? new Date(bloodWork.uploaded_at).toLocaleDateString('en-GB')}` : 'Blood work')}
-        {bloodWork?.markers ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "0.5rem" }}>
-            {Object.entries(bloodWork.markers).slice(0, 12).map(([key, m]) => (
-              <div key={key} style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: `1px solid ${m.flag && m.flag !== 'normal' ? 'oklch(0.65 0.14 65 / 0.35)' : 'var(--border-subtle)'}`, borderRadius: "8px" }}>
-                <p style={{ fontSize: "0.65rem", color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.25rem" }}>{key.replace(/_/g,' ')}</p>
-                <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: m.flag && m.flag !== 'normal' ? 'oklch(0.75 0.12 65)' : 'var(--ink)', fontFamily: "var(--font-mono), monospace" }}>
-                  {m.value ?? '—'} <span style={{ fontSize: "0.65rem", fontWeight: 300, color: "var(--dim)" }}>{m.unit}</span>
-                </p>
-              </div>
-            ))}
+      {(() => {
+        const BLOOD_MARKERS: Record<string, string> = {
+          total_t: "Total T", free_t: "Free T", shbg: "SHBG", estradiol: "Estradiol",
+          lh: "LH", fsh: "FSH", cortisol: "Cortisol", hematocrit: "Hematocrit",
+          hemoglobin: "Hemoglobin", rbc: "RBC", psa: "PSA", dhea_s: "DHEA-S",
+          igf1: "IGF-1", tsh: "TSH", t3_free: "Free T3", t4_free: "Free T4",
+          vitamin_d: "Vitamin D", ferritin: "Ferritin", cholesterol: "Cholesterol",
+          hdl: "HDL", ldl: "LDL", triglycerides: "Triglycerides", glucose: "Glucose",
+          hba1c: "HbA1c", creatinine: "Creatinine", alt: "ALT", ast: "AST",
+        };
+        const markers = bloodWork?.markers;
+        return (
+          <div>
+            {sectionLabel(markers ? `Blood work · ${bloodWork!.test_date ?? new Date(bloodWork!.uploaded_at).toLocaleDateString('en-GB')}` : 'Blood work')}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "0.5rem", opacity: markers ? 1 : 0.35 }}>
+              {markers
+                ? Object.entries(markers).slice(0, 12).map(([key, m]) => (
+                    <div key={key} style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: `1px solid ${m.flag && m.flag !== 'normal' ? 'oklch(0.65 0.14 65 / 0.35)' : 'var(--border-subtle)'}`, borderRadius: "8px" }}>
+                      <p style={{ fontSize: "0.65rem", color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.25rem" }}>{BLOOD_MARKERS[key] ?? key.replace(/_/g,' ')}</p>
+                      <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: m.flag && m.flag !== 'normal' ? 'oklch(0.75 0.12 65)' : 'var(--ink)', fontFamily: "var(--font-mono), monospace" }}>
+                        {m.value ?? '—'} <span style={{ fontSize: "0.65rem", fontWeight: 300, color: "var(--dim)" }}>{m.unit}</span>
+                      </p>
+                    </div>
+                  ))
+                : Object.entries(BLOOD_MARKERS).map(([key, label]) => (
+                    <div key={key} style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px" }}>
+                      <p style={{ fontSize: "0.65rem", color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.25rem" }}>{label}</p>
+                      <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--dim)", fontFamily: "var(--font-mono), monospace" }}>—</p>
+                      <p style={{ fontSize: "0.6rem", color: "var(--dim)", marginTop: "0.2rem", fontWeight: 300 }}>no data</p>
+                    </div>
+                  ))
+              }
+            </div>
           </div>
-        ) : (
-          <div style={{ padding: "1.25rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px", display: "flex", alignItems: "center", gap: "0.875rem" }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--dim)", flexShrink: 0 }}><path d="M8 3v4M16 3v4M9 12l2 2 4-4M3 8h18M5 8v13a1 1 0 001 1h12a1 1 0 001-1V8"/></svg>
-            <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>No blood work on file for this client</p>
-          </div>
-        )}
-      </div>
+        );
+      })()}
 
       {/* Payment + referrals */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
