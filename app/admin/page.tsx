@@ -10,6 +10,7 @@ import {
 import type { StoredUser, ClientStatus, ProtocolStatus, AccountStatus, Payment, ClientProtocol, ClientDiagnostic } from "@/lib/auth";
 import type { ProtocolId } from "@/lib/protocols";
 import { supabase } from "@/lib/supabase";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
 
 const ADMIN_EMAIL = "info.shopzul@gmail.com";
 const ADMIN_PASSWORD = "Fikri!";
@@ -1425,6 +1426,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
   const [trackers, setTrackers] = useState<{ date: string; vitals?: Record<string,unknown>; training?: Record<string,unknown>; circadian?: Record<string,unknown>; [k: string]: unknown }[]>([]);
   const [expandedTracker, setExpandedTracker] = useState<string | null>(null);
   const [bloodWorkEntries, setBloodWorkEntries] = useState<{ id: string; test_date: string | null; uploaded_at: string; markers: Record<string,{ value: number | null; unit: string; flag?: string | null }> | null }[]>([]);
+  const [expandedBWMarker, setExpandedBWMarker] = useState<string | null>(null);
   const [userData, setUserData] = useState<{ deposit_paid: number | null; total_owed: number | null; telegram_username: string | null; last_login: string | null; last_tracker_date: string | null } | null>(null);
   const [referralCount, setReferralCount] = useState(0);
   const [notes, setNotes] = useState("");
@@ -1493,9 +1495,9 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
       .order('date', { ascending: false }).limit(10)
       .then(({ data }) => setTrackers((data as typeof trackers) ?? []));
 
-    // Blood work entries (latest 2 for delta comparison)
+    // Blood work entries — all for sparklines/charts, latest 2 used for delta
     supabase.from('blood_work').select('id, test_date, uploaded_at, markers').eq('user_email', client.email)
-      .order('uploaded_at', { ascending: false }).limit(2)
+      .order('uploaded_at', { ascending: false })
       .then(({ data }) => setBloodWorkEntries((data as typeof bloodWorkEntries) ?? []));
 
     // User data (deposit, telegram, last login/tracker)
@@ -1779,15 +1781,24 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         return (
           <div>
             {sectionLabel(bwLatest?.test_date ? `Blood Work · ${bwLatest.test_date}` : 'Blood Work')}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "0.5rem", marginBottom: "1.5rem" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "0.5rem", marginBottom: "1rem" }}>
               {Object.entries(MARKER_DEFAULTS).map(([key, def]) => {
                 const m = bwLatest?.markers?.[key];
                 const prevVal = bwPrevious?.markers?.[key]?.value ?? undefined;
                 const delta = prevVal != null && m?.value != null ? m.value - prevVal : null;
-                const flagColor = m?.flag === "high" ? "oklch(0.75 0.16 25)" : m?.flag === "low" ? "oklch(0.70 0.12 260)" : "var(--primary)";
+                const flagColor = m?.flag === "high" ? "oklch(0.75 0.16 25)" : m?.flag === "low" ? "oklch(0.70 0.12 260)" : "#c8102e";
                 const hasData = m?.value != null;
+                const isExpanded = expandedBWMarker === key;
+
+                const history = bloodWorkEntries
+                  .map(e => ({ date: e.test_date ?? new Date(e.uploaded_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }), val: e.markers?.[key]?.value ?? null }))
+                  .filter((p): p is { date: string; val: number } => p.val !== null)
+                  .reverse();
+
                 return (
-                  <div key={key} style={{ padding: "0.75rem", background: "var(--surface)", border: `1px solid ${m?.flag && m.flag !== "normal" ? flagColor + "44" : "var(--border)"}`, borderRadius: "8px" }}>
+                  <div key={key}
+                    onClick={() => setExpandedBWMarker(isExpanded ? null : key)}
+                    style={{ padding: "0.75rem", background: isExpanded ? "var(--surface-hover, #1a1a1a)" : "var(--surface)", border: `1px solid ${isExpanded ? "#c8102e44" : m?.flag && m.flag !== "normal" ? flagColor + "44" : "var(--border)"}`, borderRadius: "8px", cursor: "pointer", transition: "border-color 0.15s" }}>
                     <p style={{ fontSize: "0.65rem", color: "var(--dim)", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "0.25rem", fontFamily: "var(--font-mono), monospace" }}>{def.label}</p>
                     <p style={{ fontSize: "1rem", fontWeight: 600, color: hasData && m?.flag && m.flag !== "normal" ? flagColor : hasData ? "var(--ink)" : "var(--muted)", fontFamily: "var(--font-mono), monospace" }}>
                       {hasData ? m!.value : "—"} <span style={{ fontSize: "0.65rem", fontWeight: 400, color: "var(--dim)" }}>{hasData ? m!.unit : def.unit}</span>
@@ -1797,10 +1808,53 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
                         {delta > 0 ? "↑" : "↓"} {Math.abs(delta).toFixed(1)}
                       </p>
                     )}
+                    {history.length >= 2 && (
+                      <div style={{ marginTop: "0.375rem", height: "28px" }}>
+                        <ResponsiveContainer width="100%" height={28}>
+                          <LineChart data={history} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+                            <Line type="monotone" dataKey="val" stroke={m?.flag && m.flag !== "normal" ? flagColor : "#c8102e"} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
+
+            {/* Expanded marker chart */}
+            {expandedBWMarker && (() => {
+              const def = MARKER_DEFAULTS[expandedBWMarker];
+              const history = bloodWorkEntries
+                .map(e => ({ date: e.test_date ?? new Date(e.uploaded_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }), val: e.markers?.[expandedBWMarker]?.value ?? null }))
+                .filter((p): p is { date: string; val: number } => p.val !== null)
+                .reverse();
+              const latestM = bwLatest?.markers?.[expandedBWMarker];
+              const flagColor = latestM?.flag === "high" ? "oklch(0.75 0.16 25)" : latestM?.flag === "low" ? "oklch(0.70 0.12 260)" : "#c8102e";
+              return (
+                <div style={{ marginBottom: "1rem", padding: "1rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+                    <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--ink)", fontFamily: "var(--font-mono), monospace" }}>{def.label} <span style={{ fontWeight: 400, color: "var(--dim)" }}>({def.unit})</span></p>
+                    <button onClick={() => setExpandedBWMarker(null)} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: "0.875rem" }}>✕</button>
+                  </div>
+                  {history.length < 2 ? (
+                    <p style={{ fontSize: "0.75rem", color: "var(--dim)" }}>Need ≥2 uploads for a trend.</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={180}>
+                      <LineChart data={history} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+                        <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--dim)", fontFamily: "var(--font-mono), monospace" }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 10, fill: "var(--dim)", fontFamily: "var(--font-mono), monospace" }} axisLine={false} tickLine={false} width={40} />
+                        <Tooltip
+                          contentStyle={{ background: "#111", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "0.75rem", fontFamily: "var(--font-mono), monospace", color: "#fff" }}
+                          formatter={(value) => [`${value} ${def.unit}`, def.label]}
+                        />
+                        <Line type="monotone" dataKey="val" stroke={flagColor} strokeWidth={2} dot={{ fill: flagColor, r: 3, strokeWidth: 0 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         );
       })()}
