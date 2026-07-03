@@ -73,7 +73,7 @@ export default function PendingPage() {
             </a>
           ) : (
             <a
-              href={`https://wa.me/447453172081?text=Hi%20THP%2C%20I%27ve%20just%20submitted%20my%20application%20and%20I%27m%20ready%20to%20get%20started.`}
+              href="https://t.me/THPprotocol"
               target="_blank"
               rel="noopener noreferrer"
               style={{
