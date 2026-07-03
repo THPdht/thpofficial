@@ -14,6 +14,36 @@ import { supabase } from "@/lib/supabase";
 const ADMIN_EMAIL = "info.shopzul@gmail.com";
 const ADMIN_PASSWORD = "Fikri!";
 
+const MARKER_DEFAULTS: Record<string, { label: string; unit: string }> = {
+  total_t:      { label: "Total T",       unit: "ng/dL" },
+  free_t:       { label: "Free T",        unit: "pg/mL" },
+  shbg:         { label: "SHBG",          unit: "nmol/L" },
+  estradiol:    { label: "Estradiol",     unit: "pg/mL" },
+  lh:           { label: "LH",           unit: "mIU/mL" },
+  fsh:          { label: "FSH",          unit: "mIU/mL" },
+  cortisol:     { label: "Cortisol",     unit: "μg/dL" },
+  hematocrit:   { label: "Hematocrit",   unit: "%" },
+  hemoglobin:   { label: "Hemoglobin",   unit: "g/dL" },
+  rbc:          { label: "RBC",          unit: "M/μL" },
+  psa:          { label: "PSA",          unit: "ng/mL" },
+  dhea_s:       { label: "DHEA-S",       unit: "μg/dL" },
+  igf1:         { label: "IGF-1",        unit: "ng/mL" },
+  tsh:          { label: "TSH",          unit: "mIU/L" },
+  t3_free:      { label: "Free T3",      unit: "pg/mL" },
+  t4_free:      { label: "Free T4",      unit: "ng/dL" },
+  vitamin_d:    { label: "Vitamin D",    unit: "ng/mL" },
+  ferritin:     { label: "Ferritin",     unit: "ng/mL" },
+  cholesterol:  { label: "Cholesterol",  unit: "mg/dL" },
+  hdl:          { label: "HDL",          unit: "mg/dL" },
+  ldl:          { label: "LDL",          unit: "mg/dL" },
+  triglycerides:{ label: "Triglycerides",unit: "mg/dL" },
+  glucose:      { label: "Glucose",      unit: "mg/dL" },
+  hba1c:        { label: "HbA1c",        unit: "%" },
+  creatinine:   { label: "Creatinine",   unit: "mg/dL" },
+  alt:          { label: "ALT",          unit: "U/L" },
+  ast:          { label: "AST",          unit: "U/L" },
+};
+
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   active:  { bg: "oklch(0.60 0.18 165 / 0.15)", color: "var(--color-red)" },
   pending: { bg: "oklch(0.75 0.15 80 / 0.15)",  color: "oklch(0.75 0.15 80)" },
@@ -270,8 +300,7 @@ export default function AdminPage() {
       )
     : clients;
   const paying1on1 = searchFiltered.filter(c => (c.status === "active" || c.status === "alumni") && c.diagnosticData?.clientType !== "skool");
-  const applicants = searchFiltered.filter(c => c.status === "new" || c.status === "pending");
-  const skoolClients = searchFiltered.filter(c => c.diagnosticData?.clientType === "skool");
+  const applicants = searchFiltered.filter(c => (c.status === "new" || c.status === "pending") && c.diagnosticData?.clientType !== "skool");
 
   if (!authed) {
     return (
@@ -391,15 +420,7 @@ export default function AdminPage() {
               </>
             )}
 
-            {/* SKOOL CLIENTS */}
-            {skoolClients.length > 0 && (
-              <>
-                <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", padding: "0.75rem 0.625rem 0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-                  Skool <span style={{ fontWeight: 300 }}>{skoolClients.length}</span>
-                </p>
-                {skoolClients.map(u => <ClientRow key={u.email} u={u} selected={selected} unreadCounts={{}} onSelect={selectClient} />)}
-              </>
-            )}
+            {/* Skool clients intentionally hidden — filtered from all views */}
           </div>
         </aside>}
 
@@ -415,37 +436,29 @@ export default function AdminPage() {
                 <p style={{ fontSize: "0.875rem", color: "var(--dim)", fontWeight: 300 }}>Select a client from the sidebar</p>
               </motion.div>
             ) : (
-              <motion.div key={selected.email} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-                {/* Left: profile + diagnostic */}
-                <div style={{ width: "300px", borderRight: "1px solid var(--border-subtle)", overflowY: "auto", padding: "1.5rem 1.25rem", flexShrink: 0 }}>
-                  <ProfilePanel
-                    client={selected}
-                    diagnosticOpen={diagnosticOpen}
-                    onToggleDiagnostic={() => setDiagnosticOpen(v => !v)}
-                    onActivate={activateClient}
-                    onSetStatus={setStatus}
-                    onAssignProtocol={assignProtocol}
-                    onProtocolGenerated={(notionPageId) => {
-                      const updatedDiag = { ...(selected.diagnosticData || {}), notionPageId, protocolStatus: 'active' as ProtocolStatus };
-                      const updated = { ...selected, notionPageId, diagnosticData: updatedDiag };
-                      setSelected(updated);
-                      refreshClients();
-                    }}
-                    onProtocolStatusChange={handleProtocolStatusChange}
-                    onAccountStatusChange={handleAccountStatusChange}
-                    onClientTypeChange={handleClientTypeChange}
-                    onRemoveClient={handleRemoveClient}
-                    onSuspendClient={handleSuspendClient}
-                    onAddPayment={handleAddPayment}
-                    onRemovePayment={handleRemovePayment}
-                    whatsappNumber=""
-                  />
-                </div>
-
-                {/* Right panel: CRM */}
-                <div style={{ flex: 1, overflowY: "auto", padding: "1.5rem 1.25rem" }}>
-                  <CrmPanel client={selected} />
-                </div>
+              <motion.div key={selected.email} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} style={{ flex: 1, overflowY: "auto", padding: "1.5rem 1.75rem" }}>
+                <CrmPanel
+                  client={selected}
+                  onBack={() => setSelected(null)}
+                  diagnosticOpen={diagnosticOpen}
+                  onToggleDiagnostic={() => setDiagnosticOpen(v => !v)}
+                  onActivate={activateClient}
+                  onSetStatus={setStatus}
+                  onAssignProtocol={assignProtocol}
+                  onProtocolGenerated={(notionPageId) => {
+                    const updatedDiag = { ...(selected.diagnosticData || {}), notionPageId, protocolStatus: 'active' as ProtocolStatus };
+                    const updated = { ...selected, notionPageId, diagnosticData: updatedDiag };
+                    setSelected(updated);
+                    refreshClients();
+                  }}
+                  onProtocolStatusChange={handleProtocolStatusChange}
+                  onAccountStatusChange={handleAccountStatusChange}
+                  onClientTypeChange={handleClientTypeChange}
+                  onRemoveClient={handleRemoveClient}
+                  onSuspendClient={handleSuspendClient}
+                  onAddPayment={handleAddPayment}
+                  onRemovePayment={handleRemovePayment}
+                />
               </motion.div>
             )}
           </AnimatePresence>
@@ -1389,13 +1402,29 @@ function PromoteButton({ client, onSetStatus, onClientTypeChange }: { client: St
   );
 }
 
-// ─── CRM PANEL (right panel when client selected) ──────────────────────────
+// ─── CRM PANEL (full-width when client selected) ──────────────────────────
 
-function CrmPanel({ client }: { client: StoredUser }) {
+function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActivate, onSetStatus, onAssignProtocol, onProtocolGenerated, onProtocolStatusChange, onAccountStatusChange, onClientTypeChange, onRemoveClient, onSuspendClient, onAddPayment, onRemovePayment }: {
+  client: StoredUser;
+  onBack: () => void;
+  diagnosticOpen: boolean;
+  onToggleDiagnostic: () => void;
+  onActivate: (p?: ProtocolId) => void;
+  onSetStatus: (s: ClientStatus) => void;
+  onAssignProtocol: (p?: ProtocolId) => void;
+  onProtocolGenerated: (notionPageId: string) => void;
+  onProtocolStatusChange: (status: ProtocolStatus) => void;
+  onAccountStatusChange: (status: AccountStatus) => void;
+  onClientTypeChange: (t: 'skool' | '1on1') => void;
+  onRemoveClient: () => void;
+  onSuspendClient: () => void;
+  onAddPayment: (p: Omit<Payment, 'id'>) => void;
+  onRemovePayment: (id: string) => void;
+}) {
   const [analysis, setAnalysis] = useState<{ date: string; talking_points: string[]; flags: string[] } | null>(null);
   const [trackers, setTrackers] = useState<{ date: string; vitals?: Record<string,unknown>; training?: Record<string,unknown>; circadian?: Record<string,unknown>; [k: string]: unknown }[]>([]);
   const [expandedTracker, setExpandedTracker] = useState<string | null>(null);
-  const [bloodWork, setBloodWork] = useState<{ id: string; test_date: string | null; uploaded_at: string; markers: Record<string,{ value: number | null; unit: string; flag?: string | null }> | null } | null>(null);
+  const [bloodWorkEntries, setBloodWorkEntries] = useState<{ id: string; test_date: string | null; uploaded_at: string; markers: Record<string,{ value: number | null; unit: string; flag?: string | null }> | null }[]>([]);
   const [userData, setUserData] = useState<{ deposit_paid: number | null; total_owed: number | null; telegram_username: string | null; last_login: string | null; last_tracker_date: string | null } | null>(null);
   const [referralCount, setReferralCount] = useState(0);
   const [notes, setNotes] = useState("");
@@ -1404,9 +1433,56 @@ function CrmPanel({ client }: { client: StoredUser }) {
   const [pushMsg, setPushMsg] = useState("");
   const [pushSending, setPushSending] = useState(false);
   const [applyingFreeMonth, setApplyingFreeMonth] = useState(false);
+  const [showPayForm, setShowPayForm] = useState(false);
+  const [payDeposit, setPayDeposit] = useState("");
+  const [payTotal, setPayTotal] = useState("");
+  const [paySaving, setPaySaving] = useState(false);
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ProfilePanel-equivalent state (merged into single column)
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linking, setLinking] = useState(false);
+  const [linkError, setLinkError] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentType, setPaymentType] = useState<Payment['type']>('monthly');
+  const [paymentNote, setPaymentNote] = useState("");
+  const [addingPayment, setAddingPayment] = useState(false);
+  const [clientProtocols, setClientProtocols] = useState<ClientProtocol[]>([]);
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [paymentLinkLoading, setPaymentLinkLoading] = useState(false);
+  const [paymentLinkCopied, setPaymentLinkCopied] = useState(false);
+  const [paymentLinkError, setPaymentLinkError] = useState("");
+  const [checkoutAmount, setCheckoutAmount] = useState("2000");
+  const [trackerSummary, setTrackerSummary] = useState<{
+    trends: { category: string; avgScore: number; direction: string; delta: number }[];
+    flagged: { date: string; questionLabel: string; value: string | number | boolean; category: string }[];
+    totalDaysTracked: number;
+    currentStage: number;
+  } | null>(null);
+  const [trackerLoading, setTrackerLoading] = useState(false);
+  const [regeneratingQuestions, setRegeneratingQuestions] = useState(false);
+  const [adminDiagnostics, setAdminDiagnostics] = useState<ClientDiagnostic[]>([]);
+  const [publishingDiagId, setPublishingDiagId] = useState<string | null>(null);
+  const [diagGenerating, setDiagGenerating] = useState(false);
+  const [diagGenError, setDiagGenError] = useState("");
+
   useEffect(() => {
+    // Reset profile-panel state on client change
+    setTrackerSummary(null);
+    setInviteUrl(null);
+    setInviteCopied(false);
+    setPaymentUrl(null);
+    setPaymentLinkCopied(false);
+    setPaymentLinkError("");
+    setCheckoutAmount("2000");
+    setGenError("");
+    setDiagGenError("");
+
     // Tracker analysis
     supabase.from('tracker_analysis').select('date, talking_points, flags').eq('user_email', client.email)
       .order('date', { ascending: false }).limit(1).maybeSingle()
@@ -1417,10 +1493,10 @@ function CrmPanel({ client }: { client: StoredUser }) {
       .order('date', { ascending: false }).limit(10)
       .then(({ data }) => setTrackers((data as typeof trackers) ?? []));
 
-    // Latest blood work
+    // Blood work entries (latest 2 for delta comparison)
     supabase.from('blood_work').select('id, test_date, uploaded_at, markers').eq('user_email', client.email)
-      .order('uploaded_at', { ascending: false }).limit(1).maybeSingle()
-      .then(({ data }) => setBloodWork(data as typeof bloodWork ?? null));
+      .order('uploaded_at', { ascending: false }).limit(2)
+      .then(({ data }) => setBloodWorkEntries((data as typeof bloodWorkEntries) ?? []));
 
     // User data (deposit, telegram, last login/tracker)
     supabase.from('users').select('deposit_paid, total_owed, telegram_username, last_login, last_tracker_date')
@@ -1440,6 +1516,10 @@ function CrmPanel({ client }: { client: StoredUser }) {
     // Private notes
     supabase.from('applicant_notes').select('notes').eq('user_email', client.email).maybeSingle()
       .then(({ data }) => setNotes(data?.notes ?? ''));
+
+    // Client protocols + admin diagnostics
+    getClientProtocols(client.email).then(setClientProtocols).catch(() => {});
+    getAdminDiagnostics(client.email).then(setAdminDiagnostics).catch(() => {});
   }, [client.email]);
 
   const saveNotes = (val: string) => {
@@ -1473,14 +1553,161 @@ function CrmPanel({ client }: { client: StoredUser }) {
     setApplyingFreeMonth(false);
   };
 
+  async function handlePublishDiagnosis(diagId: string) {
+    setPublishingDiagId(diagId);
+    await publishDiagnosis(diagId);
+    setAdminDiagnostics(prev => prev.map(d => d.id === diagId ? { ...d, published: true } : d));
+    setPublishingDiagId(null);
+    fetch('/api/push-send', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userEmail: client.email, adminPw: ADMIN_PASSWORD, title: 'Your THP Diagnosis is Ready', body: 'Ali has reviewed your intake. Your diagnosis is waiting on your dashboard.' }),
+    }).catch(() => {});
+  }
+
+  async function handleGenerateDiagnosis() {
+    setDiagGenerating(true); setDiagGenError("");
+    try {
+      const res = await fetch("/api/generate-diagnosis", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientEmail: client.email, adminPw: ADMIN_PASSWORD }) });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Generation failed");
+      const updated = await getAdminDiagnostics(client.email);
+      setAdminDiagnostics(updated);
+    } catch (err) { setDiagGenError(err instanceof Error ? err.message : "Unknown error"); }
+    setDiagGenerating(false);
+  }
+
+  async function handleGenerateInvite() {
+    setInviteLoading(true);
+    try {
+      const res = await fetch('/api/invite', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD }, body: JSON.stringify({ email: client.email }) });
+      const data = await res.json();
+      if (data.url) setInviteUrl(data.url);
+    } catch { /* ignore */ }
+    setInviteLoading(false);
+  }
+
+  function copyInviteUrl() {
+    if (!inviteUrl) return;
+    navigator.clipboard.writeText(inviteUrl).then(() => { setInviteCopied(true); setTimeout(() => setInviteCopied(false), 2000); });
+  }
+
+  async function handleGeneratePaymentLink() {
+    setPaymentLinkLoading(true); setPaymentLinkError("");
+    try {
+      const res = await fetch('/api/stripe/create-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: client.email, adminPw: ADMIN_PASSWORD, amount: Number(checkoutAmount) }) });
+      const data = await res.json();
+      if (data.url) { setPaymentUrl(data.url); } else { setPaymentLinkError(data.error ?? "Failed to create payment link"); }
+    } catch { setPaymentLinkError("Network error. Please try again."); }
+    setPaymentLinkLoading(false);
+  }
+
+  function copyPaymentUrl() {
+    if (!paymentUrl) return;
+    navigator.clipboard.writeText(paymentUrl).then(() => { setPaymentLinkCopied(true); setTimeout(() => setPaymentLinkCopied(false), 2000); });
+  }
+
+  async function loadTrackerSummary() {
+    setTrackerLoading(true);
+    try {
+      const res = await fetch(`/api/tracker-summary?userEmail=${encodeURIComponent(client.email)}&days=28`, { headers: { 'x-api-key': process.env.NEXT_PUBLIC_INTERNAL_API_KEY ?? '' } });
+      const data = await res.json();
+      if (!data.error) setTrackerSummary(data);
+    } catch { /* ignore */ }
+    setTrackerLoading(false);
+  }
+
+  async function handleRegenerateQuestions() {
+    if (clientProtocols.length === 0) return;
+    setRegeneratingQuestions(true);
+    const currentStage = clientProtocols[clientProtocols.length - 1].stage;
+    const { data: bankRow } = await supabase.from('tracker_questions').select('protocol_text').eq('user_email', client.email).eq('stage', currentStage).maybeSingle();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((bankRow as any)?.protocol_text) {
+      await fetch('/api/generate-tracker-questions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.NEXT_PUBLIC_INTERNAL_API_KEY ?? '' },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        body: JSON.stringify({ clientEmail: client.email, stage: currentStage, protocolText: (bankRow as any).protocol_text, diagnosticData: client.diagnosticData ?? {} }) }).catch(() => {});
+    }
+    setRegeneratingQuestions(false);
+  }
+
+  async function handleGenerateProtocol() {
+    setGenerating(true); setGenError("");
+    try {
+      const res = await fetch("/api/generate-protocol", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientEmail: client.email, clientName: client.name, diagnosticData: client.diagnosticData ?? null }) });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Generation failed");
+      const updated = await getClientProtocols(client.email);
+      setClientProtocols(updated);
+      const updatedDiags = await getAdminDiagnostics(client.email);
+      setAdminDiagnostics(updatedDiags);
+      fetch('/api/push-send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userEmail: client.email, adminPw: ADMIN_PASSWORD, title: 'Your THP Protocol is Ready', body: 'Your protocol is live. Open your dashboard to read it.' }) }).catch(() => {});
+      onProtocolGenerated(data.notionPageId);
+    } catch (err) { setGenError(err instanceof Error ? err.message : "Unknown error"); }
+    setGenerating(false);
+  }
+
+  async function handleLinkNotion() {
+    const raw = linkUrl.trim();
+    if (!raw) return;
+    const match = raw.match(/([0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})/i) || raw.match(/([0-9a-f]{32})/i);
+    if (!match) { setLinkError("Paste a Notion page URL or ID"); return; }
+    const rawId = match[1].replace(/-/g, "");
+    const pageId = `${rawId.slice(0,8)}-${rawId.slice(8,12)}-${rawId.slice(12,16)}-${rawId.slice(16,20)}-${rawId.slice(20)}`;
+    setLinking(true); setLinkError("");
+    try { await linkNotionPage(client.email, pageId); onProtocolGenerated(pageId); setLinkUrl(""); } catch { setLinkError("Failed to link page"); }
+    setLinking(false);
+  }
+
   const firstName = client.name.split(' ')[0];
 
   const sectionLabel = (text: string) => (
     <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "0.75rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{text}</p>
   );
 
+  const initials = client.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+  const joinedDate = new Date(client.joinedAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", maxWidth: "600px" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", maxWidth: "860px" }}>
+
+      {/* Compact top strip */}
+      <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.5rem", paddingBottom: "1rem", borderBottom: "1px solid var(--border)" }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: "0.875rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>← Back</button>
+        <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "var(--surface)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: "0.8rem", fontWeight: 600, color: statusColor(client.status), fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+          {initials}
+        </div>
+        <div style={{ flex: 1 }}>
+          <h2 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.25rem", fontWeight: 400, color: "var(--ink)", margin: 0 }}>{client.name}</h2>
+          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", margin: "0.2rem 0 0", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{client.email}</p>
+        </div>
+        <span style={{ padding: "0.25rem 0.625rem", borderRadius: "20px", fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", background: client.status === "active" ? "oklch(0.25 0.08 145)" : "var(--surface)", color: client.status === "active" ? "oklch(0.65 0.15 145)" : "var(--dim)", border: "1px solid", borderColor: client.status === "active" ? "oklch(0.4 0.12 145)" : "var(--border)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{client.status}</span>
+        {client.diagnosticData?.clientType && (
+          <span style={{ padding: "0.25rem 0.625rem", borderRadius: "20px", fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", background: "var(--surface)", color: "var(--dim)", border: "1px solid var(--border)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{client.diagnosticData.clientType === 'skool' ? 'Skool' : '1:1'}</span>
+        )}
+        {userData?.telegram_username && (
+          <a href={`https://t.me/${userData.telegram_username}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--dim)", textDecoration: "none", fontSize: "0.8125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>✈ Telegram</a>
+        )}
+      </div>
+
+      {/* Quick stats strip */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "0.5rem" }}>
+        {[
+          { label: "Joined", value: joinedDate },
+          { label: "Streak", value: client.streak > 0 ? `${client.streak} days` : "0 days" },
+          { label: "Protocol", value: client.diagnosticData?.protocolStatus || "None" },
+          { label: "Referrals", value: `${referralCount} / 3 paying` },
+        ].map(s => (
+          <div key={s.label} style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px" }}>
+            <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{s.label}</p>
+            <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Promote button for new/pending */}
+      {(client.status === "new" || client.status === "pending") && (
+        <PromoteButton client={client} onSetStatus={onSetStatus} onClientTypeChange={onClientTypeChange} />
+      )}
 
       {/* Talking points + flags */}
       {analysis && (
@@ -1545,71 +1772,107 @@ function CrmPanel({ client }: { client: StoredUser }) {
         </div>
       )}
 
-      {/* Blood work */}
+      {/* Blood work — always-on scoreboard */}
       {(() => {
-        const BLOOD_MARKERS: Record<string, string> = {
-          total_t: "Total T", free_t: "Free T", shbg: "SHBG", estradiol: "Estradiol",
-          lh: "LH", fsh: "FSH", cortisol: "Cortisol", hematocrit: "Hematocrit",
-          hemoglobin: "Hemoglobin", rbc: "RBC", psa: "PSA", dhea_s: "DHEA-S",
-          igf1: "IGF-1", tsh: "TSH", t3_free: "Free T3", t4_free: "Free T4",
-          vitamin_d: "Vitamin D", ferritin: "Ferritin", cholesterol: "Cholesterol",
-          hdl: "HDL", ldl: "LDL", triglycerides: "Triglycerides", glucose: "Glucose",
-          hba1c: "HbA1c", creatinine: "Creatinine", alt: "ALT", ast: "AST",
-        };
-        const markers = bloodWork?.markers;
+        const bwLatest = bloodWorkEntries[0] ?? null;
+        const bwPrevious = bloodWorkEntries[1] ?? null;
         return (
           <div>
-            {sectionLabel(markers ? `Blood work · ${bloodWork!.test_date ?? new Date(bloodWork!.uploaded_at).toLocaleDateString('en-GB')}` : 'Blood work')}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "0.5rem", opacity: markers ? 1 : 0.35 }}>
-              {markers
-                ? Object.entries(markers).slice(0, 12).map(([key, m]) => (
-                    <div key={key} style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: `1px solid ${m.flag && m.flag !== 'normal' ? 'oklch(0.65 0.14 65 / 0.35)' : 'var(--border-subtle)'}`, borderRadius: "8px" }}>
-                      <p style={{ fontSize: "0.65rem", color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.25rem" }}>{BLOOD_MARKERS[key] ?? key.replace(/_/g,' ')}</p>
-                      <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: m.flag && m.flag !== 'normal' ? 'oklch(0.75 0.12 65)' : 'var(--ink)', fontFamily: "var(--font-mono), monospace" }}>
-                        {m.value ?? '—'} <span style={{ fontSize: "0.65rem", fontWeight: 300, color: "var(--dim)" }}>{m.unit}</span>
+            {sectionLabel(bwLatest?.test_date ? `Blood Work · ${bwLatest.test_date}` : 'Blood Work')}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "0.5rem", marginBottom: "1.5rem" }}>
+              {Object.entries(MARKER_DEFAULTS).map(([key, def]) => {
+                const m = bwLatest?.markers?.[key];
+                const prevVal = bwPrevious?.markers?.[key]?.value ?? undefined;
+                const delta = prevVal != null && m?.value != null ? m.value - prevVal : null;
+                const flagColor = m?.flag === "high" ? "oklch(0.75 0.16 25)" : m?.flag === "low" ? "oklch(0.70 0.12 260)" : "var(--primary)";
+                const hasData = m?.value != null;
+                return (
+                  <div key={key} style={{ padding: "0.75rem", background: "var(--surface)", border: `1px solid ${m?.flag && m.flag !== "normal" ? flagColor + "44" : "var(--border)"}`, borderRadius: "8px" }}>
+                    <p style={{ fontSize: "0.65rem", color: "var(--dim)", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "0.25rem", fontFamily: "var(--font-mono), monospace" }}>{def.label}</p>
+                    <p style={{ fontSize: "1rem", fontWeight: 600, color: hasData && m?.flag && m.flag !== "normal" ? flagColor : hasData ? "var(--ink)" : "var(--muted)", fontFamily: "var(--font-mono), monospace" }}>
+                      {hasData ? m!.value : "—"} <span style={{ fontSize: "0.65rem", fontWeight: 400, color: "var(--dim)" }}>{hasData ? m!.unit : def.unit}</span>
+                    </p>
+                    {delta !== null && (
+                      <p style={{ fontSize: "0.65rem", color: delta > 0 ? "oklch(0.65 0.15 145)" : "oklch(0.70 0.15 25)", marginTop: "0.2rem" }}>
+                        {delta > 0 ? "↑" : "↓"} {Math.abs(delta).toFixed(1)}
                       </p>
-                    </div>
-                  ))
-                : Object.entries(BLOOD_MARKERS).map(([key, label]) => (
-                    <div key={key} style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px" }}>
-                      <p style={{ fontSize: "0.65rem", color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.25rem" }}>{label}</p>
-                      <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--dim)", fontFamily: "var(--font-mono), monospace" }}>—</p>
-                      <p style={{ fontSize: "0.6rem", color: "var(--dim)", marginTop: "0.2rem", fontWeight: 300 }}>no data</p>
-                    </div>
-                  ))
-              }
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
       })()}
 
-      {/* Payment + referrals */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-        {userData && (
-          <div style={{ padding: "1rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px" }}>
-            <p style={{ fontSize: "0.65rem", color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.5rem" }}>Payment</p>
-            {userData.deposit_paid ? (
-              <>
-                <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 500 }}>${userData.deposit_paid} deposit paid</p>
-                {userData.total_owed && userData.deposit_paid < userData.total_owed && (
-                  <p style={{ fontSize: "0.75rem", color: "oklch(0.75 0.12 65)", fontWeight: 300, marginTop: "0.25rem" }}>${userData.total_owed - userData.deposit_paid} balance due</p>
-                )}
-              </>
-            ) : (
-              <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>No deposit recorded</p>
+      {/* Payments — always visible with manual entry */}
+      <div style={{ marginBottom: "1.5rem" }}>
+        <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--dim)", textTransform: "uppercase", marginBottom: "0.75rem", fontFamily: "var(--font-mono), monospace" }}>Payments</p>
+        {userData?.deposit_paid != null ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "0.875rem", color: "var(--muted)" }}>Deposit paid</span>
+              <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--ink)" }}>${userData.deposit_paid}</span>
+            </div>
+            {userData.total_owed != null && userData.total_owed > userData.deposit_paid && (
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontSize: "0.875rem", color: "var(--muted)" }}>Balance due</span>
+                <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "oklch(0.75 0.16 25)" }}>${userData.total_owed - userData.deposit_paid}</span>
+              </div>
             )}
+            {userData.total_owed != null && userData.deposit_paid >= userData.total_owed && userData.total_owed > 0 && (
+              <p style={{ fontSize: "0.8125rem", color: "oklch(0.65 0.15 145)" }}>All settled ✓</p>
+            )}
+            <button onClick={() => setShowPayForm(v => !v)} style={{ marginTop: "0.25rem", background: "none", border: "none", fontSize: "0.75rem", color: "var(--dim)", cursor: "pointer", textAlign: "left", padding: 0 }}>
+              Edit payment →
+            </button>
+          </div>
+        ) : (
+          <div>
+            <p style={{ fontSize: "0.8125rem", color: "var(--dim)", marginBottom: "0.5rem" }}>No deposit recorded.</p>
+            <button onClick={() => setShowPayForm(v => !v)} style={{ background: "none", border: "1px solid var(--border)", borderRadius: "6px", padding: "0.375rem 0.75rem", fontSize: "0.75rem", color: "var(--muted)", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+              Log payment
+            </button>
           </div>
         )}
-        <div style={{ padding: "1rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px" }}>
-          <p style={{ fontSize: "0.65rem", color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.5rem" }}>Referrals</p>
-          <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 500 }}>{referralCount} / 3 paying</p>
-          {referralCount >= 3 && (
-            <button onClick={applyFreeMonth} disabled={applyingFreeMonth || !!client.diagnosticData?.freeMonthEarned}
-              style={{ marginTop: "0.5rem", height: "28px", padding: "0 0.75rem", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: client.diagnosticData?.freeMonthEarned ? 0.5 : 1 }}>
-              {client.diagnosticData?.freeMonthEarned ? 'Applied' : 'Apply Free Month'}
+        {showPayForm && (
+          <div style={{ marginTop: "0.75rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <label style={{ fontSize: "0.75rem", color: "var(--dim)", minWidth: "90px" }}>Deposit $</label>
+              <input value={payDeposit} onChange={e => setPayDeposit(e.target.value)} placeholder="0" type="number"
+                style={{ flex: 1, padding: "0.375rem 0.625rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--ink)", fontSize: "0.875rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }} />
+            </div>
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <label style={{ fontSize: "0.75rem", color: "var(--dim)", minWidth: "90px" }}>Total owed $</label>
+              <input value={payTotal} onChange={e => setPayTotal(e.target.value)} placeholder="0" type="number"
+                style={{ flex: 1, padding: "0.375rem 0.625rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--ink)", fontSize: "0.875rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }} />
+            </div>
+            <button disabled={paySaving} onClick={async () => {
+              setPaySaving(true);
+              const d = parseFloat(payDeposit) || 0;
+              const t = parseFloat(payTotal) || 0;
+              await supabase.from('users').update({ deposit_paid: d, total_owed: t }).eq('email', client.email);
+              setPaySaving(false);
+              setShowPayForm(false);
+              const { data } = await supabase.from('users').select('deposit_paid, total_owed, telegram_username, last_login, last_tracker_date').eq('email', client.email).maybeSingle();
+              if (data) setUserData(data as typeof userData);
+            }} style={{ alignSelf: "flex-start", padding: "0.375rem 0.875rem", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.8125rem", cursor: paySaving ? "not-allowed" : "pointer", opacity: paySaving ? 0.7 : 1 }}>
+              {paySaving ? "Saving…" : "Save"}
             </button>
-          )}
-        </div>
+          </div>
+        )}
+      </div>
+
+      {/* Referrals */}
+      <div style={{ padding: "1rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px", marginBottom: "1.5rem" }}>
+        <p style={{ fontSize: "0.65rem", color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.5rem" }}>Referrals</p>
+        <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 500 }}>{referralCount} / 3 paying</p>
+        {referralCount >= 3 && (
+          <button onClick={applyFreeMonth} disabled={applyingFreeMonth || !!client.diagnosticData?.freeMonthEarned}
+            style={{ marginTop: "0.5rem", height: "28px", padding: "0 0.75rem", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: client.diagnosticData?.freeMonthEarned ? 0.5 : 1 }}>
+            {client.diagnosticData?.freeMonthEarned ? 'Applied' : 'Apply Free Month'}
+          </button>
+        )}
       </div>
 
       {/* Telegram */}
@@ -1665,13 +1928,343 @@ function CrmPanel({ client }: { client: StoredUser }) {
       {/* Activity */}
       {userData && (
         <div style={{ padding: "0.75rem 1rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "9px" }}>
-          <p style={{ fontSize: "0.65rem", color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.375rem" }}>Activity</p>
+          <p style={{ fontSize: "0.65rem", color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Activity</p>
           <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap" }}>
             {userData.last_login && <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300 }}>Last login: {new Date(userData.last_login).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</p>}
             {userData.last_tracker_date && <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300 }}>Last tracker: {userData.last_tracker_date}</p>}
           </div>
         </div>
       )}
+
+      {/* ── ACTIONS SECTION ── */}
+      <div style={{ paddingTop: "1.5rem", borderTop: "1px solid var(--border)" }}>
+        {sectionLabel('Actions')}
+
+        {/* Client type */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginBottom: "1.25rem" }}>
+          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Client Type</p>
+          <div style={{ display: "flex", gap: "0.375rem" }}>
+            {(['skool', '1on1'] as const).map(t => {
+              const active = client.diagnosticData?.clientType === t;
+              return (
+                <button key={t} onClick={() => onClientTypeChange(t)}
+                  style={{ flex: 1, height: "32px", borderRadius: "6px", border: "1px solid", borderColor: active ? (t === 'skool' ? "oklch(0.72 0.15 260 / 0.5)" : "oklch(0.72 0.14 145 / 0.5)") : "var(--border)", background: active ? (t === 'skool' ? "oklch(0.72 0.15 260 / 0.1)" : "oklch(0.72 0.14 145 / 0.1)") : "none", color: active ? (t === 'skool' ? "oklch(0.72 0.15 260)" : "oklch(0.72 0.14 145)") : "var(--dim)", fontSize: "0.75rem", fontWeight: active ? 600 : 400, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "all 150ms" }}>
+                  {t === 'skool' ? 'Skool' : '1:1 Coaching'}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Diagnosis */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Diagnosis</p>
+            <button onClick={handleGenerateDiagnosis} disabled={diagGenerating}
+              style={{ height: "28px", padding: "0 0.75rem", background: diagGenerating ? "var(--surface-2)" : "oklch(0.55 0.18 30 / 0.15)", border: "1px solid oklch(0.55 0.18 30 / 0.4)", borderRadius: "6px", color: diagGenerating ? "var(--dim)" : "oklch(0.75 0.18 30)", fontSize: "0.7rem", fontWeight: 600, cursor: diagGenerating ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+              {diagGenerating ? "Generating…" : "+ Generate with AI"}
+            </button>
+          </div>
+          {diagGenError && <p style={{ fontSize: "0.75rem", color: "var(--primary)" }}>{diagGenError}</p>}
+          {adminDiagnostics.length === 0 ? (
+            <p style={{ fontSize: "0.8rem", color: "var(--dim)", fontWeight: 300 }}>No diagnosis yet.</p>
+          ) : adminDiagnostics.map(diag => (
+            <div key={diag.id} style={{ background: "var(--surface)", border: `1px solid ${diag.published ? "oklch(0.7 0.15 145 / 0.3)" : "oklch(0.75 0.15 80 / 0.3)"}`, borderRadius: "8px", padding: "0.75rem" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.375rem" }}>
+                <p style={{ fontSize: "0.8rem", fontWeight: 500, color: "var(--ink)" }}>Stage {diag.stage}</p>
+                <span style={{ fontSize: "0.65rem", fontWeight: 600, padding: "2px 7px", borderRadius: "4px", background: diag.published ? "oklch(0.7 0.15 145 / 0.12)" : "oklch(0.75 0.15 80 / 0.12)", color: diag.published ? "oklch(0.7 0.15 145)" : "oklch(0.75 0.15 80)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{diag.published ? "Sent" : "Draft"}</span>
+              </div>
+              {diag.content?.sections.map(s => (
+                <details key={s.heading} style={{ marginBottom: "0.25rem" }}>
+                  <summary style={{ fontSize: "0.75rem", color: "var(--muted)", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", userSelect: "none" }}>{s.heading}</summary>
+                  <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, lineHeight: 1.6, marginTop: "0.375rem", whiteSpace: "pre-wrap" }}>{s.text}</p>
+                </details>
+              ))}
+              {!diag.published && (
+                <button onClick={() => handlePublishDiagnosis(diag.id)} disabled={publishingDiagId === diag.id}
+                  style={{ marginTop: "0.625rem", width: "100%", height: "36px", background: publishingDiagId === diag.id ? "var(--surface-2)" : "var(--primary)", border: "none", borderRadius: "7px", color: publishingDiagId === diag.id ? "var(--dim)" : "#fff", fontSize: "0.8125rem", fontWeight: 600, cursor: publishingDiagId === diag.id ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                  {publishingDiagId === diag.id ? "Sending…" : "Send diagnosis to client →"}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Portal Access (invite link) */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
+          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Portal Access</p>
+          {!inviteUrl ? (
+            <button onClick={handleGenerateInvite} disabled={inviteLoading}
+              style={{ height: "36px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: inviteLoading ? "var(--dim)" : "var(--muted)", fontSize: "0.8125rem", fontWeight: 500, cursor: inviteLoading ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+              {inviteLoading ? "Generating…" : "Generate invite link"}
+            </button>
+          ) : (
+            <div style={{ display: "flex", gap: "0.375rem" }}>
+              <input readOnly value={inviteUrl} style={{ flex: 1, height: "34px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.625rem", fontSize: "0.75rem", color: "var(--dim)", fontFamily: "var(--font-mono), monospace", outline: "none" }} />
+              <button onClick={copyInviteUrl} style={{ height: "34px", padding: "0 0.75rem", background: inviteCopied ? "oklch(0.60 0.18 165 / 0.12)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: inviteCopied ? "var(--primary)" : "var(--muted)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap" }}>
+                {inviteCopied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Payment link */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
+          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Send Payment Link</p>
+          {!paymentUrl ? (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                <span style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 500, flexShrink: 0 }}>$</span>
+                <input type="number" min="1" value={checkoutAmount} onChange={e => setCheckoutAmount(e.target.value)} placeholder="2000"
+                  style={{ flex: 1, height: "34px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.625rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }}
+                  onFocus={e => (e.target.style.borderColor = "var(--primary)")} onBlur={e => (e.target.style.borderColor = "var(--border)")} />
+              </div>
+              <button onClick={handleGeneratePaymentLink} disabled={paymentLinkLoading || !checkoutAmount || Number(checkoutAmount) < 1}
+                style={{ height: "36px", background: (paymentLinkLoading || !checkoutAmount || Number(checkoutAmount) < 1) ? "var(--surface-2)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: (paymentLinkLoading || !checkoutAmount || Number(checkoutAmount) < 1) ? "var(--dim)" : "var(--muted)", fontSize: "0.8125rem", fontWeight: 500, cursor: (paymentLinkLoading || !checkoutAmount || Number(checkoutAmount) < 1) ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                {paymentLinkLoading ? "Generating…" : `Generate $${checkoutAmount || '—'} link`}
+              </button>
+              {paymentLinkError && <p style={{ fontSize: "0.75rem", color: "var(--danger)" }}>{paymentLinkError}</p>}
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: "0.75rem", color: "oklch(0.7 0.15 145)", fontWeight: 400 }}>${checkoutAmount} checkout link ready</p>
+              <div style={{ display: "flex", gap: "0.375rem" }}>
+                <input readOnly value={paymentUrl} style={{ flex: 1, height: "34px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.625rem", fontSize: "0.75rem", color: "var(--dim)", fontFamily: "var(--font-mono), monospace", outline: "none" }} />
+                <button onClick={copyPaymentUrl} style={{ height: "34px", padding: "0 0.75rem", background: paymentLinkCopied ? "oklch(0.60 0.18 165 / 0.12)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: paymentLinkCopied ? "var(--primary)" : "var(--muted)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap" }}>
+                  {paymentLinkCopied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+              <button onClick={() => { setPaymentUrl(null); setPaymentLinkCopied(false); }} style={{ height: "28px", background: "none", border: "none", color: "var(--dim)", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", textAlign: "left" }}>
+                ← Generate different amount
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Protocol generate */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
+          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Protocol</p>
+          {!client.notionPageId && (
+            <button onClick={handleGenerateProtocol} disabled={generating}
+              style={{ height: "36px", background: generating ? "var(--surface-2)" : "oklch(0.60 0.18 165 / 0.12)", border: "1px solid oklch(0.60 0.18 165 / 0.3)", borderRadius: "7px", color: generating ? "var(--dim)" : "var(--primary)", fontSize: "0.8125rem", fontWeight: 500, cursor: generating ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.375rem" }}>
+              <SparkleIcon />
+              {generating ? "Generating…" : clientProtocols.length === 0 ? "Generate protocol with AI" : `Regenerate stage ${clientProtocols[clientProtocols.length - 1].stage} with AI`}
+            </button>
+          )}
+          {client.notionPageId && (() => {
+            const ps = client.diagnosticData?.protocolStatus ?? 'active';
+            const statusMeta: Record<string, { label: string; color: string; bg: string }> = {
+              active:   { label: "Live",     color: "oklch(0.72 0.14 145)", bg: "oklch(0.45 0.15 145 / 0.1)" },
+              updating: { label: "Updating", color: "oklch(0.84 0.12 65)", bg: "oklch(0.65 0.14 65 / 0.1)" },
+              building: { label: "Building", color: "var(--primary)",       bg: "oklch(0.60 0.18 165 / 0.1)" },
+            };
+            const sm = statusMeta[ps] ?? statusMeta['active'];
+            return (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", padding: "0.625rem 0.875rem", background: sm.bg, border: `1px solid ${sm.color}40`, borderRadius: "8px" }}>
+                  <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: sm.color, animation: ps !== 'active' ? "pulse 2s ease infinite" : "none", flexShrink: 0 }} />
+                  <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: sm.color, flex: 1 }}>Protocol {sm.label}</p>
+                </div>
+                <div style={{ display: "flex", gap: "0.375rem" }}>
+                  {ps !== 'active' && <button onClick={() => onProtocolStatusChange('active')} style={{ flex: 1, height: "32px", background: "oklch(0.45 0.15 145 / 0.1)", border: "1px solid oklch(0.45 0.15 145 / 0.2)", borderRadius: "6px", color: "oklch(0.72 0.14 145)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Mark as live</button>}
+                  {ps !== 'updating' && <button onClick={() => onProtocolStatusChange('updating')} style={{ flex: 1, height: "32px", background: "oklch(0.65 0.14 65 / 0.08)", border: "1px solid oklch(0.65 0.14 65 / 0.2)", borderRadius: "6px", color: "oklch(0.84 0.12 65)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Mark as updating</button>}
+                  {ps !== 'building' && <button onClick={() => onProtocolStatusChange('building')} style={{ flex: 1, height: "32px", background: "oklch(0.60 0.18 165 / 0.08)", border: "1px solid oklch(0.60 0.18 165 / 0.2)", borderRadius: "6px", color: "var(--primary)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Mark as building</button>}
+                </div>
+                <button onClick={handleGenerateProtocol} disabled={generating}
+                  style={{ height: "32px", background: generating ? "var(--surface-2)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "6px", color: generating ? "var(--dim)" : "var(--muted)", fontSize: "0.75rem", fontWeight: 500, cursor: generating ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.375rem" }}>
+                  <SparkleIcon /> {generating ? "Generating…" : "Regenerate with AI"}
+                </button>
+              </>
+            );
+          })()}
+          {genError && <p style={{ fontSize: "0.75rem", color: "var(--danger)", fontWeight: 300 }}>{genError}</p>}
+          {linkError && <p style={{ fontSize: "0.75rem", color: "var(--danger)", fontWeight: 300 }}>{linkError}</p>}
+        </div>
+
+        {/* Tracker section */}
+        {clientProtocols.length > 0 && (
+          <div style={{ paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
+            <TrackerSection
+              protocols={clientProtocols}
+              summary={trackerSummary}
+              loading={trackerLoading}
+              regenerating={regeneratingQuestions}
+              onLoadSummary={loadTrackerSummary}
+              onRegenerateQuestions={handleRegenerateQuestions}
+              onGenerateNextStage={async () => {
+                await loadTrackerSummary();
+                setGenerating(true); setGenError("");
+                try {
+                  const res = await fetch("/api/generate-protocol", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientEmail: client.email, clientName: client.name, diagnosticData: client.diagnosticData ?? null, trackerSummary }) });
+                  const data = await res.json();
+                  if (!res.ok || data.error) throw new Error(data.error || "Generation failed");
+                  onProtocolGenerated(data.notionPageId);
+                  getClientProtocols(client.email).then(setClientProtocols).catch(() => {});
+                } catch (err) { setGenError(err instanceof Error ? err.message : "Unknown error"); }
+                setGenerating(false);
+              }}
+            />
+          </div>
+        )}
+
+        {/* Account controls */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
+          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Account</p>
+          {(() => {
+            const as = client.diagnosticData?.accountStatus ?? 'active';
+            const asMeta: Record<string, { label: string; color: string }> = {
+              active:  { label: "Active",   color: "oklch(0.7 0.15 145)" },
+              hold:    { label: "On hold",  color: "oklch(0.82 0.10 62)" },
+              limited: { label: "Limited",  color: "oklch(0.65 0.14 300)" },
+            };
+            const meta = asMeta[as] ?? asMeta['active'];
+            return (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "7px" }}>
+                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: meta.color, flexShrink: 0 }} />
+                  <span style={{ fontSize: "0.8125rem", fontWeight: 500, color: meta.color }}>{meta.label}</span>
+                </div>
+                <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
+                  {as !== 'active' && <button onClick={() => onAccountStatusChange('active')} style={{ height: "28px", padding: "0 0.75rem", background: "oklch(0.45 0.15 145 / 0.08)", border: "1px solid oklch(0.45 0.15 145 / 0.2)", borderRadius: "6px", color: "oklch(0.7 0.15 145)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Activate</button>}
+                  {as !== 'hold' && <button onClick={() => onAccountStatusChange('hold')} style={{ height: "28px", padding: "0 0.75rem", background: "oklch(0.65 0.14 65 / 0.08)", border: "1px solid oklch(0.65 0.14 65 / 0.2)", borderRadius: "6px", color: "oklch(0.82 0.10 62)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Put on hold</button>}
+                  {as !== 'limited' && <button onClick={() => onAccountStatusChange('limited')} style={{ height: "28px", padding: "0 0.75rem", background: "oklch(0.65 0.14 300 / 0.08)", border: "1px solid oklch(0.65 0.14 300 / 0.2)", borderRadius: "6px", color: "oklch(0.65 0.14 300)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Limit access</button>}
+                  <button onClick={onSuspendClient} style={{ height: "28px", padding: "0 0.75rem", background: client.diagnosticData?.suspended ? "oklch(0.60 0.18 165 / 0.08)" : "oklch(0.55 0.18 25 / 0.06)", border: `1px solid ${client.diagnosticData?.suspended ? "oklch(0.60 0.18 165 / 0.3)" : "oklch(0.65 0.15 50 / 0.3)"}`, borderRadius: "6px", color: client.diagnosticData?.suspended ? "var(--primary)" : "oklch(0.72 0.14 50)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                    {client.diagnosticData?.suspended ? "Unsuspend" : "Suspend"}
+                  </button>
+                  <button onClick={onRemoveClient} style={{ height: "28px", padding: "0 0.75rem", background: "oklch(0.55 0.18 25 / 0.08)", border: "1px solid oklch(0.55 0.18 25 / 0.25)", borderRadius: "6px", color: "oklch(0.68 0.18 25)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Remove client</button>
+                </div>
+                <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap", marginTop: "0.25rem" }}>
+                  {(["pending", "active", "alumni"] as ClientStatus[]).filter(s => s !== client.status).map(s => (
+                    <button key={s} onClick={() => onSetStatus(s)}
+                      style={{ height: "28px", padding: "0 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "6px", color: "var(--dim)", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                      Set {s}
+                    </button>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
+        </div>
+
+        {/* Legacy payment log (addPayment/removePayment) */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
+          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Payment History</p>
+          {(client.diagnosticData?.payments ?? []).length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem", marginBottom: "0.25rem" }}>
+              {(client.diagnosticData?.payments ?? []).map((p: Payment) => (
+                <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.5rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "7px" }}>
+                  <div>
+                    <span style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)" }}>{p.currency}{p.amount}</span>
+                    <span style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, marginLeft: "0.5rem" }}>{p.type} · {new Date(p.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
+                    {p.note && <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.15rem" }}>{p.note}</p>}
+                  </div>
+                  <button onClick={() => onRemovePayment(p.id)} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: "0.75rem", padding: "0 0.25rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {!addingPayment ? (
+            <button onClick={() => setAddingPayment(true)} style={{ height: "32px", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "6px", color: "var(--dim)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>+ Log payment</button>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem", padding: "0.75rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px" }}>
+              <div style={{ display: "flex", gap: "0.375rem" }}>
+                <input type="number" min="0" placeholder="Amount" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} style={{ flex: 1, height: "32px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "0 0.625rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }} />
+                <select value={paymentType} onChange={e => setPaymentType(e.target.value as Payment['type'])} style={{ height: "32px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "0 0.5rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }}>
+                  <option value="deposit">Deposit</option>
+                  <option value="full">Full</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <input type="text" placeholder="Note (optional)" value={paymentNote} onChange={e => setPaymentNote(e.target.value)} style={{ height: "32px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "0 0.625rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }} />
+              <div style={{ display: "flex", gap: "0.375rem" }}>
+                <button onClick={() => { const amt = parseFloat(paymentAmount); if (!amt || isNaN(amt)) return; onAddPayment({ date: new Date().toISOString().split('T')[0], amount: amt, currency: '$', type: paymentType, note: paymentNote || undefined }); setPaymentAmount(""); setPaymentNote(""); setAddingPayment(false); }} disabled={!paymentAmount}
+                  style={{ flex: 1, height: "30px", background: paymentAmount ? "var(--primary)" : "var(--surface-2)", border: "none", borderRadius: "6px", color: paymentAmount ? "#ffffff" : "var(--dim)", fontSize: "0.75rem", fontWeight: 500, cursor: paymentAmount ? "pointer" : "default", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Save</button>
+                <button onClick={() => { setAddingPayment(false); setPaymentAmount(""); setPaymentNote(""); }} style={{ height: "30px", padding: "0 0.625rem", background: "none", border: "1px solid var(--border-subtle)", borderRadius: "6px", color: "var(--dim)", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Referral: apply free month */}
+        {referralCount >= 3 && (
+          <div style={{ paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
+            <button onClick={applyFreeMonth} disabled={applyingFreeMonth || !!client.diagnosticData?.freeMonthEarned}
+              style={{ height: "32px", padding: "0 0.875rem", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: client.diagnosticData?.freeMonthEarned ? 0.5 : 1 }}>
+              {client.diagnosticData?.freeMonthEarned ? 'Free Month Applied' : 'Apply Free Month'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── FULL INTAKE ACCORDION ── */}
+      {client.diagnosticData && (
+        <div style={{ paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
+          <button onClick={onToggleDiagnostic}
+            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: "0.125rem 0 0.5rem", cursor: "pointer" }}>
+            <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>View Full Intake</p>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: diagnosticOpen ? "rotate(180deg)" : "none", transition: "transform 200ms", color: "var(--dim)" }} aria-hidden>
+              <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <AnimatePresence initial={false}>
+            {diagnosticOpen && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} style={{ overflow: "hidden" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", paddingTop: "0.5rem" }}>
+                  {[
+                    { label: "Full Name", value: client.diagnosticData.fullName },
+                    { label: "Age / Location", value: client.diagnosticData.ageLocation },
+                    { label: "Contact Info", value: client.diagnosticData.contactInfo },
+                    { label: "Travel Pattern", value: client.diagnosticData.travelPattern },
+                    { label: "What They're Trying To Fix", value: client.diagnosticData.whatTryingToFix },
+                    { label: "How They Ask For What They Want", value: client.diagnosticData.howAskForWhatYouWant },
+                    { label: "Avoiding Disappointing Others", value: client.diagnosticData.avoidDisappointing },
+                    { label: "Validation Source", value: client.diagnosticData.validationSource },
+                    { label: "Energy State", value: client.diagnosticData.energyState },
+                    { label: "Self-Perception", value: client.diagnosticData.selfPerception },
+                    { label: "Avoids Conflict", value: client.diagnosticData.avoidConflict },
+                    { label: "Response To Criticism", value: client.diagnosticData.responseToCriticism },
+                    { label: "Internal State Entering Room", value: client.diagnosticData.internalStateEnteringRoom },
+                    { label: "Past Relationship Patterns", value: client.diagnosticData.pastRelationshipPatterns },
+                    { label: "Training Recovery", value: client.diagnosticData.trainingRecovery },
+                    { label: "Height / Weight / BF%", value: client.diagnosticData.heightWeightBf },
+                    { label: "Sleep Duration", value: client.diagnosticData.sleepDuration },
+                    { label: "Relationship Status", value: client.diagnosticData.relationshipStatus },
+                    { label: "Relationship To Risk", value: client.diagnosticData.relationshipToRisk },
+                    { label: "Sexual Confidence", value: client.diagnosticData.sexualConfidence },
+                    { label: "Alcohol Use", value: client.diagnosticData.alcoholUse },
+                    { label: "Current Medications", value: client.diagnosticData.currentMedications },
+                    { label: "Relationship To Food", value: client.diagnosticData.relationshipToFood },
+                    { label: "Baseline Internal State", value: client.diagnosticData.baselineInternalState },
+                    { label: "On TRT / Peptides", value: client.diagnosticData.onTrt },
+                    { label: "What Stays Solid Traveling", value: client.diagnosticData.whatStaysSolidTraveling },
+                    { label: "Caffeine Intake", value: client.diagnosticData.caffeineIntake },
+                    { label: "Nicotine / Other Substances", value: client.diagnosticData.nicotineSubstances },
+                    { label: "Sleep Quality", value: client.diagnosticData.sleepQuality },
+                    { label: "Training Frequency", value: client.diagnosticData.trainingFrequency },
+                    { label: "Morning Erections", value: client.diagnosticData.morningErections },
+                    { label: "Eye Contact", value: client.diagnosticData.eyeContact },
+                    { label: "Sexual Dynamic", value: client.diagnosticData.sexualDynamic },
+                    { label: "Physique Feeling", value: client.diagnosticData.physiqueFeeling },
+                    { label: "Training Approach", value: client.diagnosticData.trainingApproach },
+                    { label: "How They Decompress", value: client.diagnosticData.howDecompress },
+                    { label: "Libido", value: client.diagnosticData.libido },
+                    { label: "Travel Frequency", value: client.diagnosticData.travelFrequency },
+                    { label: "Wake Up Recovered", value: client.diagnosticData.wakeUpRecovered },
+                    { label: "Recent Hormone Panel", value: client.diagnosticData.recentHormonePanel },
+                  ].filter(f => f.value).map(f => (
+                    <div key={f.label} style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px" }}>
+                      <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.2rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>{f.label}</p>
+                      <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.55 }}>{f.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
     </div>
   );
 }

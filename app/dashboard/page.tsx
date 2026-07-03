@@ -13,13 +13,10 @@ import DiagnosticDocumentComponent from "@/components/portal/DiagnosticDocument"
 
 const CAL_LINK = "https://www.cal.eu/thp/call";
 
-type Tab = "today" | "protocol" | "diagnosis" | "blood-work" | "referrals";
-
 export default function Dashboard() {
   const router = useRouter();
   const [user, setUser] = useState<StoredUser | null>(null);
   const [protocol, setProtocol] = useState<Protocol | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>("today");
   const [showPwaBanner, setShowPwaBanner] = useState(false);
   const [suspended, setSuspended] = useState(false);
 
@@ -61,10 +58,6 @@ export default function Dashboard() {
           }).catch(() => {});
         });
         return;
-      }
-
-      if (!u.diagnosticData?.notionPageId) {
-        setActiveTab("protocol");
       }
 
       // Capture timezone on first login
@@ -132,23 +125,27 @@ export default function Dashboard() {
         setSuspended(false);
         cacheUser(updated);
         setUser(updated);
-        // protocol is fetched from Supabase in ProtocolTab; nothing to set here
-        if (updated.diagnosticData?.accountStatus === 'limited') setActiveTab('protocol');
       })
       .subscribe();
 
     return () => { isMounted = false; supabase.removeChannel(userChannel); };
   }, [router]);
 
-  // Log tab opens for protocol and diagnosis
+  // Deep-link scroll: ?tab= or ?section= URL param scrolls to section on mount
   useEffect(() => {
-    if (!user) return;
-    if (activeTab === 'protocol') {
-      fetch('/api/activity-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email, event: 'protocol_opened' }) }).catch(() => {});
-    } else if (activeTab === 'diagnosis') {
-      fetch('/api/activity-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email, event: 'diagnosis_viewed' }) }).catch(() => {});
-    }
-  }, [activeTab, user]);
+    const params = new URLSearchParams(window.location.search);
+    const target = params.get("tab") || params.get("section");
+    if (!target) return;
+    const map: Record<string, string> = {
+      protocol: "protocol-section",
+      diagnosis: "diagnosis-section",
+      "blood-work": "blood-work-section",
+      referrals: "referrals-section",
+      payments: "payments-section",
+    };
+    const id = map[target] ?? target + "-section";
+    setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }), 300);
+  }, []);
 
   const handleSignOut = () => { signOut(); router.push("/"); };
 
@@ -287,72 +284,69 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Tab bar */}
-      <div style={{
-        borderBottom: "1px solid var(--border-subtle)",
-        padding: "0 clamp(1.25rem, 4vw, 2.5rem)",
-        display: "flex",
-        gap: "0.125rem",
-        overflowX: "auto",
-        WebkitOverflowScrolling: "touch" as "touch",
-        scrollbarWidth: "none" as "none",
-      }}>
-        {(["today", "protocol", "diagnosis", "blood-work", "referrals"] as Tab[])
-          .filter(tab => tab !== "today" || user.status === "active" || user.status === "alumni")
-          .filter(tab => !isLimited || tab === "protocol")
-          .map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              style={{
-                position: "relative",
-                padding: "0.875rem 1rem",
-                background: "none",
-                border: "none",
-                fontSize: "0.75rem",
-                fontWeight: activeTab === tab ? 500 : 400,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: activeTab === tab ? "var(--ink)" : "var(--dim)",
-                cursor: "pointer",
-                fontFamily: "var(--font-ui), system-ui, sans-serif",
-                whiteSpace: "nowrap",
-                transition: "color 150ms ease",
-                flexShrink: 0,
-              }}
-            >
-              {tab === "today" ? "Today" : tab === "protocol" ? (
-                <span style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                  Protocol
-                  {user.diagnosticData?.protocolStatus === "active" && (
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", padding: "0.1rem 0.45rem", borderRadius: "100px", background: "oklch(0.60 0.18 165 / 0.15)", border: "1px solid oklch(0.60 0.18 165 / 0.35)", fontSize: "0.6rem", fontWeight: 600, color: "var(--primary)", letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "var(--font-mono), monospace" }}>
-                      <span style={{ width: "4px", height: "4px", borderRadius: "50%", background: "var(--primary)", animation: "pulse 2s ease infinite" }} aria-hidden />
-                      live
-                    </span>
-                  )}
-                </span>
-              ) : tab === "diagnosis" ? "Diagnosis" : tab === "blood-work" ? "Blood Work" : "Referrals"}
-              {activeTab === tab && (
-                <motion.div layoutId="tab-indicator" style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "2px", background: "var(--primary)", borderRadius: "1px 1px 0 0" }} transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }} />
-              )}
-              {tab === "today" && (
-                <span style={{ position: "absolute", top: "0.625rem", right: "0.5rem", width: "5px", height: "5px", borderRadius: "50%", background: "var(--primary)" }} aria-label="Tracker pending" />
-              )}
-            </button>
-          ))}
-      </div>
+      {/* Single-scroll content */}
+      <div style={{ flex: 1, padding: "2rem clamp(1.25rem, 4vw, 2.5rem)", maxWidth: "760px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "3rem" }}>
 
-      {/* Content */}
-      <div style={{ flex: 1, padding: "2rem clamp(1.25rem, 4vw, 2.5rem)", maxWidth: "760px", width: "100%", margin: "0 auto" }}>
-        <AnimatePresence mode="wait">
-          <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}>
-            {activeTab === "today" && !isLimited && (user.status === "active" || user.status === "alumni") && <TodayTab user={user} firstName={firstName} greeting={greeting} todayFormatted={todayFormatted} isAlumni={user.status === "alumni"} />}
-            {activeTab === "protocol" && !isLimited && <ProtocolTab user={user} protocol={protocol} notionPageId={user.notionPageId} />}
-            {activeTab === "diagnosis" && !isLimited && <DiagnosisTab user={user} />}
-            {activeTab === "blood-work" && !isLimited && <BloodWorkTab user={user} />}
-            {activeTab === "referrals" && !isLimited && <ReferralsTab user={user} />}
-          </motion.div>
-        </AnimatePresence>
+        {/* Tracker hero — only active/alumni non-limited */}
+        {!isLimited && (user.status === "active" || user.status === "alumni") && (
+          <TodayTab user={user} firstName={firstName} greeting={greeting} todayFormatted={todayFormatted} isAlumni={user.status === "alumni"} />
+        )}
+
+        {/* Protocol section */}
+        <section id="protocol-section">
+          <details open style={{ border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}>
+            <summary style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", background: "var(--surface)", cursor: "pointer", listStyle: "none", fontFamily: "var(--font-ui), system-ui, sans-serif", userSelect: "none" }}>
+              <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--ink)" }}>
+                Protocol
+                {user.diagnosticData?.protocolStatus === "active" && (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", padding: "0.1rem 0.45rem", borderRadius: "100px", background: "oklch(0.60 0.18 165 / 0.15)", border: "1px solid oklch(0.60 0.18 165 / 0.35)", fontSize: "0.6rem", fontWeight: 600, color: "var(--primary)", letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "var(--font-mono), monospace" }}>
+                    <span style={{ width: "4px", height: "4px", borderRadius: "50%", background: "var(--primary)", animation: "pulse 2s ease infinite" }} aria-hidden />
+                    live
+                  </span>
+                )}
+              </span>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden style={{ color: "var(--dim)", flexShrink: 0 }}><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </summary>
+            <div style={{ padding: "1.5rem 1.25rem", borderTop: "1px solid var(--border-subtle)" }}>
+              <ProtocolTab user={user} protocol={protocol} notionPageId={user.notionPageId} />
+            </div>
+          </details>
+        </section>
+
+        {/* Diagnosis section */}
+        <section id="diagnosis-section">
+          <details open style={{ border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}>
+            <summary style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", background: "var(--surface)", cursor: "pointer", listStyle: "none", fontFamily: "var(--font-ui), system-ui, sans-serif", userSelect: "none" }}>
+              <span style={{ fontSize: "0.75rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--ink)" }}>Diagnosis</span>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden style={{ color: "var(--dim)", flexShrink: 0 }}><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </summary>
+            <div style={{ padding: "1.5rem 1.25rem", borderTop: "1px solid var(--border-subtle)" }}>
+              <DiagnosisTab user={user} />
+            </div>
+          </details>
+        </section>
+
+        {/* Blood Work section — hidden for limited */}
+        {!isLimited && (
+          <section id="blood-work-section">
+            <BloodWorkTab user={user} />
+          </section>
+        )}
+
+        {/* Payments section — hidden for limited */}
+        {!isLimited && (
+          <section id="payments-section">
+            <PaymentsSection user={user} />
+          </section>
+        )}
+
+        {/* Referrals section — hidden for limited */}
+        {!isLimited && (
+          <section id="referrals-section">
+            <ReferralsTab user={user} />
+          </section>
+        )}
+
       </div>
 
       {showPwaBanner && (
@@ -921,6 +915,77 @@ function TodoList({ items }: { items: string[] }) {
 }
 
 
+// ─── PAYMENTS SECTION ─────────────────────────────────────────────────────
+
+function PaymentsSection({ user }: { user: StoredUser }) {
+  const [payData, setPayData] = useState<{ deposit_paid: number | null; total_owed: number | null } | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    supabase.from('users').select('deposit_paid, total_owed').eq('email', user.email).maybeSingle()
+      .then(({ data }) => {
+        setPayData(data as { deposit_paid: number | null; total_owed: number | null } | null);
+        setLoaded(true);
+      }, () => setLoaded(true));
+  }, [user.email]);
+
+  const deposit = payData?.deposit_paid ?? null;
+  const total = payData?.total_owed ?? null;
+  const balanceDue = deposit != null && total != null && total > deposit ? total - deposit : null;
+  const allSettled = deposit != null && total != null && total > 0 && deposit >= total;
+  const hasSubscription = !!(user.diagnosticData?.stripeCustomerId);
+
+  const labelStyle: React.CSSProperties = {
+    fontFamily: "var(--font-mono), monospace",
+    fontSize: "0.7rem",
+    letterSpacing: "0.1em",
+    textTransform: "uppercase",
+    color: "var(--dim)",
+    fontWeight: 600,
+    marginBottom: "0.75rem",
+  };
+
+  const rowStyle: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "0.5rem 0",
+    borderBottom: "1px solid var(--border-subtle)",
+  };
+
+  return (
+    <div>
+      <p style={labelStyle}>Payments</p>
+      <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "1rem 1.25rem" }}>
+        {!loaded ? (
+          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>Loading…</p>
+        ) : (
+          <div>
+            <div style={rowStyle}>
+              <span style={{ fontSize: "0.875rem", color: "var(--muted)" }}>Deposit paid</span>
+              <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--ink)", fontFamily: "var(--font-mono), monospace" }}>{deposit != null ? `$${deposit}` : "—"}</span>
+            </div>
+            <div style={{ ...rowStyle, borderBottom: balanceDue != null || allSettled ? "1px solid var(--border-subtle)" : "none" }}>
+              <span style={{ fontSize: "0.875rem", color: "var(--muted)" }}>Balance due</span>
+              {balanceDue != null ? (
+                <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "oklch(0.75 0.16 25)", fontFamily: "var(--font-mono), monospace" }}>${balanceDue}</span>
+              ) : allSettled ? (
+                <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "oklch(0.65 0.15 145)" }}>All settled ✓</span>
+              ) : (
+                <span style={{ fontSize: "0.875rem", fontWeight: 400, color: "var(--dim)" }}>—</span>
+              )}
+            </div>
+            <div style={{ ...rowStyle, borderBottom: "none" }}>
+              <span style={{ fontSize: "0.875rem", color: "var(--muted)" }}>Subscription</span>
+              <span style={{ fontSize: "0.875rem", fontWeight: 600, color: hasSubscription ? "oklch(0.65 0.15 145)" : "var(--dim)" }}>{hasSubscription ? "Active" : "—"}</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── BLOOD WORK TAB ───────────────────────────────────────────────────────
 
 interface BloodMarker {
@@ -939,14 +1004,34 @@ interface BloodWorkEntry {
   image_url: string;
 }
 
-const MARKER_LABELS: Record<string, string> = {
-  total_t: "Total T", free_t: "Free T", shbg: "SHBG", estradiol: "Estradiol",
-  lh: "LH", fsh: "FSH", cortisol: "Cortisol", hematocrit: "Hematocrit",
-  hemoglobin: "Hemoglobin", rbc: "RBC", psa: "PSA", dhea_s: "DHEA-S",
-  igf1: "IGF-1", tsh: "TSH", t3_free: "Free T3", t4_free: "Free T4",
-  vitamin_d: "Vitamin D", ferritin: "Ferritin", cholesterol: "Cholesterol",
-  hdl: "HDL", ldl: "LDL", triglycerides: "Triglycerides", glucose: "Glucose",
-  hba1c: "HbA1c", creatinine: "Creatinine", alt: "ALT", ast: "AST",
+const MARKER_DEFAULTS: Record<string, { label: string; unit: string }> = {
+  total_t:       { label: "Total T",       unit: "ng/dL" },
+  free_t:        { label: "Free T",        unit: "pg/mL" },
+  shbg:          { label: "SHBG",          unit: "nmol/L" },
+  estradiol:     { label: "Estradiol",     unit: "pg/mL" },
+  lh:            { label: "LH",            unit: "mIU/mL" },
+  fsh:           { label: "FSH",           unit: "mIU/mL" },
+  cortisol:      { label: "Cortisol",      unit: "μg/dL" },
+  hematocrit:    { label: "Hematocrit",    unit: "%" },
+  hemoglobin:    { label: "Hemoglobin",    unit: "g/dL" },
+  rbc:           { label: "RBC",           unit: "M/μL" },
+  psa:           { label: "PSA",           unit: "ng/mL" },
+  dhea_s:        { label: "DHEA-S",        unit: "μg/dL" },
+  igf1:          { label: "IGF-1",         unit: "ng/mL" },
+  tsh:           { label: "TSH",           unit: "mIU/L" },
+  t3_free:       { label: "Free T3",       unit: "pg/mL" },
+  t4_free:       { label: "Free T4",       unit: "ng/dL" },
+  vitamin_d:     { label: "Vitamin D",     unit: "ng/mL" },
+  ferritin:      { label: "Ferritin",      unit: "ng/mL" },
+  cholesterol:   { label: "Cholesterol",   unit: "mg/dL" },
+  hdl:           { label: "HDL",           unit: "mg/dL" },
+  ldl:           { label: "LDL",           unit: "mg/dL" },
+  triglycerides: { label: "Triglycerides", unit: "mg/dL" },
+  glucose:       { label: "Glucose",       unit: "mg/dL" },
+  hba1c:         { label: "HbA1c",         unit: "%" },
+  creatinine:    { label: "Creatinine",    unit: "mg/dL" },
+  alt:           { label: "ALT",           unit: "U/L" },
+  ast:           { label: "AST",           unit: "U/L" },
 };
 
 function BloodWorkTab({ user }: { user: StoredUser }) {
@@ -1014,62 +1099,45 @@ function BloodWorkTab({ user }: { user: StoredUser }) {
         </div>
       )}
 
-      {entries.length === 0 && !analysing ? (
-        <>
-          <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--dim)", textTransform: "uppercase", marginBottom: "0.875rem", fontFamily: "var(--font-mono), monospace", opacity: 0.5 }}>
-            Awaiting results
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "0.625rem", marginBottom: "2rem", opacity: 0.35 }}>
-            {Object.entries(MARKER_LABELS).map(([key, label]) => (
-              <div key={key} style={{ padding: "0.875rem 1rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px" }}>
-                <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "0.375rem", fontFamily: "var(--font-mono), monospace" }}>{label}</p>
-                <p style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--dim)", fontFamily: "var(--font-mono), monospace" }}>—</p>
-                <p style={{ fontSize: "0.65rem", color: "var(--dim)", marginTop: "0.25rem", fontWeight: 300 }}>no data</p>
+      <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--dim)", textTransform: "uppercase", marginBottom: "0.875rem", fontFamily: "var(--font-mono), monospace" }}>
+        {latest?.test_date ? `Latest — ${latest.test_date}` : latest ? `Latest — ${new Date(latest.uploaded_at).toLocaleDateString("en-GB")}` : "Awaiting results"}
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "0.625rem", marginBottom: "2rem" }}>
+        {Object.entries(MARKER_DEFAULTS).map(([key, def]) => {
+          const m = latest?.markers?.[key];
+          const prevVal = previous?.markers?.[key]?.value ?? undefined;
+          const delta = prevVal != null && m?.value != null ? m.value - prevVal : null;
+          const flagColor = m?.flag === "high" ? "oklch(0.75 0.16 25)" : m?.flag === "low" ? "oklch(0.70 0.12 260)" : "var(--primary)";
+          const hasData = m?.value != null;
+          return (
+            <div key={key} style={{ padding: "0.875rem 1rem", background: "var(--surface)", border: `1px solid ${m?.flag && m.flag !== "normal" ? flagColor + "44" : "var(--border)"}`, borderRadius: "10px" }}>
+              <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "0.375rem", fontFamily: "var(--font-mono), monospace" }}>{def.label}</p>
+              <p style={{ fontSize: "1.125rem", fontWeight: 600, color: hasData && m?.flag && m.flag !== "normal" ? flagColor : hasData ? "var(--ink)" : "var(--muted)", fontFamily: "var(--font-mono), monospace" }}>
+                {hasData ? m!.value : "—"} <span style={{ fontSize: "0.7rem", fontWeight: 400, color: "var(--dim)" }}>{hasData ? m!.unit : def.unit}</span>
+              </p>
+              {delta !== null && (
+                <p style={{ fontSize: "0.7rem", color: delta > 0 ? "oklch(0.65 0.15 145)" : "oklch(0.70 0.15 25)", marginTop: "0.25rem" }}>
+                  {delta > 0 ? "↑" : "↓"} {Math.abs(delta).toFixed(1)}
+                </p>
+              )}
+              {m?.reference_range && <p style={{ fontSize: "0.65rem", color: "var(--dim)", marginTop: "0.25rem", fontWeight: 300 }}>ref: {m.reference_range}</p>}
+            </div>
+          );
+        })}
+      </div>
+
+      {entries.length > 1 && (
+        <details style={{ marginBottom: "1.5rem" }}>
+          <summary style={{ fontSize: "0.8125rem", color: "var(--muted)", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 400, marginBottom: "0.75rem" }}>Previous uploads ({entries.length - 1})</summary>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.75rem" }}>
+            {entries.slice(1).map(e => (
+              <div key={e.id} style={{ padding: "0.75rem 1rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300 }}>{e.test_date ?? new Date(e.uploaded_at).toLocaleDateString("en-GB")}</span>
+                <span style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>{e.markers ? Object.keys(e.markers).length + " markers" : "Processing…"}</span>
               </div>
             ))}
           </div>
-        </>
-      ) : latest?.markers && (
-        <>
-          <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--dim)", textTransform: "uppercase", marginBottom: "0.875rem", fontFamily: "var(--font-mono), monospace" }}>
-            Latest — {latest.test_date ?? new Date(latest.uploaded_at).toLocaleDateString("en-GB")}
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "0.625rem", marginBottom: "2rem" }}>
-            {Object.entries(latest.markers).map(([key, m]) => {
-              const prevVal = previous?.markers?.[key]?.value ?? undefined;
-              const delta = prevVal != null && m.value != null ? m.value - prevVal : null;
-              const flagColor = m.flag === "high" ? "oklch(0.75 0.16 25)" : m.flag === "low" ? "oklch(0.70 0.12 260)" : "var(--primary)";
-              return (
-                <div key={key} style={{ padding: "0.875rem 1rem", background: "var(--surface)", border: `1px solid ${m.flag && m.flag !== "normal" ? flagColor + "44" : "var(--border)"}`, borderRadius: "10px" }}>
-                  <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "0.375rem", fontFamily: "var(--font-mono), monospace" }}>{MARKER_LABELS[key] ?? key}</p>
-                  <p style={{ fontSize: "1.125rem", fontWeight: 600, color: m.flag && m.flag !== "normal" ? flagColor : "var(--ink)", fontFamily: "var(--font-mono), monospace" }}>
-                    {m.value ?? "—"} <span style={{ fontSize: "0.7rem", fontWeight: 400, color: "var(--dim)" }}>{m.unit}</span>
-                  </p>
-                  {delta !== null && (
-                    <p style={{ fontSize: "0.7rem", color: delta > 0 ? "oklch(0.65 0.15 145)" : "oklch(0.70 0.15 25)", marginTop: "0.25rem" }}>
-                      {delta > 0 ? "↑" : "↓"} {Math.abs(delta).toFixed(1)}
-                    </p>
-                  )}
-                  {m.reference_range && <p style={{ fontSize: "0.65rem", color: "var(--dim)", marginTop: "0.25rem", fontWeight: 300 }}>ref: {m.reference_range}</p>}
-                </div>
-              );
-            })}
-          </div>
-
-          {entries.length > 1 && (
-            <details style={{ marginBottom: "1.5rem" }}>
-              <summary style={{ fontSize: "0.8125rem", color: "var(--muted)", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 400, marginBottom: "0.75rem" }}>Previous uploads ({entries.length - 1})</summary>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.75rem" }}>
-                {entries.slice(1).map(e => (
-                  <div key={e.id} style={{ padding: "0.75rem 1rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300 }}>{e.test_date ?? new Date(e.uploaded_at).toLocaleDateString("en-GB")}</span>
-                    <span style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>{e.markers ? Object.keys(e.markers).length + " markers" : "Processing…"}</span>
-                  </div>
-                ))}
-              </div>
-            </details>
-          )}
-        </>
+        </details>
       )}
 
       <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, lineHeight: 1.6, marginTop: "1rem" }}>
