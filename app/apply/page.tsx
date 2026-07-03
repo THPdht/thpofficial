@@ -325,8 +325,11 @@ export default function ApplyPage() {
       instagram: form.instagram,
     });
 
-    // Update status to pending now that application is submitted
-    await supabase.from('users').update({ status: 'pending' }).eq('email', form.email.trim().toLowerCase());
+    // Update status to pending and tag as 1:1 applicant
+    await supabase.from('users').update({
+      status: 'pending',
+      diagnostic_data: { clientType: '1on1', source: 'apply' },
+    }).eq('email', form.email.trim().toLowerCase());
 
     if (!error) {
       try {

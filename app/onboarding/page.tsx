@@ -173,7 +173,12 @@ function OnboardingInner() {
   useEffect(() => {
     const cached = getCurrentUser();
     if (!cached) { setAuthMode("register"); return; }
-    if (cached.status === "pending") { router.replace("/onboarding/pending"); return; }
+    // If payment proof is in the URL (session_id = Stripe checkout, token = invite),
+    // let pending users through — they just paid and need to fill intake.
+    const hasPaymentProof = typeof window !== "undefined" &&
+      (new URLSearchParams(window.location.search).has("session_id") ||
+       new URLSearchParams(window.location.search).has("token"));
+    if (cached.status === "pending" && !hasPaymentProof) { router.replace("/onboarding/pending"); return; }
     if (cached.status === "active" || cached.status === "alumni") { router.replace("/dashboard"); return; }
     setUser({ email: cached.email, password: cached.password, name: cached.name });
     setAuthMode("nudge");
@@ -261,7 +266,6 @@ function OnboardingInner() {
     setSubmitError("");
 
     try {
-      setSubmitStatus("generating");
       const res = await fetch("/api/generate-onboarding-protocol", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -270,11 +274,10 @@ function OnboardingInner() {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? "Protocol generation failed");
+        throw new Error(body.error ?? "Failed to save intake");
       }
 
       setSubmitStatus("done");
-      router.replace("/dashboard");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
       setSubmitError(msg);
@@ -296,23 +299,43 @@ function OnboardingInner() {
     );
   }
 
-  // Protocol generating overlay
-  if (submitting && submitStatus !== "error") {
+  // Intake submitted — done screen
+  if (submitStatus === "done") {
     return (
-      <div style={{ minHeight: "100dvh", background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1.5rem", padding: "2rem" }}>
+      <div style={{ minHeight: "100dvh", background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
+        <div style={{ width: "100%", maxWidth: "420px", textAlign: "center" }}>
+          <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "0.72rem", letterSpacing: "0.22em", color: "var(--color-gold)", textTransform: "uppercase", marginBottom: "2rem" }}>THP Client Portal</p>
+          <div style={{ width: "52px", height: "52px", borderRadius: "50%", background: `color-mix(in srgb, var(--color-red) 15%, transparent)`, border: `1px solid var(--color-red)`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1.75rem" }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-red)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </div>
+          <h1 style={{ fontFamily: "var(--font-display), sans-serif", fontSize: "1.75rem", fontWeight: 400, color: ink, marginBottom: "0.75rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            You&apos;re In.
+          </h1>
+          <p style={{ color: muted, fontSize: "0.9rem", fontFamily: "var(--font-body), sans-serif", lineHeight: 1.65, marginBottom: "2.5rem" }}>
+            Your intake has been received. THP will review everything and reach out with next steps.
+          </p>
+          <button
+            onClick={() => router.replace("/dashboard")}
+            style={{ padding: "0.875rem 2rem", background: primary, color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body), sans-serif" }}
+          >
+            Go to my dashboard →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Saving spinner (brief — just while POST is in flight)
+  if (submitting) {
+    return (
+      <div style={{ minHeight: "100dvh", background: bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-          style={{ width: "40px", height: "40px", borderRadius: "50%", border: `3px solid ${border}`, borderTopColor: primary }}
+          style={{ width: "36px", height: "36px", borderRadius: "50%", border: `3px solid ${border}`, borderTopColor: primary }}
         />
-        <div style={{ textAlign: "center" }}>
-          <p style={{ color: ink, fontFamily: "var(--font-body), sans-serif", fontSize: "1rem", fontWeight: 500, marginBottom: "0.5rem" }}>
-            {submitStatus === "saving" ? "Saving your intake..." : "Building your protocol..."}
-          </p>
-          <p style={{ color: muted, fontFamily: "var(--font-body), sans-serif", fontSize: "0.82rem" }}>
-            THP AI is analysing your intake. This takes about 30 seconds.
-          </p>
-        </div>
       </div>
     );
   }

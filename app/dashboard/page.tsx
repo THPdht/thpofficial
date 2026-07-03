@@ -3,18 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { getCurrentUser, signOut, recordCheckIn, hasCheckedInToday, getMessages, addMessage, uploadMessageAttachment, rowToUser, cacheUser, updatePresence, isAdminActive, getClientProtocols, getClientDiagnostics } from "@/lib/auth";
-import type { Message, AttachmentType, ClientProtocol, ClientDiagnostic, TrackerQuestion } from "@/lib/auth";
+import { getCurrentUser, signOut, rowToUser, cacheUser, getClientProtocols, getClientDiagnostics } from "@/lib/auth";
+import type { ClientProtocol, ClientDiagnostic } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import type { StoredUser } from "@/lib/auth";
-import type { Protocol, TrackerField } from "@/lib/protocols";
+import type { Protocol } from "@/lib/protocols";
 import ProtocolDocumentComponent from "@/components/portal/ProtocolDocument";
 import DiagnosticDocumentComponent from "@/components/portal/DiagnosticDocument";
 
-const WHATSAPP_NUMBER = "447453172081";
 const CAL_LINK = "https://www.cal.eu/thp/call";
 
-type Tab = "today" | "diagnosis" | "protocol" | "book" | "thp";
+type Tab = "today" | "protocol" | "diagnosis" | "blood-work" | "referrals";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -67,6 +66,23 @@ export default function Dashboard() {
       if (!u.diagnosticData?.notionPageId) {
         setActiveTab("protocol");
       }
+
+      // Capture timezone on first login
+      try {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (tz) {
+          fetch('/api/activity-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: u.email, event: 'login' }),
+          }).catch(() => {});
+          // Also save timezone if not already stored
+          if (!localStorage.getItem('thp_tz_saved')) {
+            localStorage.setItem('thp_tz_saved', '1');
+            void Promise.resolve(supabase.from('users').update({ timezone: tz }).eq('email', u.email));
+          }
+        }
+      } catch { /* ignore */ }
     });
 
     // PWA install banner - show once on mobile when not already installed
@@ -89,19 +105,6 @@ export default function Dashboard() {
           }
         })
         .catch(() => { /* ignore */ });
-    }
-
-    // On-open reminder: fire if past 8am and they haven't checked in today
-    if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && !hasCheckedInToday(u)) {
-      const todayStr = new Date().toISOString().split('T')[0];
-      const notifKey = `mn_reminder_${todayStr}`;
-      const hour = new Date().getHours();
-      if ((hour >= 8) && !localStorage.getItem(notifKey)) {
-        try {
-          new Notification('THP', { body: "Log your tracker and complete today's challenge.", icon: '/thp.jpg', tag: 'daily-reminder' });
-          localStorage.setItem(notifKey, '1');
-        } catch { /* blocked */ }
-      }
     }
 
     // Real-time: listen for any changes to THIS user's row in Supabase.
@@ -130,25 +133,24 @@ export default function Dashboard() {
         cacheUser(updated);
         setUser(updated);
         // protocol is fetched from Supabase in ProtocolTab; nothing to set here
-        if (updated.diagnosticData?.accountStatus === 'limited') setActiveTab('thp');
+        if (updated.diagnosticData?.accountStatus === 'limited') setActiveTab('protocol');
       })
       .subscribe();
 
     return () => { isMounted = false; supabase.removeChannel(userChannel); };
   }, [router]);
 
-  const handleSignOut = () => { signOut(); router.push("/"); };
-
-  const onCheckInComplete = async () => {
+  // Log tab opens for protocol and diagnosis
+  useEffect(() => {
     if (!user) return;
-    await recordCheckIn(user.email, user.streak);
-    const updated = getCurrentUser();
-    if (updated) setUser(updated);
-    // Tell the SW the check-in is done so it stops reminding today
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({ type: 'CHECK_IN_DONE' });
+    if (activeTab === 'protocol') {
+      fetch('/api/activity-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email, event: 'protocol_opened' }) }).catch(() => {});
+    } else if (activeTab === 'diagnosis') {
+      fetch('/api/activity-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email, event: 'diagnosis_viewed' }) }).catch(() => {});
     }
-  };
+  }, [activeTab, user]);
+
+  const handleSignOut = () => { signOut(); router.push("/"); };
 
   if (suspended) {
     return (
@@ -161,12 +163,12 @@ export default function Dashboard() {
             Message THP to get set up again
           </p>
           <a
-            href={`https://wa.me/447453172081`}
+            href="https://t.me/thpofficial"
             target="_blank"
             rel="noopener noreferrer"
             style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", height: "44px", padding: "0 1.5rem", background: "var(--primary)", color: "#ffffff", border: "none", borderRadius: "999px", fontSize: "0.9rem", fontWeight: 500, textDecoration: "none", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "background 150ms" }}
           >
-            Message on WhatsApp
+            Message THP
           </a>
           <p style={{ marginTop: "2rem", fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>
             <button onClick={() => { signOut(); router.push("/"); }} style={{ background: "none", border: "none", color: "var(--dim)", fontSize: "0.75rem", cursor: "pointer", textDecoration: "underline", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Sign out</button>
@@ -220,7 +222,6 @@ export default function Dashboard() {
   const firstName = user.name.split(" ")[0];
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const alreadyCheckedIn = hasCheckedInToday(user);
   const todayFormatted = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
 
   return (
@@ -242,7 +243,7 @@ export default function Dashboard() {
       }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/images/thprebrandlogo2.png" alt="THP" style={{ height: "28px", width: "auto", filter: "brightness(0) invert(1)" }} />
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.875rem" }}>
           {user.streak > 0 && (
             <div style={{
               display: "flex",
@@ -253,43 +254,21 @@ export default function Dashboard() {
               border: "1px solid oklch(0.60 0.18 165 / 0.35)",
               borderRadius: "100px",
             }}>
-              <span style={{
-                width: "6px",
-                height: "6px",
-                borderRadius: "50%",
-                background: "var(--primary)",
-                flexShrink: 0,
-              }} aria-hidden />
-              <span style={{
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                color: "var(--ink)",
-                fontFamily: "var(--font-mono), monospace",
-              }}>{user.streak}</span>
-              <span style={{
-                fontSize: "0.7rem",
-                color: "var(--dim)",
-                fontFamily: "var(--font-ui), system-ui, sans-serif",
-              }}>day streak</span>
+              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--primary)", flexShrink: 0 }} aria-hidden />
+              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--ink)", fontFamily: "var(--font-mono), monospace" }}>{user.streak}</span>
+              <span style={{ fontSize: "0.7rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>day streak</span>
             </div>
           )}
-          <span style={{
-            fontSize: "0.875rem",
-            color: "var(--muted)",
-            fontWeight: 300,
-            fontFamily: "var(--font-ui), system-ui, sans-serif",
-          }}>{firstName}</span>
+          <a href={CAL_LINK} target="_blank" rel="noopener noreferrer"
+            style={{ height: "32px", padding: "0 0.875rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: "var(--muted)", fontSize: "0.75rem", fontWeight: 500, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "border-color 150ms, color 150ms", whiteSpace: "nowrap" }}
+            onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "var(--primary)"; (e.currentTarget as HTMLAnchorElement).style.color = "var(--primary)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLAnchorElement).style.color = "var(--muted)"; }}>
+            <CalIcon /> Book
+          </a>
+          <span style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{firstName}</span>
           <button
             onClick={handleSignOut}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--dim)",
-              fontSize: "0.8125rem",
-              cursor: "pointer",
-              fontFamily: "var(--font-ui), system-ui, sans-serif",
-              transition: "color 150ms",
-            }}
+            style={{ background: "none", border: "none", color: "var(--dim)", fontSize: "0.8125rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "color 150ms" }}
             onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = "var(--muted)"}
             onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = "var(--dim)"}
           >
@@ -318,9 +297,9 @@ export default function Dashboard() {
         WebkitOverflowScrolling: "touch" as "touch",
         scrollbarWidth: "none" as "none",
       }}>
-        {(["today", "diagnosis", "protocol", "book", "thp"] as Tab[])
+        {(["today", "protocol", "diagnosis", "blood-work", "referrals"] as Tab[])
           .filter(tab => tab !== "today" || user.status === "active" || user.status === "alumni")
-          .filter(tab => !isLimited || tab === "thp")
+          .filter(tab => !isLimited || tab === "protocol")
           .map(tab => (
             <button
               key={tab}
@@ -342,50 +321,22 @@ export default function Dashboard() {
                 flexShrink: 0,
               }}
             >
-              {tab === "today" ? "Today" : tab === "diagnosis" ? "Diagnosis" : tab === "protocol" ? (
+              {tab === "today" ? "Today" : tab === "protocol" ? (
                 <span style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
                   Protocol
                   {user.diagnosticData?.protocolStatus === "active" && (
-                    <span style={{
-                      display: "inline-flex", alignItems: "center", gap: "0.25rem",
-                      padding: "0.1rem 0.45rem", borderRadius: "100px",
-                      background: "oklch(0.60 0.18 165 / 0.15)",
-                      border: "1px solid oklch(0.60 0.18 165 / 0.35)",
-                      fontSize: "0.6rem", fontWeight: 600, color: "var(--primary)",
-                      letterSpacing: "0.08em", textTransform: "uppercase",
-                      fontFamily: "var(--font-mono), monospace",
-                    }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", padding: "0.1rem 0.45rem", borderRadius: "100px", background: "oklch(0.60 0.18 165 / 0.15)", border: "1px solid oklch(0.60 0.18 165 / 0.35)", fontSize: "0.6rem", fontWeight: 600, color: "var(--primary)", letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "var(--font-mono), monospace" }}>
                       <span style={{ width: "4px", height: "4px", borderRadius: "50%", background: "var(--primary)", animation: "pulse 2s ease infinite" }} aria-hidden />
                       live
                     </span>
                   )}
                 </span>
-              ) : tab === "book" ? "Book a call" : "THP"}
+              ) : tab === "diagnosis" ? "Diagnosis" : tab === "blood-work" ? "Blood Work" : "Referrals"}
               {activeTab === tab && (
-                <motion.div
-                  layoutId="tab-indicator"
-                  style={{
-                    position: "absolute",
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    height: "2px",
-                    background: "var(--primary)",
-                    borderRadius: "1px 1px 0 0",
-                  }}
-                  transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                />
+                <motion.div layoutId="tab-indicator" style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "2px", background: "var(--primary)", borderRadius: "1px 1px 0 0" }} transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }} />
               )}
-              {tab === "today" && !alreadyCheckedIn && (
-                <span style={{
-                  position: "absolute",
-                  top: "0.625rem",
-                  right: "0.5rem",
-                  width: "5px",
-                  height: "5px",
-                  borderRadius: "50%",
-                  background: "var(--primary)",
-                }} aria-label="Check-in pending" />
+              {tab === "today" && (
+                <span style={{ position: "absolute", top: "0.625rem", right: "0.5rem", width: "5px", height: "5px", borderRadius: "50%", background: "var(--primary)" }} aria-label="Tracker pending" />
               )}
             </button>
           ))}
@@ -395,11 +346,11 @@ export default function Dashboard() {
       <div style={{ flex: 1, padding: "2rem clamp(1.25rem, 4vw, 2.5rem)", maxWidth: "760px", width: "100%", margin: "0 auto" }}>
         <AnimatePresence mode="wait">
           <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}>
-            {activeTab === "today" && !isLimited && (user.status === "active" || user.status === "alumni") && <TodayTab user={user} protocol={protocol} firstName={firstName} greeting={greeting} alreadyCheckedIn={alreadyCheckedIn} todayFormatted={todayFormatted} onComplete={onCheckInComplete} isAlumni={user.status === "alumni"} />}
-            {activeTab === "diagnosis" && !isLimited && <DiagnosisTab user={user} />}
+            {activeTab === "today" && !isLimited && (user.status === "active" || user.status === "alumni") && <TodayTab user={user} firstName={firstName} greeting={greeting} todayFormatted={todayFormatted} isAlumni={user.status === "alumni"} />}
             {activeTab === "protocol" && !isLimited && <ProtocolTab user={user} protocol={protocol} notionPageId={user.notionPageId} />}
-            {activeTab === "book" && !isLimited && <BookTab isAlumni={user.status === "alumni"} />}
-            {(activeTab === "thp" || isLimited) && <NikodmTab user={user} isAlumni={user.status === "alumni"} />}
+            {activeTab === "diagnosis" && !isLimited && <DiagnosisTab user={user} />}
+            {activeTab === "blood-work" && !isLimited && <BloodWorkTab user={user} />}
+            {activeTab === "referrals" && !isLimited && <ReferralsTab user={user} />}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -411,88 +362,203 @@ export default function Dashboard() {
   );
 }
 
-// ─── TODAY TAB ─────────────────────────────────────────────────────────────
+// ─── TODAY TAB — v2 TRACKER ────────────────────────────────────────────────
 
-function TodayTab({ user, protocol, firstName, greeting, alreadyCheckedIn, todayFormatted, onComplete, isAlumni }: {
-  user: StoredUser; protocol: Protocol | null; firstName: string;
-  greeting: string; alreadyCheckedIn: boolean; todayFormatted: string;
-  onComplete: () => void; isAlumni?: boolean;
+type SectionKey = "circadian" | "training" | "nutrition" | "vitals" | "psychological" | "business";
+
+const SECTION_META: { key: SectionKey; emoji: string; label: string }[] = [
+  { key: "circadian", emoji: "☀️", label: "Circadian" },
+  { key: "training", emoji: "🏋️", label: "Training" },
+  { key: "nutrition", emoji: "🥩", label: "Nutrition" },
+  { key: "vitals", emoji: "⚡", label: "Vitals" },
+  { key: "psychological", emoji: "🧠", label: "Psychological" },
+  { key: "business", emoji: "💼", label: "Business" },
+];
+
+const FEEL_OPTIONS = ["Great", "Good", "Okay", "Poor", "Skipped"];
+const INTENSITY_OPTIONS = ["Low", "Medium", "High"];
+const FOCUS_OPTIONS = ["Deep work", "Admin", "Networking", "Strategy", "Sales", "Learning", "Content"];
+
+function ScaleRow({ label, fieldKey, data, onChange }: { label: string; fieldKey: string; data: Record<string, unknown>; onChange: (k: string, v: unknown) => void }) {
+  const val = data[fieldKey] as number | undefined;
+  return (
+    <div style={{ marginBottom: "1rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.375rem" }}>
+        <span style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 400 }}>{label}</span>
+        {val !== undefined && <span style={{ fontSize: "0.75rem", color: "var(--primary)", fontFamily: "var(--font-mono), monospace", fontWeight: 600 }}>{val}/10</span>}
+      </div>
+      <div style={{ display: "flex", gap: "0.25rem" }}>
+        {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
+          <button key={n} type="button" onClick={() => onChange(fieldKey, n)}
+            style={{ flex: 1, height: "36px", borderRadius: "5px", border: `1px solid ${val === n ? "var(--primary)" : "var(--border)"}`, background: val === n ? "var(--primary)" : "var(--surface)", color: val === n ? "#fff" : "var(--dim)", fontSize: "0.75rem", fontWeight: val === n ? 600 : 400, cursor: "pointer", transition: "all 120ms", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+            {n}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TextareaField({ label, fieldKey, placeholder, data, onChange }: { label: string; fieldKey: string; placeholder?: string; data: Record<string, unknown>; onChange: (k: string, v: unknown) => void }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <div style={{ marginBottom: "1rem" }}>
+      <label style={{ display: "block", fontSize: "0.875rem", color: "var(--muted)", fontWeight: 400, marginBottom: "0.375rem" }}>{label}</label>
+      <textarea value={(data[fieldKey] as string) || ""} placeholder={placeholder || ""}
+        onChange={e => onChange(fieldKey, e.target.value)} rows={2}
+        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        style={{ width: "100%", background: "var(--surface)", border: `1px solid ${focused ? "var(--primary)" : "var(--border)"}`, borderRadius: "7px", padding: "0.625rem 0.75rem", fontSize: "0.9rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none", resize: "vertical", lineHeight: 1.6, transition: "border-color 150ms", minHeight: "64px", boxSizing: "border-box" }} />
+    </div>
+  );
+}
+
+function InputField({ label, fieldKey, type, placeholder, unit, data, onChange }: { label: string; fieldKey: string; type?: string; placeholder?: string; unit?: string; data: Record<string, unknown>; onChange: (k: string, v: unknown) => void }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <div style={{ marginBottom: "1rem" }}>
+      <label style={{ display: "block", fontSize: "0.875rem", color: "var(--muted)", fontWeight: 400, marginBottom: "0.375rem" }}>{label}</label>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <input type={type || "text"} value={(data[fieldKey] as string) || ""} placeholder={placeholder || ""}
+          onChange={e => onChange(fieldKey, type === "number" ? e.target.value : e.target.value)}
+          onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+          style={{ flex: 1, height: "40px", background: "var(--surface)", border: `1px solid ${focused ? "var(--primary)" : "var(--border)"}`, borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.9rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none", transition: "border-color 150ms" }} />
+        {unit && <span style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, flexShrink: 0 }}>{unit}</span>}
+      </div>
+    </div>
+  );
+}
+
+function YesNoField({ label, fieldKey, data, onChange }: { label: string; fieldKey: string; data: Record<string, unknown>; onChange: (k: string, v: unknown) => void }) {
+  const val = data[fieldKey];
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.875rem" }}>
+      <span style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 400 }}>{label}</span>
+      <div style={{ display: "flex", gap: "0.375rem" }}>
+        {[{ v: true, l: "Yes" }, { v: false, l: "No" }].map(({ v, l }) => (
+          <button key={l} type="button" onClick={() => onChange(fieldKey, v)}
+            style={{ height: "34px", padding: "0 0.875rem", borderRadius: "6px", border: `1px solid ${val === v ? "var(--primary)" : "var(--border)"}`, background: val === v ? "var(--primary)" : "var(--surface)", color: val === v ? "#fff" : "var(--muted)", fontSize: "0.8125rem", fontWeight: val === v ? 500 : 400, cursor: "pointer", transition: "all 120ms", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+            {l}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SelectField({ label, fieldKey, options, data, onChange }: { label: string; fieldKey: string; options: string[]; data: Record<string, unknown>; onChange: (k: string, v: unknown) => void }) {
+  const val = data[fieldKey] as string | undefined;
+  return (
+    <div style={{ marginBottom: "1rem" }}>
+      <label style={{ display: "block", fontSize: "0.875rem", color: "var(--muted)", fontWeight: 400, marginBottom: "0.375rem" }}>{label}</label>
+      <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
+        {options.map(opt => (
+          <button key={opt} type="button" onClick={() => onChange(fieldKey, opt)}
+            style={{ height: "32px", padding: "0 0.875rem", borderRadius: "6px", border: `1px solid ${val === opt ? "var(--primary)" : "var(--border)"}`, background: val === opt ? "var(--primary)" : "var(--surface)", color: val === opt ? "#fff" : "var(--muted)", fontSize: "0.8125rem", fontWeight: val === opt ? 500 : 400, cursor: "pointer", transition: "all 120ms", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+            {opt}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TrackerSection({ emoji, label, open, onToggle, children }: { emoji: string; label: string; open: boolean; onToggle: () => void; children: React.ReactNode }) {
+  return (
+    <div style={{ border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden", marginBottom: "0.75rem" }}>
+      <button type="button" onClick={onToggle}
+        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", background: open ? "var(--surface)" : "var(--bg)", border: "none", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "background 150ms" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: "0.625rem", fontSize: "0.9375rem", fontWeight: 500, color: "var(--ink)" }}>
+          <span aria-hidden>{emoji}</span>{label}
+        </span>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 200ms", color: "var(--dim)" }} aria-hidden>
+          <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div style={{ padding: "1.25rem", borderTop: "1px solid var(--border-subtle)" }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TodayTab({ user, firstName, greeting, todayFormatted, isAlumni }: {
+  user: StoredUser; firstName: string; greeting: string; todayFormatted: string; isAlumni?: boolean;
 }) {
   const today = new Date().toISOString().split('T')[0];
-  const [submitted, setSubmitted] = useState(alreadyCheckedIn);
-  const [values, setValues] = useState<Record<string, string | number | boolean>>({});
+  const [sections, setSections] = useState<Record<SectionKey, Record<string, unknown>>>({
+    circadian: {}, training: {}, nutrition: {}, vitals: {}, psychological: {}, business: {},
+  });
+  const [openSection, setOpenSection] = useState<SectionKey>("circadian");
   const [submitting, setSubmitting] = useState(false);
-  const [aiQuestions, setAiQuestions] = useState<TrackerQuestion[] | null>(null);
-  const [aiStage, setAiStage] = useState(1);
-  const [loadingQuestions, setLoadingQuestions] = useState(true);
-  const pulseRef = useRef<HTMLDivElement | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+  const [trackerCount, setTrackerCount] = useState<number | null>(null);
 
   useEffect(() => {
-    setLoadingQuestions(true);
+    // Check if already submitted today + get month count
+    const start = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
     fetch(`/api/tracker-questions?userEmail=${encodeURIComponent(user.email)}&date=${today}`)
       .then(r => r.json())
-      .then(d => {
-        setAiQuestions(d.questions?.length > 0 ? d.questions : null);
-        setAiStage(d.stage ?? 1);
-      })
-      .catch(() => setAiQuestions(null))
-      .finally(() => setLoadingQuestions(false));
+      .then(d => { if (d.alreadySubmitted) setSubmitted(true); })
+      .catch(() => {});
+    // Get tracker count for the month
+    import('@/lib/supabase').then(({ supabase }) => {
+      supabase.from('daily_trackers').select('date', { count: 'exact', head: true })
+        .eq('user_email', user.email).gte('date', start).then(({ count }) => setTrackerCount(count ?? 0));
+    }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user.email]);
+  }, [user.email, today]);
 
-  const setValue = (id: string, value: string | number | boolean) =>
-    setValues(prev => ({ ...prev, [id]: value }));
+  const setField = (section: SectionKey, key: string, value: unknown) => {
+    setSections(prev => ({ ...prev, [section]: { ...prev[section], [key]: value } }));
+  };
 
   const handleSubmit = async () => {
     setSubmitting(true);
-    if (pulseRef.current) {
-      pulseRef.current.style.animation = "none";
-      void pulseRef.current.offsetHeight;
-      pulseRef.current.style.animation = "nk-pulse 0.6s ease-out forwards";
-    }
-
-    if (aiQuestions) {
-      await fetch('/api/tracker-submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userEmail: user.email, date: today, stage: aiStage, responses: values, dailyQuestions: aiQuestions }),
-      }).catch(() => {});
-    }
-
-    await new Promise(r => setTimeout(r, 500));
-    setSubmitted(true);
+    await fetch('/api/tracker-submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userEmail: user.email,
+        date: today,
+        circadian: sections.circadian,
+        training: sections.training,
+        nutrition: sections.nutrition,
+        vitals: sections.vitals,
+        psychological: sections.psychological,
+        business: sections.business,
+      }),
+    }).catch(() => {});
     setSubmitting(false);
-    onComplete();
+    setSubmitted(true);
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: 'CHECK_IN_DONE' });
+    }
   };
 
-  // Decide which questions to show: AI first, then hardcoded protocol fields, then plain button
-  const fieldsToShow: (TrackerQuestion | TrackerField)[] | null = aiQuestions ?? protocol?.trackerFields ?? null;
+  const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
 
   if (submitted) {
     return (
       <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}>
-        <div style={{ marginBottom: "2.5rem" }}>
-          <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--dim)", marginBottom: "0.375rem" }}>{todayFormatted}</p>
-          <h1 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "clamp(1.875rem, 4vw, 2.75rem)", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.02em", lineHeight: 1.1, marginBottom: "0.625rem" }}>
-            Logged.
-          </h1>
-          <p style={{ fontSize: "1rem", color: "var(--muted)", fontWeight: 300 }}>
-            Streak: <strong style={{ color: "var(--ink)", fontWeight: 600 }}>{(user.streak || 0) + 1} day{user.streak + 1 !== 1 ? "s" : ""}</strong>
-            {user.streak + 1 >= 7 ? " 🔥" : user.streak + 1 >= 3 ? " ⚡" : ""}
-          </p>
+        <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }`}</style>
+        <div style={{ marginBottom: "2rem" }}>
+          <p style={{ fontSize: "0.75rem", color: "var(--dim)", marginBottom: "0.375rem", fontFamily: "var(--font-mono), monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>{todayFormatted.toUpperCase()}</p>
+          <h1 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "clamp(1.875rem, 4vw, 2.75rem)", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.02em", lineHeight: 1.1 }}>Logged.</h1>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "2.5rem", padding: "1.25rem 1.5rem", background: "oklch(0.60 0.18 165 / 0.06)", border: "1px solid oklch(0.60 0.18 165 / 0.15)", borderRadius: "12px" }}>
-          <div style={{ width: "42px", height: "42px", borderRadius: "50%", background: "oklch(0.60 0.18 165 / 0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "1.25rem 1.5rem", background: "oklch(0.60 0.18 165 / 0.06)", border: "1px solid oklch(0.60 0.18 165 / 0.15)", borderRadius: "12px", marginBottom: "1.5rem" }}>
+          <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "oklch(0.60 0.18 165 / 0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden><path d="M4 10l4 4 8-8" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </div>
           <div>
-            <p style={{ fontSize: "0.9375rem", fontWeight: 500, color: "var(--ink)", marginBottom: "0.2rem" }}>Today&apos;s entry submitted</p>
-            <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300 }}>Come back tomorrow. THP reviews everything.</p>
+            <p style={{ fontSize: "0.9375rem", fontWeight: 500, color: "var(--ink)", marginBottom: "0.2rem" }}>Today&apos;s tracker submitted</p>
+            <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300 }}>
+              {trackerCount !== null ? `${trackerCount}/${daysInMonth} this month.` : ""} Come back tomorrow.
+            </p>
           </div>
         </div>
-        <button onClick={() => setSubmitted(false)} style={{ background: "none", border: "1px solid var(--border)", borderRadius: "7px", padding: "0.625rem 1.125rem", fontSize: "0.8125rem", color: "var(--muted)", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "border-color 150ms, color 150ms" }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--primary)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--primary)"; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--muted)"; }}>
+        <button onClick={() => setSubmitted(false)} style={{ background: "none", border: "1px solid var(--border)", borderRadius: "7px", padding: "0.625rem 1.125rem", fontSize: "0.8125rem", color: "var(--muted)", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
           Update today&apos;s entry
         </button>
       </motion.div>
@@ -500,260 +566,89 @@ function TodayTab({ user, protocol, firstName, greeting, alreadyCheckedIn, today
   }
 
   return (
-    <>
-      <style>{`@keyframes nk-pulse { 0% { transform: scale(1); opacity: 0.35; } 100% { transform: scale(2.5); opacity: 0; } } @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }`}</style>
-      <div>
-        <div style={{ marginBottom: "2rem" }}>
-          <p style={{ fontSize: "0.75rem", fontWeight: 400, color: "var(--dim)", marginBottom: "0.5rem", fontFamily: "var(--font-mono), monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-            {todayFormatted.toUpperCase()}
-          </p>
-          <h1 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "clamp(1.875rem, 4vw, 2.75rem)", fontWeight: 400, color: "var(--muted)", letterSpacing: "-0.02em", lineHeight: 1.1, marginBottom: "0.5rem" }}>
-            {greeting}, {firstName}.
-          </h1>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", flexWrap: "wrap" }}>
-            {aiQuestions && (
-              <span style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--primary)", fontFamily: "var(--font-mono), monospace", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                Stage {aiStage}
-              </span>
-            )}
-            {protocol && !aiQuestions && (
-              <span style={{ fontSize: "0.875rem", color: "var(--dim)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{protocol.name}</span>
-            )}
-            {user.streak > 0 && (
-              <span style={{ fontSize: "0.875rem", color: "var(--dim)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif", paddingLeft: "0.5rem", borderLeft: "1px solid var(--border-subtle)" }}>
-                {user.streak} day streak
-              </span>
-            )}
-          </div>
-        </div>
-
-        <AlumniGate active={!!isAlumni} label="Daily tracking is part of active mentorship.">
-          <div style={{ marginBottom: "1.75rem", padding: "0.875rem 1.125rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", display: "flex", alignItems: "flex-start", gap: "0.75rem" }}>
-            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--primary)", flexShrink: 0, marginTop: "0.3rem", animation: "pulse 2s ease infinite" }} aria-hidden />
-            <div>
-              <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)", marginBottom: "0.2rem" }}>Daily check-in waiting</p>
-              <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300 }}>Take 3 minutes. Be honest. THP reviews every entry.</p>
-            </div>
-          </div>
-
-          {/* Loading skeleton */}
-          {loadingQuestions && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginBottom: "2rem" }}>
-              {[90, 70, 85, 60].map((w, i) => (
-                <div key={i} style={{ height: "80px", background: "var(--surface)", borderRadius: "8px", opacity: 0.4, borderLeft: "3px solid var(--border)" }} />
-              ))}
-            </div>
-          )}
-
-          {/* Questions */}
-          {!loadingQuestions && fieldsToShow && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem", marginBottom: "2rem" }}>
-              {fieldsToShow.map(field => (
-                field.type === "upload"
-                  ? null
-                  : <TrackerFieldCmp key={field.id} field={field as TrackerField} value={values[field.id]} onChange={v => setValue(field.id, v)} />
-              ))}
-            </div>
-          )}
-
-          {/* No questions yet — plain check-in */}
-          {!loadingQuestions && !fieldsToShow && (
-            <div style={{ marginBottom: "2rem", padding: "1.25rem 1.5rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
-              <p style={{ fontSize: "0.9375rem", fontWeight: 400, color: "var(--muted)", lineHeight: 1.6 }}>
-                Your tracker is being prepared. Log your check-in now to keep your streak going.
-              </p>
-            </div>
-          )}
-
-          <div style={{ paddingTop: "1.5rem", borderTop: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-            <div style={{ position: "relative", display: "inline-block" }}>
-              <div ref={pulseRef} style={{ position: "absolute", inset: 0, borderRadius: "100px", background: "var(--primary)", pointerEvents: "none", opacity: 0 }} />
-              <button onClick={handleSubmit} disabled={submitting || loadingQuestions}
-                style={{ position: "relative", height: "50px", padding: "0 2rem", background: (submitting || loadingQuestions) ? "var(--primary-dim)" : "var(--primary)", color: "#ffffff", border: "none", borderRadius: "100px", fontSize: "0.9375rem", fontWeight: 500, fontFamily: "var(--font-ui), system-ui, sans-serif", cursor: (submitting || loadingQuestions) ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: "0.5rem", transition: "background 200ms ease" }}
-                onMouseEnter={e => { if (!submitting && !loadingQuestions) (e.currentTarget as HTMLButtonElement).style.background = "var(--primary-hover)"; }}
-                onMouseLeave={e => { if (!submitting && !loadingQuestions) (e.currentTarget as HTMLButtonElement).style.background = "var(--primary)"; }}
-              >
-                {submitting ? <><Spinner />Logging…</> : "Log today's entry"}
-              </button>
-            </div>
-            <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>THP reviews every submission.</p>
-          </div>
-        </AlumniGate>
-      </div>
-    </>
-  );
-}
-
-function TrackerFieldCmp({ field, value, onChange }: {
-  field: TrackerField; value: string | number | boolean | undefined;
-  onChange: (v: string | number | boolean) => void;
-}) {
-  const [focused, setFocused] = useState(false);
-  return (
-    <div style={{
-      background: "var(--surface)",
-      borderLeft: "3px solid var(--primary)",
-      borderRadius: "8px",
-      padding: "1rem 1.25rem",
-    }}>
-      <label style={{ display: "block", marginBottom: field.hint ? "0.25rem" : "0.625rem" }}>
-        <span style={{ fontSize: "0.9375rem", fontWeight: 500, color: "var(--ink)" }}>
-          {field.label}
-          {field.optional && <span style={{ fontSize: "0.8rem", fontWeight: 300, color: "var(--dim)", marginLeft: "0.5rem" }}>optional</span>}
-        </span>
-      </label>
-      {field.hint && <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, marginBottom: "0.625rem", lineHeight: 1.5 }}>{field.hint}</p>}
-
-      {field.type === "boolean" && (
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          {([{ v: true, label: "Yes" }, { v: false, label: "No" }] as {v: boolean, label: string}[]).map(({ v, label }) => (
-            <button key={label} type="button" onClick={() => onChange(v)}
-              style={{ height: "42px", padding: "0 1.5rem", borderRadius: "7px", border: `1px solid ${value === v ? "var(--primary)" : "var(--border)"}`, background: value === v ? "var(--primary)" : "var(--surface)", color: value === v ? "#ffffff" : "var(--muted)", fontSize: "0.9rem", fontWeight: value === v ? 500 : 400, fontFamily: "var(--font-ui), system-ui, sans-serif", cursor: "pointer", transition: "all 150ms ease" }}>
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {field.type === "rating" && (
-        <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
-          {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
-            <button key={n} type="button" onClick={() => onChange(n)} aria-pressed={value === n}
-              style={{ width: "40px", height: "40px", borderRadius: "7px", border: `1px solid ${value === n ? "var(--primary)" : "var(--border)"}`, background: value === n ? "var(--primary)" : "var(--surface)", color: value === n ? "#ffffff" : "var(--muted)", fontSize: "0.875rem", fontWeight: value === n ? 600 : 400, fontFamily: "var(--font-ui), system-ui, sans-serif", cursor: "pointer", transition: "all 150ms ease", flexShrink: 0 }}>
-              {n}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {field.type === "number" && (
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <input type="number" value={value as string || ""} placeholder={field.placeholder || "0"}
-            onChange={e => onChange(parseFloat(e.target.value) || 0)}
-            onFocus={e => (e.target.style.borderColor = "var(--primary)")}
-            onBlur={e => (e.target.style.borderColor = "var(--border)")}
-            style={{ width: "120px", height: "44px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.875rem", fontSize: "1rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none", transition: "border-color 150ms" }} />
-          {field.unit && <span style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300 }}>{field.unit}</span>}
-        </div>
-      )}
-
-      {field.type === "text" && (
-        <input type="text" value={value as string || ""} placeholder={field.placeholder || ""}
-          onChange={e => onChange(e.target.value)}
-          onFocus={e => { setFocused(true); e.target.style.borderColor = "var(--primary)"; }}
-          onBlur={e => { setFocused(false); e.target.style.borderColor = "var(--border)"; }}
-          style={{ width: "100%", height: "44px", background: "var(--surface)", border: `1px solid ${focused ? "var(--primary)" : "var(--border)"}`, borderRadius: "7px", padding: "0 0.875rem", fontSize: "0.9375rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none", transition: "border-color 150ms" }} />
-      )}
-
-      {field.type === "textarea" && (
-        <textarea value={value as string || ""} placeholder={field.placeholder || ""}
-          onChange={e => onChange(e.target.value)} rows={3}
-          onFocus={e => { setFocused(true); e.target.style.borderColor = "var(--primary)"; }}
-          onBlur={e => { setFocused(false); e.target.style.borderColor = "var(--border)"; }}
-          style={{ width: "100%", background: "var(--surface)", border: `1px solid ${focused ? "var(--primary)" : "var(--border)"}`, borderRadius: "8px", padding: "0.75rem 0.875rem", fontSize: "0.9375rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none", resize: "vertical", lineHeight: 1.6, transition: "border-color 150ms", minHeight: "88px" }} />
-      )}
-    </div>
-  );
-}
-
-function MediaUploadField({ field, files, previews, fileRef, onAddFiles, onRemove }: {
-  field: TrackerField; files: File[]; previews: string[];
-  fileRef: React.RefObject<HTMLInputElement | null>;
-  onAddFiles: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onRemove: (idx: number) => void;
-}) {
-  return (
-    <div>
-      <label style={{ display: "block", marginBottom: field.hint ? "0.25rem" : "0.625rem" }}>
-        <span style={{ fontSize: "0.9375rem", fontWeight: 500, color: "var(--ink)" }}>
-          {field.label}
-          {field.optional && <span style={{ fontSize: "0.8rem", fontWeight: 300, color: "var(--dim)", marginLeft: "0.5rem" }}>optional</span>}
-        </span>
-      </label>
-      {field.hint && <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, marginBottom: "0.75rem", lineHeight: 1.55 }}>{field.hint}</p>}
-
-      <div style={{ marginBottom: "0.875rem", padding: "0.625rem 0.875rem", background: "oklch(0.60 0.18 165 / 0.05)", border: "1px solid oklch(0.60 0.18 165 / 0.12)", borderRadius: "7px", display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
-        <span style={{ fontSize: "0.9rem", flexShrink: 0 }} aria-hidden>📸</span>
-        <p style={{ fontSize: "0.8125rem", color: "var(--primary)", fontWeight: 400, lineHeight: 1.5 }}>
-          THP sees every upload. This is how he tracks real progress over time, not just what you report.
-        </p>
+    <AlumniGate active={!!isAlumni} label="Daily tracking is part of active mentorship.">
+      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }`}</style>
+      <div style={{ marginBottom: "1.5rem" }}>
+        <p style={{ fontSize: "0.75rem", color: "var(--dim)", marginBottom: "0.375rem", fontFamily: "var(--font-mono), monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>{todayFormatted.toUpperCase()}</p>
+        <h1 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "clamp(1.5rem, 4vw, 2.25rem)", fontWeight: 400, color: "var(--muted)", letterSpacing: "-0.02em", lineHeight: 1.1, marginBottom: "0.375rem" }}>
+          {greeting}, {firstName}.
+        </h1>
+        {trackerCount !== null && (
+          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>{trackerCount}/{daysInMonth} trackers this month</p>
+        )}
       </div>
 
-      {previews.length > 0 && (
-        <div style={{ display: "flex", gap: "0.625rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
-          {previews.map((src, i) => (
-            <div key={i} style={{ position: "relative" }}>
-              {files[i]?.type.startsWith("video") ? (
-                <div style={{ width: "96px", height: "96px", borderRadius: "8px", background: "var(--surface-2)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.375rem" }}>
-                  <span style={{ fontSize: "1.5rem" }} aria-hidden>🎥</span>
-                  <span style={{ fontSize: "0.7rem", color: "var(--muted)" }}>Video</span>
-                </div>
-              ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={src} alt={`Upload ${i + 1}`} style={{ width: "96px", height: "96px", objectFit: "cover", borderRadius: "8px", border: "1px solid var(--border)", display: "block" }} />
-              )}
-              <button onClick={() => onRemove(i)} aria-label="Remove"
-                style={{ position: "absolute", top: "-6px", right: "-6px", width: "20px", height: "20px", borderRadius: "50%", background: "var(--bg)", border: "1px solid var(--border)", color: "var(--muted)", fontSize: "11px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+      {SECTION_META.map(({ key, emoji, label }) => (
+        <TrackerSection key={key} emoji={emoji} label={label} open={openSection === key} onToggle={() => setOpenSection(openSection === key ? ("" as SectionKey) : key)}>
+          {key === "circadian" && (
+            <>
+              <InputField label="Wake time" fieldKey="wake_time" type="time" data={sections.circadian} onChange={(k, v) => setField("circadian", k, v)} />
+              <InputField label="Bed time (last night)" fieldKey="bed_time" type="time" data={sections.circadian} onChange={(k, v) => setField("circadian", k, v)} />
+              <InputField label="Sleep hours" fieldKey="sleep_hours" type="number" placeholder="7.5" unit="hrs" data={sections.circadian} onChange={(k, v) => setField("circadian", k, v)} />
+              <InputField label="Sunlight" fieldKey="sunlight_min" type="number" placeholder="20" unit="min" data={sections.circadian} onChange={(k, v) => setField("circadian", k, v)} />
+              <InputField label="Steps" fieldKey="steps" type="number" placeholder="8000" data={sections.circadian} onChange={(k, v) => setField("circadian", k, v)} />
+              <YesNoField label="Grounding (barefoot outdoors)" fieldKey="grounding" data={sections.circadian} onChange={(k, v) => setField("circadian", k, v)} />
+            </>
+          )}
+          {key === "training" && (
+            <>
+              <TextareaField label="What did you do?" fieldKey="what_did" placeholder="E.g. Upper push — bench, OHP, dips" data={sections.training} onChange={(k, v) => setField("training", k, v)} />
+              <SelectField label="Intensity" fieldKey="intensity" options={INTENSITY_OPTIONS} data={sections.training} onChange={(k, v) => setField("training", k, v)} />
+              <YesNoField label="Explosive work included?" fieldKey="explosiveness" data={sections.training} onChange={(k, v) => setField("training", k, v)} />
+            </>
+          )}
+          {key === "nutrition" && (
+            <>
+              <InputField label="Breakfast" fieldKey="breakfast" placeholder="E.g. Eggs, steak, fruit" data={sections.nutrition} onChange={(k, v) => setField("nutrition", k, v)} />
+              <SelectField label="How did it make you feel?" fieldKey="breakfast_feel" options={FEEL_OPTIONS} data={sections.nutrition} onChange={(k, v) => setField("nutrition", k, v)} />
+              <InputField label="Lunch" fieldKey="lunch" placeholder="E.g. Chicken, rice, salad" data={sections.nutrition} onChange={(k, v) => setField("nutrition", k, v)} />
+              <SelectField label="How did it make you feel?" fieldKey="lunch_feel" options={FEEL_OPTIONS} data={sections.nutrition} onChange={(k, v) => setField("nutrition", k, v)} />
+              <InputField label="Dinner" fieldKey="dinner" placeholder="E.g. Salmon, veg, olive oil" data={sections.nutrition} onChange={(k, v) => setField("nutrition", k, v)} />
+              <SelectField label="How did it make you feel?" fieldKey="dinner_feel" options={FEEL_OPTIONS} data={sections.nutrition} onChange={(k, v) => setField("nutrition", k, v)} />
+              <InputField label="Hydration" fieldKey="hydration_l" type="number" placeholder="2.5" unit="L" data={sections.nutrition} onChange={(k, v) => setField("nutrition", k, v)} />
+              <YesNoField label="Electrolytes?" fieldKey="electrolytes" data={sections.nutrition} onChange={(k, v) => setField("nutrition", k, v)} />
+              <YesNoField label="Raw foods today?" fieldKey="raw_foods" data={sections.nutrition} onChange={(k, v) => setField("nutrition", k, v)} />
+              <TextareaField label="Supplements taken" fieldKey="supplements" placeholder="E.g. Vit D3, Zinc, Mag glycinate" data={sections.nutrition} onChange={(k, v) => setField("nutrition", k, v)} />
+            </>
+          )}
+          {key === "vitals" && (
+            <>
+              <ScaleRow label="Energy" fieldKey="energy" data={sections.vitals} onChange={(k, v) => setField("vitals", k, v)} />
+              <ScaleRow label="Mood" fieldKey="mood" data={sections.vitals} onChange={(k, v) => setField("vitals", k, v)} />
+              <ScaleRow label="Focus" fieldKey="focus" data={sections.vitals} onChange={(k, v) => setField("vitals", k, v)} />
+              <ScaleRow label="Libido" fieldKey="libido" data={sections.vitals} onChange={(k, v) => setField("vitals", k, v)} />
+              <ScaleRow label="Drive / motivation" fieldKey="drive" data={sections.vitals} onChange={(k, v) => setField("vitals", k, v)} />
+              <ScaleRow label="Sleep quality" fieldKey="sleep_quality" data={sections.vitals} onChange={(k, v) => setField("vitals", k, v)} />
+              <TextareaField label="Anything unusual?" fieldKey="unusual" placeholder="Headaches, brain fog, unusual energy, etc." data={sections.vitals} onChange={(k, v) => setField("vitals", k, v)} />
+            </>
+          )}
+          {key === "psychological" && (
+            <>
+              <TextareaField label="Identity audit" fieldKey="identity_audit" placeholder="Are you acting like the man you said you wanted to be?" data={sections.psychological} onChange={(k, v) => setField("psychological", k, v)} />
+              <InputField label="Dominant emotion today" fieldKey="dominant_emotion" placeholder="E.g. Calm, restless, fired up" data={sections.psychological} onChange={(k, v) => setField("psychological", k, v)} />
+              <TextareaField label="Fear exposure" fieldKey="fear_exposure" placeholder="What did you do that was hard or uncomfortable?" data={sections.psychological} onChange={(k, v) => setField("psychological", k, v)} />
+              <TextareaField label="Testosterone behaviour" fieldKey="testosterone_behaviour" placeholder="Dominant, decisive, assertive moment today?" data={sections.psychological} onChange={(k, v) => setField("psychological", k, v)} />
+            </>
+          )}
+          {key === "business" && (
+            <>
+              <SelectField label="Primary focus today" fieldKey="primary_focus" options={FOCUS_OPTIONS} data={sections.business} onChange={(k, v) => setField("business", k, v)} />
+              <TextareaField label="Main win" fieldKey="main_win" placeholder="One thing you accomplished or moved forward" data={sections.business} onChange={(k, v) => setField("business", k, v)} />
+              <TextareaField label="Main obstacle" fieldKey="obstacle" placeholder="What blocked you or slowed you down?" data={sections.business} onChange={(k, v) => setField("business", k, v)} />
+              <TextareaField label="Tomorrow&apos;s priority" fieldKey="tomorrow_priority" placeholder="The one thing that matters most tomorrow" data={sections.business} onChange={(k, v) => setField("business", k, v)} />
+            </>
+          )}
+        </TrackerSection>
+      ))}
 
-      <button type="button" onClick={() => fileRef.current?.click()}
-        style={{ display: "flex", alignItems: "center", gap: "0.75rem", width: "100%", padding: "0.875rem 1.125rem", border: "1px dashed var(--border)", borderRadius: "9px", background: "var(--surface)", cursor: "pointer", transition: "border-color 150ms, background 150ms", textAlign: "left" }}
-        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--primary)"; (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.60 0.18 165 / 0.04)"; }}
-        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLButtonElement).style.background = "var(--surface)"; }}>
-        <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: "var(--surface-2)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ color: "var(--muted)" }} aria-hidden>
-            <path d="M9 12V4m0 0L6 7m3-3 3 3M16 13v1.5A1.5 1.5 0 0 1 14.5 16h-11A1.5 1.5 0 0 1 2 14.5V13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </div>
-        <div>
-          <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--muted)", marginBottom: "0.125rem" }}>
-            {files.length ? `${files.length} file${files.length > 1 ? "s" : ""} added · add more` : "Upload photos or videos"}
-          </p>
-          <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>Photos and short clips · up to 5 files</p>
-        </div>
-      </button>
-    </div>
-  );
-}
-
-// ─── BASIC CHECK-IN (no tracker template assigned yet) ─────────────────────
-
-function BasicCheckIn({ firstName, greeting, alreadyCheckedIn, todayFormatted, onComplete }: {
-  firstName: string; greeting: string; alreadyCheckedIn: boolean; todayFormatted: string; onComplete: () => void;
-}) {
-  const [done, setDone] = useState(false);
-  const handleCheckIn = async () => { setDone(true); onComplete(); };
-  return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}>
-      <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.375rem" }}>{todayFormatted}</p>
-      <h2 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "clamp(1.5rem, 4vw, 2.25rem)", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.02em", lineHeight: 1.15, marginBottom: "2rem" }}>
-        {greeting}, {firstName}.
-      </h2>
-      {alreadyCheckedIn || done ? (
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "1.25rem 1.5rem", background: "oklch(0.45 0.15 145 / 0.08)", border: "1px solid oklch(0.45 0.15 145 / 0.2)", borderRadius: "12px" }}>
-          <span style={{ fontSize: "1.25rem" }}>✓</span>
-          <div>
-            <p style={{ fontSize: "0.9375rem", fontWeight: 500, color: "var(--ink)" }}>Checked in for today.</p>
-            <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300 }}>Your protocol is live. THP will be in touch.</p>
-          </div>
-        </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          <div style={{ padding: "1.25rem 1.5rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
-            <p style={{ fontSize: "0.9375rem", fontWeight: 400, color: "var(--muted)", lineHeight: 1.6 }}>Your protocol is live. Follow it today and check in to keep your streak going.</p>
-          </div>
-          <button onClick={handleCheckIn}
-            style={{ height: "52px", background: "var(--primary)", color: "#ffffff", border: "none", borderRadius: "10px", fontSize: "0.9375rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-            Mark today as done
-          </button>
-        </div>
-      )}
-    </motion.div>
+      <div style={{ paddingTop: "1.5rem", borderTop: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap", marginTop: "0.5rem" }}>
+        <button onClick={handleSubmit} disabled={submitting}
+          style={{ height: "50px", padding: "0 2rem", background: submitting ? "var(--primary-dim)" : "var(--primary)", color: "#ffffff", border: "none", borderRadius: "100px", fontSize: "0.9375rem", fontWeight: 500, fontFamily: "var(--font-ui), system-ui, sans-serif", cursor: submitting ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: "0.5rem", transition: "background 200ms ease" }}>
+          {submitting ? <><Spinner />Submitting…</> : "Submit tracker"}
+        </button>
+        <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>THP reviews every entry.</p>
+      </div>
+    </AlumniGate>
   );
 }
 
@@ -1025,480 +920,261 @@ function TodoList({ items }: { items: string[] }) {
   );
 }
 
-// ─── BOOK TAB ─────────────────────────────────────────────────────────────
 
-function BookTab({ isAlumni }: { isAlumni?: boolean }) {
-  return (
-    <div>
-      <div style={{ marginBottom: "2.5rem" }}>
-        <h1 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "clamp(1.75rem, 4vw, 2.5rem)", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.02em", lineHeight: 1.1, marginBottom: "0.625rem" }}>Book a call.</h1>
-        <p style={{ fontSize: "1rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.65, maxWidth: "52ch" }}>Progress reviews, strategy sessions, working through a block. Pick a time and we'll go from there.</p>
-      </div>
+// ─── BLOOD WORK TAB ───────────────────────────────────────────────────────
 
-      <AlumniGate active={!!isAlumni} label="Live calls are part of active mentorship.">
-        <div style={{ padding: "1.5rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "14px", marginBottom: "1.5rem" }}>
-          <p style={{ fontSize: "0.9375rem", fontWeight: 500, color: "var(--ink)", marginBottom: "0.375rem" }}>Schedule a session</p>
-          <p style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.6, marginBottom: "1.25rem" }}>
-            Pick a time directly from the calendar. THP blocks time for every active client.
-          </p>
-          <a href={CAL_LINK} target="_blank" rel="noopener noreferrer"
-            style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", height: "44px", padding: "0 1.25rem", background: "var(--primary)", color: "#ffffff", borderRadius: "8px", textDecoration: "none", fontSize: "0.9rem", fontWeight: 500, transition: "background 150ms" }}
-            onMouseEnter={e => (e.currentTarget as HTMLAnchorElement).style.background = "var(--primary-hover)"}
-            onMouseLeave={e => (e.currentTarget as HTMLAnchorElement).style.background = "var(--primary)"}>
-            <CalIcon /> Book a time
-          </a>
-        </div>
-      </AlumniGate>
-
-      <div style={{ padding: "1.25rem 1.375rem", background: "oklch(0.55 0.18 30 / 0.07)", border: "1px solid oklch(0.55 0.18 30 / 0.2)", borderRadius: "12px", marginBottom: "1.5rem", display: "flex", alignItems: "flex-start", gap: "0.875rem" }}>
-        <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "oklch(0.55 0.18 30 / 0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-            <path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM7.25 5.25a.75.75 0 0 1 1.5 0V8.5a.75.75 0 0 1-1.5 0V5.25Zm.75 6a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" fill="oklch(0.75 0.15 30)" />
-          </svg>
-        </div>
-        <div>
-          <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "oklch(0.78 0.12 30)", marginBottom: "0.375rem" }}>Emergency calls</p>
-          <p style={{ fontSize: "0.8125rem", color: "oklch(0.65 0.08 30)", fontWeight: 300, lineHeight: 1.6 }}>
-            Only use these if you are in a serious situation that needs immediate attention or help. If I&apos;m available I will respond. If I am not, I will send you a voice message or text message.
-          </p>
-          <a
-            href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent("THP, I need urgent help. This is an emergency call request.")}`}
-            target="_blank" rel="noopener noreferrer"
-            style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem", marginTop: "0.875rem", height: "34px", padding: "0 0.875rem", background: "oklch(0.55 0.18 30 / 0.12)", border: "1px solid oklch(0.55 0.18 30 / 0.25)", borderRadius: "7px", color: "oklch(0.75 0.15 30)", textDecoration: "none", fontSize: "0.8125rem", fontWeight: 500, transition: "background 150ms" }}
-            onMouseEnter={e => (e.currentTarget as HTMLAnchorElement).style.background = "oklch(0.55 0.18 30 / 0.2)"}
-            onMouseLeave={e => (e.currentTarget as HTMLAnchorElement).style.background = "oklch(0.55 0.18 30 / 0.12)"}>
-            <WhatsAppIcon /> Emergency WhatsApp
-          </a>
-        </div>
-      </div>
-
-      <div style={{ padding: "1rem 1.25rem", background: "var(--surface)", borderRadius: "10px", border: "1px solid var(--border-subtle)" }}>
-        <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.6 }}>
-          <strong style={{ fontWeight: 500, color: "var(--ink)" }}>Lifetime access.</strong>{" "}
-          You can book at any time, during your mentorship or after. This never expires.
-        </p>
-      </div>
-    </div>
-  );
+interface BloodMarker {
+  value: number | null;
+  unit: string;
+  reference_range?: string | null;
+  flag?: "high" | "low" | "normal" | null;
 }
 
-// ─── VOICE NOTE PLAYER ───────────────────────────────────────────────────
-
-const WAVEFORM_BARS = [0.4, 0.7, 0.5, 1.0, 0.6, 0.8, 0.3, 0.9, 0.5, 0.7, 0.4, 0.6, 0.8, 0.5, 0.9, 0.4, 0.7, 0.3, 0.6, 0.8];
-
-function VoiceNotePlayer({ url, isAdmin, transcript }: { url: string; isAdmin: boolean; transcript?: string }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [duration, setDuration] = useState(0);
-  const [elapsed, setElapsed] = useState(0);
-  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const togglePlay = () => {
-    const a = audioRef.current;
-    if (!a) return;
-    if (playing) { a.pause(); } else { a.play(); }
-  };
-
-  const fmt = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${m}:${sec.toString().padStart(2, "0")}`;
-  };
-
-  useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    const onPlay = () => { setPlaying(true); tickRef.current = setInterval(() => setElapsed(a.currentTime), 100); };
-    const onPause = () => { setPlaying(false); if (tickRef.current) clearInterval(tickRef.current); };
-    const onEnded = () => { setPlaying(false); setElapsed(0); if (tickRef.current) clearInterval(tickRef.current); };
-    const onMeta = () => setDuration(isFinite(a.duration) ? a.duration : 0);
-    a.addEventListener("play", onPlay);
-    a.addEventListener("pause", onPause);
-    a.addEventListener("ended", onEnded);
-    a.addEventListener("loadedmetadata", onMeta);
-    return () => {
-      a.removeEventListener("play", onPlay);
-      a.removeEventListener("pause", onPause);
-      a.removeEventListener("ended", onEnded);
-      a.removeEventListener("loadedmetadata", onMeta);
-      if (tickRef.current) clearInterval(tickRef.current);
-    };
-  }, []);
-
-  const progress = duration > 0 ? elapsed / duration : 0;
-  const accentColor = isAdmin ? "var(--color-red)" : "oklch(0.70 0.20 220)";
-  const bgColor = isAdmin ? "oklch(0.60 0.18 165 / 0.12)" : "oklch(0.15 0.02 220 / 0.5)";
-
-  return (
-    <div style={{ marginTop: "0.375rem" }}>
-      <audio ref={audioRef} src={url} preload="metadata" style={{ display: "none" }} />
-      <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", padding: "0.5rem 0.75rem", background: bgColor, borderRadius: "10px", minWidth: "180px", maxWidth: "240px" }}>
-        <button onClick={togglePlay} style={{ width: "32px", height: "32px", borderRadius: "50%", flexShrink: 0, background: accentColor, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "opacity 150ms" }}
-          onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = "0.8"}
-          onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}>
-          {playing
-            ? <svg width="10" height="10" viewBox="0 0 10 10" fill="#ffffff" aria-hidden><rect x="1" y="1" width="3" height="8" rx="1"/><rect x="6" y="1" width="3" height="8" rx="1"/></svg>
-            : <svg width="10" height="10" viewBox="0 0 10 10" fill="#ffffff" aria-hidden style={{ marginLeft: "1px" }}><polygon points="2,1 9,5 2,9"/></svg>}
-        </button>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: "2px", height: "22px" }}>
-            {WAVEFORM_BARS.map((h, i) => (
-              <div key={i} style={{ width: "2.5px", borderRadius: "2px", flexShrink: 0, height: `${h * 100}%`, background: i / WAVEFORM_BARS.length <= progress ? accentColor : (isAdmin ? "oklch(0.60 0.18 165 / 0.35)" : "oklch(0.97 0.005 220 / 0.25)"), transition: "background 80ms" }} />
-            ))}
-          </div>
-          <span style={{ fontSize: "0.65rem", fontFamily: "var(--font-mono), monospace", color: isAdmin ? "var(--dim)" : "oklch(0.97 0.005 220 / 0.55)", fontWeight: 300 }}>
-            {playing || elapsed > 0 ? fmt(elapsed) : duration > 0 ? fmt(duration) : "0:00"}
-          </span>
-        </div>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={isAdmin ? "var(--dim)" : "oklch(0.97 0.005 220 / 0.4)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-        </svg>
-      </div>
-      {transcript && (
-        <p style={{ marginTop: "0.375rem", fontSize: "0.8rem", color: isAdmin ? "var(--muted)" : "oklch(0.97 0.005 220 / 0.7)", fontWeight: 300, lineHeight: 1.5, fontStyle: "italic", maxWidth: "240px" }}>
-          &ldquo;{transcript}&rdquo;
-        </p>
-      )}
-    </div>
-  );
+interface BloodWorkEntry {
+  id: string;
+  uploaded_at: string;
+  test_date: string | null;
+  markers: Record<string, BloodMarker> | null;
+  extraction_notes: string | null;
+  image_url: string;
 }
 
-// ─── ATTACHMENT RENDERER ─────────────────────────────────────────────────
+const MARKER_LABELS: Record<string, string> = {
+  total_t: "Total T", free_t: "Free T", shbg: "SHBG", estradiol: "Estradiol",
+  lh: "LH", fsh: "FSH", cortisol: "Cortisol", hematocrit: "Hematocrit",
+  hemoglobin: "Hemoglobin", rbc: "RBC", psa: "PSA", dhea_s: "DHEA-S",
+  igf1: "IGF-1", tsh: "TSH", t3_free: "Free T3", t4_free: "Free T4",
+  vitamin_d: "Vitamin D", ferritin: "Ferritin", cholesterol: "Cholesterol",
+  hdl: "HDL", ldl: "LDL", triglycerides: "Triglycerides", glucose: "Glucose",
+  hba1c: "HbA1c", creatinine: "Creatinine", alt: "ALT", ast: "AST",
+};
 
-function AttachmentRender({ url, type, name, isAdmin, transcript }: { url: string; type: AttachmentType; name?: string; isAdmin: boolean; transcript?: string }) {
-  if (type === "audio") return <VoiceNotePlayer url={url} isAdmin={isAdmin} transcript={transcript} />;
-  if (type === "image") return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={url} alt={name || "Image"} style={{ maxWidth: "100%", borderRadius: "8px", marginTop: "0.375rem", cursor: "pointer", display: "block" }} onClick={() => window.open(url, "_blank")} />
-  );
-  if (type === "video") return <video controls src={url} style={{ maxWidth: "100%", borderRadius: "8px", marginTop: "0.375rem", display: "block" }} />;
-  return (
-    <a href={url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem", marginTop: "0.375rem", fontSize: "0.8125rem", color: isAdmin ? "var(--primary)" : "#ffffff", textDecoration: "underline" }}>
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-      {name || "Download file"}
-    </a>
-  );
-}
-
-function renderTextWithLinks(text: string, isAdmin: boolean) {
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  const parts = text.split(urlRegex);
-  return parts.map((part, i) =>
-    /^https?:\/\//.test(part)
-      ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: isAdmin ? "var(--primary)" : "#ffffff", textDecoration: "underline", wordBreak: "break-all" }}>{part}</a>
-      : part
-  );
-}
-
-// ─── NIKODEM TAB ──────────────────────────────────────────────────────────
-
-function NikodmTab({ user, isAlumni }: { user: StoredUser; isAlumni?: boolean }) {
-  const userEmail = user.email;
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [compose, setCompose] = useState("");
-  const [focused, setFocused] = useState(false);
+function BloodWorkTab({ user }: { user: StoredUser }) {
+  const [entries, setEntries] = useState<BloodWorkEntry[]>([]);
+  const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [adminActive, setAdminActive] = useState(false);
-  const [sendError, setSendError] = useState<string | null>(null);
-  const [recording, setRecording] = useState(false);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [pendingType, setPendingType] = useState<AttachmentType | null>(null);
-  const [voiceTranscript, setVoiceTranscript] = useState<string>("");
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const speechRecRef = useRef<any>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const msgEndRef = useRef<HTMLDivElement | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const animFrameRef = useRef<number | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const [waveformBars, setWaveformBars] = useState<number[]>(Array(28).fill(0.05));
-
-  const refreshMessages = () => {
-    getMessages(userEmail).then(msgs => {
-      setMessages(msgs);
-      setTimeout(() => msgEndRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
-    });
-  };
+  const [analysing, setAnalysing] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    refreshMessages();
+    supabase.from('blood_work').select('*').eq('user_email', user.email)
+      .order('uploaded_at', { ascending: false })
+      .then(({ data }) => { setEntries((data as BloodWorkEntry[]) ?? []); setLoading(false); });
+  }, [user.email]);
 
-    // Check admin status immediately then poll every 90s so offline is detected even without a DB event
-    isAdminActive().then(setAdminActive).catch(() => {});
-    const presencePoll = setInterval(() => isAdminActive().then(setAdminActive).catch(() => {}), 90000);
-
-    // Client presence heartbeat
-    updatePresence(userEmail).catch(() => {});
-    const heartbeatInterval = setInterval(() => updatePresence(userEmail).catch(() => {}), 60000);
-
-    // Message stream — manual replies from admin
-    const channel = supabase
-      .channel(`messages:${userEmail}`)
-      .on('postgres_changes', {
-        event: 'INSERT', schema: 'public', table: 'messages', filter: `user_email=eq.${userEmail}`,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      }, (payload: any) => {
-        const row = payload.new;
-        if (row?.from_type === 'admin') {
-          refreshMessages();
-          if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-            try { new Notification('New message from THP', { body: (row.text ?? '').slice(0, 100), icon: '/thp.jpg' }); } catch { /* blocked */ }
-          }
-        }
-      }).subscribe();
-
-    // Admin presence: update indicator immediately on each admin heartbeat
-    const presenceChannel = supabase
-      .channel('admin-presence-watch')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'presence', filter: 'id=eq.admin' }, () => {
-        isAdminActive().then(setAdminActive).catch(() => {});
-      })
-      .subscribe();
-
-    return () => {
-      clearInterval(heartbeatInterval);
-      clearInterval(presencePoll);
-      supabase.removeChannel(channel);
-      supabase.removeChannel(presenceChannel);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userEmail]);
-
-  const startRecording = async () => {
-    try {
-      setVoiceTranscript("");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
-      const chunks: Blob[] = [];
-      mr.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-      mr.onstop = () => {
-        setAudioBlob(new Blob(chunks, { type: mr.mimeType || "audio/webm" }));
-        setPendingType("audio");
-        stream.getTracks().forEach(t => t.stop());
-        if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-        audioCtxRef.current?.close();
-        audioCtxRef.current = null;
-        analyserRef.current = null;
-        setWaveformBars(Array(28).fill(0.05));
-      };
-      mr.start();
-      mediaRecorderRef.current = mr;
-      try {
-        const audioCtx = new AudioContext();
-        audioCtxRef.current = audioCtx;
-        const source = audioCtx.createMediaStreamSource(stream);
-        const analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 128;
-        source.connect(analyser);
-        analyserRef.current = analyser;
-        const draw = () => {
-          const data = new Uint8Array(analyser.frequencyBinCount);
-          analyser.getByteFrequencyData(data);
-          setWaveformBars(Array.from({ length: 28 }, (_, i) => Math.max(0.05, data[Math.floor(i * data.length / 28)] / 255)));
-          animFrameRef.current = requestAnimationFrame(draw);
-        };
-        animFrameRef.current = requestAnimationFrame(draw);
-      } catch { /* AudioContext unavailable */ }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SR) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const rec: any = new SR();
-        rec.continuous = true; rec.interimResults = true; rec.lang = "en-US";
-        let finalText = "";
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        rec.onresult = (e: any) => {
-          let interim = "";
-          for (let i = e.resultIndex; i < e.results.length; i++) {
-            if (e.results[i].isFinal) finalText += e.results[i][0].transcript + " ";
-            else interim = e.results[i][0].transcript;
-          }
-          setVoiceTranscript((finalText + interim).trim());
-        };
-        rec.start();
-        speechRecRef.current = rec;
-      }
-      setRecording(true);
-    } catch { /* mic denied */ }
-  };
-
-  const stopRecording = () => {
-    mediaRecorderRef.current?.stop();
-    speechRecRef.current?.stop();
-    const rawTranscript = voiceTranscript;
-    speechRecRef.current = null;
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    setRecording(false);
-    if (rawTranscript?.trim()) {
-      fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rawTranscript }) })
-        .then(r => r.json()).then(d => { if (d.transcript) setVoiceTranscript(d.transcript); }).catch(() => {});
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const type: AttachmentType = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : "file";
-    setPendingFile(file);
-    setPendingType(type);
-    e.target.value = "";
+    setUploading(true);
+    const form = new FormData();
+    form.append('file', file);
+    form.append('userEmail', user.email);
+    const res = await fetch('/api/blood-work-upload', { method: 'POST', body: form }).then(r => r.json()).catch(() => null);
+    if (res?.uploadId) {
+      setAnalysing(true);
+      // Poll for markers to appear (Edge Function runs async)
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        const { data } = await supabase.from('blood_work').select('*').eq('id', res.uploadId).maybeSingle();
+        if (data?.markers || attempts > 20) {
+          clearInterval(poll);
+          setAnalysing(false);
+          setEntries(prev => [data as BloodWorkEntry, ...prev.filter(e => e.id !== res.uploadId)]);
+        }
+      }, 3000);
+    }
+    setUploading(false);
+    if (e.target) e.target.value = '';
   };
 
-  const clearPending = () => { setPendingFile(null); setPendingType(null); setAudioBlob(null); setVoiceTranscript(""); };
+  if (loading) return <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>{[1,2,3].map(i => <div key={i} style={{ height: "80px", background: "var(--surface)", borderRadius: "8px", opacity: 0.4 }} />)}</div>;
 
-  const canSend = compose.trim() || pendingFile || audioBlob;
+  const latest = entries[0];
+  const previous = entries[1];
 
-  const handleSend = async () => {
-    if (!canSend || uploading) return;
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
-      try { await Notification.requestPermission(); } catch { /* unsupported */ }
-    }
-    setUploading(true);
-    setSendError(null);
-    let attachment: { url: string; type: AttachmentType; name?: string } | undefined;
-    const capturedTranscript = voiceTranscript;
-    if (audioBlob) {
-      const url = await uploadMessageAttachment(audioBlob, "voice.webm", userEmail);
-      if (url) { attachment = { url, type: "audio", name: "Voice note" }; }
-      else { setAudioBlob(null); setUploading(false); setSendError("Upload failed. Please try again."); return; }
-      setAudioBlob(null); setVoiceTranscript("");
-    } else if (pendingFile) {
-      const url = await uploadMessageAttachment(pendingFile, pendingFile.name, userEmail);
-      if (url) { attachment = { url, type: pendingType!, name: pendingFile.name }; }
-      else { setPendingFile(null); setPendingType(null); setUploading(false); setSendError("Upload failed. Please try again."); return; }
-      setPendingFile(null); setPendingType(null);
-    }
-    const text = attachment?.type === "audio" ? capturedTranscript : compose.trim();
-    if (!text && !attachment) { setUploading(false); return; }
-    setCompose("");
-    setUploading(false);
-    await addMessage(userEmail, text, "client", attachment);
-    refreshMessages();
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem", marginBottom: "2rem" }}>
+        <div>
+          <h2 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "clamp(1.5rem, 4vw, 2rem)", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.02em", marginBottom: "0.25rem" }}>Blood Work</h2>
+          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>Upload your lab results. THP sees everything.</p>
+        </div>
+        <button onClick={() => fileRef.current?.click()} disabled={uploading || analysing}
+          style={{ height: "40px", padding: "0 1.25rem", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.875rem", fontWeight: 500, cursor: (uploading || analysing) ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", display: "inline-flex", alignItems: "center", gap: "0.375rem", opacity: (uploading || analysing) ? 0.7 : 1 }}>
+          {uploading ? <><Spinner /> Uploading…</> : analysing ? <><Spinner /> Analysing…</> : "Upload results"}
+        </button>
+        <input ref={fileRef} type="file" accept="image/*,.pdf" style={{ display: "none" }} onChange={handleUpload} />
+      </div>
+
+      {analysing && (
+        <div style={{ padding: "1rem 1.25rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <Spinner />
+          <p style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300 }}>Extracting markers from your results…</p>
+        </div>
+      )}
+
+      {entries.length === 0 && !analysing ? (
+        <div style={{ padding: "2rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "12px", textAlign: "center" }}>
+          <p style={{ fontSize: "0.9375rem", color: "var(--dim)", fontWeight: 300 }}>No blood work uploaded yet.</p>
+          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.375rem" }}>Upload a photo of your lab results to get started.</p>
+        </div>
+      ) : latest?.markers && (
+        <>
+          <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--dim)", textTransform: "uppercase", marginBottom: "0.875rem", fontFamily: "var(--font-mono), monospace" }}>
+            Latest — {latest.test_date ?? new Date(latest.uploaded_at).toLocaleDateString("en-GB")}
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "0.625rem", marginBottom: "2rem" }}>
+            {Object.entries(latest.markers).map(([key, m]) => {
+              const prevVal = previous?.markers?.[key]?.value ?? undefined;
+              const delta = prevVal != null && m.value != null ? m.value - prevVal : null;
+              const flagColor = m.flag === "high" ? "oklch(0.75 0.16 25)" : m.flag === "low" ? "oklch(0.70 0.12 260)" : "var(--primary)";
+              return (
+                <div key={key} style={{ padding: "0.875rem 1rem", background: "var(--surface)", border: `1px solid ${m.flag && m.flag !== "normal" ? flagColor + "44" : "var(--border)"}`, borderRadius: "10px" }}>
+                  <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "0.375rem", fontFamily: "var(--font-mono), monospace" }}>{MARKER_LABELS[key] ?? key}</p>
+                  <p style={{ fontSize: "1.125rem", fontWeight: 600, color: m.flag && m.flag !== "normal" ? flagColor : "var(--ink)", fontFamily: "var(--font-mono), monospace" }}>
+                    {m.value ?? "—"} <span style={{ fontSize: "0.7rem", fontWeight: 400, color: "var(--dim)" }}>{m.unit}</span>
+                  </p>
+                  {delta !== null && (
+                    <p style={{ fontSize: "0.7rem", color: delta > 0 ? "oklch(0.65 0.15 145)" : "oklch(0.70 0.15 25)", marginTop: "0.25rem" }}>
+                      {delta > 0 ? "↑" : "↓"} {Math.abs(delta).toFixed(1)}
+                    </p>
+                  )}
+                  {m.reference_range && <p style={{ fontSize: "0.65rem", color: "var(--dim)", marginTop: "0.25rem", fontWeight: 300 }}>ref: {m.reference_range}</p>}
+                </div>
+              );
+            })}
+          </div>
+
+          {entries.length > 1 && (
+            <details style={{ marginBottom: "1.5rem" }}>
+              <summary style={{ fontSize: "0.8125rem", color: "var(--muted)", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 400, marginBottom: "0.75rem" }}>Previous uploads ({entries.length - 1})</summary>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.75rem" }}>
+                {entries.slice(1).map(e => (
+                  <div key={e.id} style={{ padding: "0.75rem 1rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300 }}>{e.test_date ?? new Date(e.uploaded_at).toLocaleDateString("en-GB")}</span>
+                    <span style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>{e.markers ? Object.keys(e.markers).length + " markers" : "Processing…"}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+        </>
+      )}
+
+      <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, lineHeight: 1.6, marginTop: "1rem" }}>
+        For reference only. This is not medical advice.
+      </p>
+    </div>
+  );
+}
+
+// ─── REFERRALS TAB ────────────────────────────────────────────────────────
+
+interface ReferralEntry {
+  id: string;
+  referred_name: string;
+  referred_email: string;
+  status: "pending" | "paid";
+  submitted_at: string;
+}
+
+function ReferralsTab({ user }: { user: StoredUser }) {
+  const [referrals, setReferrals] = useState<ReferralEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    fetch(`/api/referrals?email=${encodeURIComponent(user.email)}`)
+      .then(r => r.json()).then(d => setReferrals(d.referrals ?? [])).catch(() => {}).finally(() => setLoading(false));
+  };
+
+  useEffect(load, [user.email]);
+
+  const paidCount = referrals.filter(r => r.status === "paid").length;
+
+  const handleSubmit = async () => {
+    if (!name.trim() || !email.trim()) { setError("Name and email are required."); return; }
+    setSubmitting(true); setError("");
+    const res = await fetch('/api/referrals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ referrerEmail: user.email, referredName: name.trim(), referredEmail: email.trim() }),
+    }).then(r => r.json()).catch(() => ({ error: "Request failed" }));
+    if (res.error) { setError(res.error); setSubmitting(false); return; }
+    setSuccess(true); setName(""); setEmail(""); setSubmitting(false);
+    load();
   };
 
   return (
     <div>
       <div style={{ marginBottom: "2rem" }}>
-        <h1 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "clamp(1.75rem, 4vw, 2.5rem)", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.02em", lineHeight: 1.1, marginBottom: "0.625rem" }}>Direct access.</h1>
-        <p style={{ fontSize: "1rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.65, maxWidth: "52ch" }}>Use this when you&apos;re stuck, have a win to share, or need a quick answer.</p>
+        <h2 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "clamp(1.5rem, 4vw, 2rem)", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.02em", marginBottom: "0.25rem" }}>Referrals</h2>
+        <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>3 paying referrals = a free month with THP.</p>
       </div>
 
-      {/* Mentor card */}
-      <div style={{ display: "flex", alignItems: "center", gap: "1rem", padding: "1rem 1.25rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "14px", marginBottom: "1.5rem" }}>
-        <div style={{ width: "48px", height: "48px", borderRadius: "50%", overflow: "hidden", border: "2px solid oklch(0.60 0.18 165 / 0.3)", flexShrink: 0, background: "oklch(0.60 0.18 165 / 0.1)" }}>
-          <img src="/thp.jpg" alt="THP" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-            onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+      {/* Progress bar */}
+      <div style={{ padding: "1.25rem 1.5rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", marginBottom: "2rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.875rem" }}>
+          <span style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)" }}>Paying referrals</span>
+          <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--primary)", fontFamily: "var(--font-mono), monospace" }}>{paidCount} / 3</span>
         </div>
-        <div style={{ flex: 1 }}>
-          <p style={{ fontSize: "0.9375rem", fontWeight: 500, color: "var(--ink)", marginBottom: "0.2rem" }}>THP</p>
-          <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300 }}>
-            {adminActive ? "Your mentor · Active now" : "Your mentor · Away right now, messages are reviewed and followed up personally"}
-          </p>
+        <div style={{ height: "6px", background: "var(--border)", borderRadius: "3px", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${Math.min(paidCount / 3, 1) * 100}%`, background: "var(--primary)", borderRadius: "3px", transition: "width 500ms ease" }} />
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
-          <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: adminActive ? "oklch(0.7 0.15 145)" : "var(--muted)", animation: adminActive ? "pulse 2.5s ease infinite" : "none", opacity: adminActive ? 1 : 0.5 }} aria-hidden />
-          <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}`}</style>
-          <span style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: 300 }}>{adminActive ? "Active" : "Away"}</span>
+        {paidCount >= 3 && (
+          <p style={{ fontSize: "0.8125rem", color: "var(--primary)", fontWeight: 500, marginTop: "0.75rem" }}>You&apos;ve earned a free month — THP will apply it to your next cycle.</p>
+        )}
+      </div>
+
+      {/* Submit form */}
+      <div style={{ padding: "1.5rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", marginBottom: "2rem" }}>
+        <p style={{ fontSize: "0.9375rem", fontWeight: 500, color: "var(--ink)", marginBottom: "1.25rem" }}>Refer someone</p>
+        {success && (
+          <div style={{ padding: "0.75rem 1rem", background: "oklch(0.60 0.18 165 / 0.08)", border: "1px solid oklch(0.60 0.18 165 / 0.2)", borderRadius: "8px", marginBottom: "1rem" }}>
+            <p style={{ fontSize: "0.875rem", color: "var(--primary)", fontWeight: 400 }}>Referral submitted. You&apos;ll get credit when they sign up and pay.</p>
+          </div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
+          <div>
+            <label style={{ display: "block", fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 400, marginBottom: "0.375rem" }}>Their name</label>
+            <input value={name} onChange={e => { setName(e.target.value); setSuccess(false); }} placeholder="First Last"
+              style={{ width: "100%", height: "42px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.9rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none", boxSizing: "border-box" }} />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 400, marginBottom: "0.375rem" }}>Their email</label>
+            <input value={email} onChange={e => { setEmail(e.target.value); setSuccess(false); }} placeholder="email@example.com" type="email"
+              style={{ width: "100%", height: "42px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.9rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none", boxSizing: "border-box" }} />
+          </div>
+          {error && <p style={{ fontSize: "0.8125rem", color: "oklch(0.70 0.15 25)" }}>{error}</p>}
+          <button onClick={handleSubmit} disabled={submitting}
+            style={{ height: "42px", background: submitting ? "var(--primary-dim)" : "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 500, cursor: submitting ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+            {submitting ? <><Spinner /> Submitting…</> : "Submit referral"}
+          </button>
         </div>
       </div>
 
-      {/* Message thread */}
-      {messages.length > 0 && (
-        <div style={{ marginBottom: "1.25rem", padding: "1rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "12px", maxHeight: "320px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          {messages.map((msg, i) => {
-            const isAdmin = msg.from === "admin";
-            const showDate = i === 0 || new Date(messages[i - 1].ts).toDateString() !== new Date(msg.ts).toDateString();
-            return (
-              <div key={msg.id}>
-                {showDate && (
-                  <p style={{ textAlign: "center", fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, margin: "0.375rem 0" }}>
-                    {new Date(msg.ts).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
-                  </p>
-                )}
-                <div style={{ display: "flex", justifyContent: isAdmin ? "flex-start" : "flex-end" }}>
-                  <div style={{ maxWidth: "78%", padding: "0.5rem 0.75rem", borderRadius: isAdmin ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: isAdmin ? "oklch(0.60 0.18 165 / 0.15)" : "var(--surface)", border: isAdmin ? "1px solid oklch(0.60 0.18 165 / 0.35)" : "1px solid var(--border)" }}>
-                    {isAdmin && <p style={{ fontSize: "0.7rem", color: "var(--primary)", fontWeight: 500, marginBottom: "0.2rem" }}>THP</p>}
-                    {msg.text && msg.attachmentType !== "audio" && <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 300, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{renderTextWithLinks(msg.text, isAdmin)}</p>}
-                    {msg.attachmentUrl && msg.attachmentType && <AttachmentRender url={msg.attachmentUrl} type={msg.attachmentType} name={msg.attachmentName} isAdmin={isAdmin} transcript={msg.attachmentType === "audio" ? msg.text : undefined} />}
-                    <p style={{ fontSize: "0.65rem", fontFamily: "var(--font-mono), monospace", color: "var(--dim)", fontWeight: 300, marginTop: "0.2rem", textAlign: "right" }}>
-                      {new Date(msg.ts).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-                    </p>
-                  </div>
-                </div>
+      {/* Referral list */}
+      {!loading && referrals.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          {referrals.map(r => (
+            <div key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.875rem 1rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "9px" }}>
+              <div>
+                <p style={{ fontSize: "0.9rem", fontWeight: 500, color: "var(--ink)", marginBottom: "0.125rem" }}>{r.referred_name}</p>
+                <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>{new Date(r.submitted_at).toLocaleDateString("en-GB")}</p>
               </div>
-            );
-          })}
-          <div ref={msgEndRef} />
+              <span style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", padding: "0.25rem 0.625rem", borderRadius: "99px", background: r.status === "paid" ? "oklch(0.60 0.18 165 / 0.12)" : "var(--surface)", border: `1px solid ${r.status === "paid" ? "oklch(0.60 0.18 165 / 0.3)" : "var(--border)"}`, color: r.status === "paid" ? "var(--primary)" : "var(--dim)", fontFamily: "var(--font-mono), monospace" }}>
+                {r.status === "paid" ? "Paying" : "Pending"}
+              </span>
+            </div>
+          ))}
         </div>
       )}
-
-      {/* Compose */}
-      <AlumniGate active={!!isAlumni} label="Direct access ends with your mentorship.">
-        <div style={{ marginBottom: "2rem" }}>
-          <label style={{ display: "block", fontSize: "0.875rem", fontWeight: 500, color: "var(--muted)", marginBottom: "0.5rem" }}>Send a message</label>
-          {sendError && (
-            <div style={{ padding: "0.375rem 0.75rem", background: "oklch(0.25 0.08 25 / 0.8)", border: "1px solid oklch(0.55 0.18 25 / 0.5)", borderRadius: "7px", marginBottom: "0.5rem", fontSize: "0.8rem", color: "oklch(0.85 0.12 25)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              {sendError}
-              <button onClick={() => setSendError(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "inherit", fontSize: "1rem", lineHeight: 1 }}>×</button>
-            </div>
-          )}
-          {(pendingFile || audioBlob) && (
-            <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", padding: "0.625rem 0.875rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", marginBottom: "0.5rem" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem", flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: "0.8125rem", color: "var(--muted)" }}>
-                  {audioBlob ? (recording ? "Recording..." : "Voice note ready") : pendingFile?.name}
-                </span>
-                {audioBlob && voiceTranscript && (
-                  <span style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{voiceTranscript}</span>
-                )}
-              </div>
-              <button onClick={clearPending} style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: "1rem", lineHeight: 1, flexShrink: 0 }}>×</button>
-            </div>
-          )}
-          <div style={{ display: "flex", alignItems: "flex-end", gap: "0.5rem", padding: "0.5rem 0.5rem 0.5rem 0.875rem", background: "var(--surface)", borderRadius: "24px", border: `1px solid ${focused ? "var(--primary)" : "var(--border)"}`, transition: "border-color 150ms" }}>
-            <input ref={fileInputRef} type="file" accept="image/*,video/*,application/pdf,.doc,.docx,.txt" onChange={handleFileChange} style={{ display: "none" }} aria-hidden />
-            <button onClick={() => fileInputRef.current?.click()} title="Attach file"
-              style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: "var(--dim)", cursor: "pointer", flexShrink: 0 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-            </button>
-            {recording ? (
-              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "2px", height: "40px", padding: "0 0.25rem" }}>
-                <span style={{ fontSize: "0.75rem", color: "#ef4444", fontWeight: 500, fontFamily: "var(--font-ui), system-ui, sans-serif", marginRight: "0.5rem", flexShrink: 0 }}>rec</span>
-                {waveformBars.map((h, i) => (
-                  <div key={i} style={{ flex: 1, borderRadius: "2px", background: "#ef4444", height: `${Math.round(h * 32)}px`, minHeight: "3px", transition: "height 60ms ease" }} />
-                ))}
-              </div>
-            ) : (
-              <textarea value={compose} onChange={e => setCompose(e.target.value)} placeholder="Hi THP, I wanted to ask about..." rows={1}
-                onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-                onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSend(); }}
-                style={{ flex: 1, background: "transparent", border: "none", outline: "none", resize: "none", fontSize: "0.9375rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, lineHeight: 1.6, minHeight: "32px", maxHeight: "160px", overflowY: "auto", padding: "0.25rem 0", alignSelf: "center" }} />
-            )}
-            <button onClick={recording ? stopRecording : startRecording} title={recording ? "Stop recording" : "Record voice note"}
-              style={{ width: "32px", height: "32px", display: "flex", alignItems: "center", justifyContent: "center", background: recording ? "#ef4444" : "none", border: "none", borderRadius: "50%", color: recording ? "white" : "var(--dim)", cursor: "pointer", transition: "all 150ms", flexShrink: 0 }}>
-              {recording
-                ? <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-                : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>}
-            </button>
-            {(canSend && !uploading) && (
-              <button onClick={handleSend}
-                style={{ width: "36px", height: "36px", borderRadius: "50%", background: "var(--primary)", border: "none", color: "#ffffff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 200ms ease" }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-              </button>
-            )}
-            {uploading && (
-              <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "var(--surface-2)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <Spinner />
-              </div>
-            )}
-          </div>
-        </div>
-        <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.65 }}>
-          I check this regularly and will be in touch soon. Ask anything: questions, blocks, wins, check-ins.
-        </p>
-      </AlumniGate>
     </div>
   );
 }
@@ -1606,12 +1282,12 @@ function AlumniModal({ onClose }: { onClose: () => void }) {
         </p>
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
           <a
-            href={`https://wa.me/447453172081?text=${encodeURIComponent("Hi THP, I want to continue mentorship.")}`}
+            href="https://t.me/thpofficial"
             target="_blank" rel="noopener noreferrer"
             style={{ height: "44px", padding: "0 1.375rem", background: "var(--primary)", color: "#ffffff", borderRadius: "8px", textDecoration: "none", fontSize: "0.9rem", fontWeight: 500, display: "inline-flex", alignItems: "center", transition: "background 150ms" }}
             onMouseEnter={e => (e.currentTarget as HTMLAnchorElement).style.background = "var(--primary-hover)"}
             onMouseLeave={e => (e.currentTarget as HTMLAnchorElement).style.background = "var(--primary)"}>
-            Speak to THP
+            Message THP
           </a>
           <button onClick={onClose}
             style={{ height: "44px", padding: "0 1.25rem", background: "none", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", fontSize: "0.9rem", fontWeight: 400, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "border-color 150ms, color 150ms" }}
@@ -1665,13 +1341,6 @@ function CalIcon() {
   );
 }
 
-function WhatsAppIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-    </svg>
-  );
-}
 
 function Spinner() {
   return (

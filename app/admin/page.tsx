@@ -5,16 +5,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   getAllUsers, updateUser, linkNotionPage, setProtocolStatus,
   setAccountStatus, setClientType, addPayment, removePayment, removeClient, createClient,
-  getMessages, addMessage, uploadMessageAttachment, markClientMessagesRead, getAllUnreadCounts, setSuspended,
-  updatePresence, isClientActive, getClientProtocols, getAdminDiagnostics, publishDiagnosis,
+  setSuspended, updatePresence, getClientProtocols, getAdminDiagnostics, publishDiagnosis,
 } from "@/lib/auth";
-import type { StoredUser, Message, ClientStatus, ProtocolStatus, AccountStatus, Payment, AttachmentType, ClientProtocol, ClientDiagnostic } from "@/lib/auth";
+import type { StoredUser, ClientStatus, ProtocolStatus, AccountStatus, Payment, ClientProtocol, ClientDiagnostic } from "@/lib/auth";
 import type { ProtocolId } from "@/lib/protocols";
 import { supabase } from "@/lib/supabase";
 
 const ADMIN_EMAIL = "info.shopzul@gmail.com";
 const ADMIN_PASSWORD = "Fikri!";
-const WHATSAPP_NUMBER = "447453172081";
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   active:  { bg: "oklch(0.60 0.18 165 / 0.15)", color: "var(--color-red)" },
@@ -24,8 +22,6 @@ const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   hold:    { bg: "oklch(0.62 0.20 25 / 0.15)",   color: "var(--danger)" },
 };
 
-type ChatMsg = { role: "user" | "assistant"; content: string };
-
 export default function AdminPage() {
   const [authed, setAuthed] = useState(false);
   const [adminEmail, setAdminEmail] = useState("");
@@ -34,38 +30,8 @@ export default function AdminPage() {
   const [clients, setClients] = useState<StoredUser[]>([]);
   const [selected, setSelected] = useState<StoredUser | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [compose, setCompose] = useState("");
-  const [composeFocused, setComposeFocused] = useState(false);
   const [diagnosticOpen, setDiagnosticOpen] = useState(true);
-  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
-
-  // Chatbot state
-  const [chatOpen, setChatOpen] = useState(false);
-  const [chatMsgs, setChatMsgs] = useState<ChatMsg[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [chatLoading, setChatLoading] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
-  const msgEndRef = useRef<HTMLDivElement | null>(null);
-  const adminFileInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Client brief
-  const [brief, setBrief] = useState<string | null>(null);
-  const [briefLoading, setBriefLoading] = useState(false);
-
-  // Draft reply
-  const [drafting, setDrafting] = useState(false);
-
-  // Admin attachment state
-  const [adminPendingFile, setAdminPendingFile] = useState<File | null>(null);
-  const [adminPendingType, setAdminPendingType] = useState<AttachmentType | null>(null);
-  const [adminRecording, setAdminRecording] = useState(false);
-  const [adminAudioBlob, setAdminAudioBlob] = useState<Blob | null>(null);
-  const [selectedClientActive, setSelectedClientActive] = useState(false);
-  const adminMediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const [adminUploading, setAdminUploading] = useState(false);
-  const [adminSendError, setAdminSendError] = useState<string | null>(null);
 
   // Create client modal
   const [showCreate, setShowCreate] = useState(false);
@@ -90,40 +56,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (!authed) return;
 
-    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => { /* ignore */ });
-    }
-
-    // Realtime: client sends a message → update unread badge + browser notification
-    const channel = supabase
-      .channel('admin:new_client_messages')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: 'from_type=eq.client',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      }, (payload: any) => {
-        const row = payload.new;
-        if (!row) return;
-        setUnreadCounts(prev => ({ ...prev, [row.user_email]: (prev[row.user_email] ?? 0) + 1 }));
-        setSelected(prev => {
-          if (prev?.email === row.user_email) {
-            const newMsg: Message = { id: row.id, from: 'client', text: row.text, ts: row.ts, read: false };
-            setMessages(msgs => [...msgs, newMsg]);
-            setTimeout(() => msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
-            setUnreadCounts(c => ({ ...c, [row.user_email]: 0 }));
-            markClientMessagesRead(row.user_email).catch(() => {});
-          }
-          return prev;
-        });
-        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-          try { new Notification(`Message from ${row.user_email}`, { body: (row.text ?? '').slice(0, 100), icon: '/thp.jpg' }); } catch { /* blocked */ }
-        }
-      })
-      .subscribe();
-
-    // Realtime: client checks in → notify + refresh their row in the list
+    // Realtime: client submits tracker → notify + refresh their row in the list
     const checkinChannel = supabase
       .channel('admin:checkins')
       .on('postgres_changes', {
@@ -146,7 +79,40 @@ export default function AdminPage() {
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); supabase.removeChannel(checkinChannel); };
+    // Realtime: new client completes /apply → appear in Applicants section immediately
+    const newClientChannel = supabase
+      .channel('admin:new_applicants')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'users',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }, (payload: any) => {
+        const row = payload.new;
+        if (!row) return;
+        const diagData = row.diagnostic_data ?? undefined;
+        const newClient: StoredUser = {
+          name: row.name ?? row.email,
+          email: row.email,
+          password: row.password ?? '',
+          status: (row.status ?? 'new') as StoredUser['status'],
+          streak: row.streak ?? 0,
+          longestStreak: row.longest_streak ?? 0,
+          lastCheckIn: row.last_check_in ?? undefined,
+          joinedAt: row.joined_at,
+          diagnosticData: diagData,
+        };
+        setClients(prev => [newClient, ...prev]);
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          try { new Notification(`New applicant: ${row.name ?? row.email}`, { body: 'Completed application form', icon: '/thp.jpg' }); } catch { /* blocked */ }
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(checkinChannel);
+      supabase.removeChannel(newClientChannel);
+    };
   }, [authed]);
 
   // Admin presence heartbeat: mark THP as active while in admin panel
@@ -165,10 +131,9 @@ export default function AdminPage() {
 
   async function refreshClients() {
     const order: Record<ClientStatus, number> = { pending: 0, active: 1, alumni: 2, new: 3 };
-    const [all, counts] = await Promise.all([getAllUsers(), getAllUnreadCounts()]);
-    const sorted = all.sort((a, b) => (order[a.status] ?? 4) - (order[b.status] ?? 4));
+    const all = await getAllUsers();
+    const sorted = [...all].sort((a, b) => (order[a.status] ?? 4) - (order[b.status] ?? 4));
     setClients(sorted);
-    setUnreadCounts(counts);
   }
 
   async function handleLogin(e: React.FormEvent) {
@@ -187,44 +152,8 @@ export default function AdminPage() {
     setAuthed(false);
   }
 
-  async function selectClient(u: StoredUser) {
+  function selectClient(u: StoredUser) {
     setSelected(u);
-    setBrief(null);
-    setSelectedClientActive(false);
-    isClientActive(u.email).then(setSelectedClientActive).catch(() => {});
-    await markClientMessagesRead(u.email);
-    const msgs = await getMessages(u.email);
-    setMessages(msgs);
-    setUnreadCounts(prev => ({ ...prev, [u.email]: 0 }));
-    setTimeout(() => msgEndRef.current?.scrollIntoView({ behavior: "smooth" }), 120);
-
-    // Auto-generate client brief if they have intake data
-    if (u.diagnosticData && u.diagnosticData.whatTryingToFix) {
-      setBriefLoading(true);
-      const d = u.diagnosticData;
-      const ctx = `Client: ${u.name}, joined ${u.joinedAt}
-What they are trying to fix: ${d.whatTryingToFix || 'not specified'}
-Age / location: ${d.ageLocation || 'not specified'}
-Energy state: ${d.energyState || 'not provided'}
-Self-perception: ${d.selfPerception || 'not provided'}
-Baseline internal state: ${d.baselineInternalState || 'not provided'}
-Sleep quality: ${d.sleepQuality || 'not provided'} | Duration: ${d.sleepDuration || 'not provided'}
-On TRT / peptides: ${d.onTrt || 'not provided'}
-Libido: ${d.libido || 'not provided'}
-Sexual confidence: ${d.sexualConfidence || 'not provided'}
-Training: ${d.trainingApproach || 'not provided'} — ${d.trainingFrequency || 'not provided'}
-Height / weight / BF: ${d.heightWeightBf || 'not provided'}`;
-      try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: [{ role: 'user', content: 'Write the client brief.' }], clientContext: ctx, mode: 'brief' }),
-        });
-        const data = await res.json();
-        if (data.content) setBrief(data.content);
-      } catch { /* ignore */ }
-      setBriefLoading(false);
-    }
   }
 
   async function handleCreateClient() {
@@ -243,104 +172,6 @@ Height / weight / BF: ${d.heightWeightBf || 'not provided'}`;
     setCreating(false);
   }
 
-  async function draftReply() {
-    if (!selected || drafting) return;
-    setDrafting(true);
-    const d = selected.diagnosticData;
-    const ctx = d ? `Client: ${selected.name}
-Trying to fix: ${d.whatTryingToFix || 'not specified'}
-Energy: ${d.energyState || 'not provided'} | Sleep: ${d.sleepQuality || 'not provided'}
-Self-perception: ${d.selfPerception || 'not provided'}
-Libido: ${d.libido || 'not provided'}` : `Client: ${selected.name}`;
-
-    const recentMessages = messages.slice(-8).map(m => `${m.from === 'client' ? selected.name.split(' ')[0] : 'THP'}: ${m.text}`).join('\n');
-    const prompt = `Draft a reply to ${selected.name.split(' ')[0]}'s last message.\n\nConversation:\n${recentMessages}`;
-
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [{ role: 'user', content: prompt }], clientContext: ctx, mode: 'draft' }),
-      });
-      const data = await res.json();
-      if (data.content) setCompose(data.content);
-    } catch { /* ignore */ }
-    setDrafting(false);
-  }
-
-  async function sendAdminMessage() {
-    if ((!compose.trim() && !adminPendingFile && !adminAudioBlob) || !selected) return;
-    setAdminUploading(true);
-    setAdminSendError(null);
-    let attachment: { url: string; type: AttachmentType; name?: string } | undefined;
-    if (adminAudioBlob) {
-      const url = await uploadMessageAttachment(adminAudioBlob, "voice.webm", `admin-${selected.email}`);
-      if (url) {
-        attachment = { url, type: "audio", name: "Voice note" };
-      } else {
-        setAdminAudioBlob(null);
-        setAdminUploading(false);
-        setAdminSendError("Upload failed. Check your Supabase storage bucket.");
-        return;
-      }
-      setAdminAudioBlob(null);
-    } else if (adminPendingFile) {
-      const url = await uploadMessageAttachment(adminPendingFile, adminPendingFile.name, `admin-${selected.email}`);
-      if (url) {
-        attachment = { url, type: adminPendingType!, name: adminPendingFile.name };
-      } else {
-        setAdminPendingFile(null);
-        setAdminPendingType(null);
-        setAdminUploading(false);
-        setAdminSendError("Upload failed. Check your Supabase storage bucket.");
-        return;
-      }
-      setAdminPendingFile(null);
-      setAdminPendingType(null);
-    }
-    const text = compose.trim();
-    if (!text && !attachment) { setAdminUploading(false); return; }
-    setCompose("");
-    setAdminUploading(false);
-    const savedMsg = await addMessage(selected.email, text, "admin", attachment);
-    // Optimistically append to local state so UI updates instantly
-    if (savedMsg) {
-      setMessages(msgs => [...msgs, savedMsg]);
-    } else {
-      const msgs = await getMessages(selected.email);
-      setMessages(msgs);
-    }
-    setTimeout(() => msgEndRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
-
-    // Push notification to client
-    const preview = text ? text.slice(0, 80) : (attachment?.type === "audio" ? "Voice note from THP" : "New message from THP");
-    fetch('/api/push-send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userEmail: selected.email, title: 'THP', body: preview, adminPw: ADMIN_PASSWORD }),
-    }).catch(() => { /* non-critical */ });
-  }
-
-  function startAdminRecording() {
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-      const mr = new MediaRecorder(stream);
-      const chunks: Blob[] = [];
-      mr.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-      mr.onstop = () => {
-        setAdminAudioBlob(new Blob(chunks, { type: mr.mimeType || "audio/webm" }));
-        setAdminPendingType("audio");
-        stream.getTracks().forEach(t => t.stop());
-      };
-      mr.start();
-      adminMediaRecorderRef.current = mr;
-      setAdminRecording(true);
-    }).catch(() => { /* mic denied */ });
-  }
-
-  function stopAdminRecording() {
-    adminMediaRecorderRef.current?.stop();
-    setAdminRecording(false);
-  }
 
   async function activateClient(_protocolId?: ProtocolId) {
     if (!selected) return;
@@ -428,52 +259,6 @@ Libido: ${d.libido || 'not provided'}` : `Client: ${selected.name}`;
     setSelected(updated);
   }
 
-  async function sendChatMessage() {
-    if (!chatInput.trim() || chatLoading) return;
-    const text = chatInput.trim();
-    setChatInput("");
-    const newMsgs: ChatMsg[] = [...chatMsgs, { role: "user", content: text }];
-    setChatMsgs(newMsgs);
-    setChatLoading(true);
-    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
-
-    let clientContext = "";
-    if (selected) {
-      const d = selected.diagnosticData;
-      clientContext = `Client: ${selected.name} (${selected.email})
-Status: ${selected.status} | Streak: ${selected.streak} days
-Joined: ${selected.joinedAt}${d ? `
-Trying to fix: ${d.whatTryingToFix || "not specified"}
-Energy: ${d.energyState || "not provided"} | Sleep: ${d.sleepQuality || "not provided"} (${d.sleepDuration || "?"})
-Self-perception: ${d.selfPerception || "not provided"}
-Baseline internal state: ${d.baselineInternalState || "not provided"}
-On TRT: ${d.onTrt || "not provided"} | Libido: ${d.libido || "not provided"}
-Training: ${d.trainingApproach || "not provided"} — ${d.trainingFrequency || "not provided"}
-Height / weight / BF: ${d.heightWeightBf || "not provided"}` : " (no intake form submitted yet)"}`;
-    } else if (clients.length) {
-      clientContext = `Total clients: ${clients.length}
-Active: ${clients.filter(c => c.status === "active").length} | Pending: ${clients.filter(c => c.status === "pending").length} | New (not yet submitted intake): ${clients.filter(c => c.status === "new").length}`;
-    }
-
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: newMsgs.map(m => ({ role: m.role, content: m.content })),
-          clientContext,
-        }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      const reply = data.content;
-      setChatMsgs([...newMsgs, { role: "assistant", content: reply }]);
-    } catch {
-      setChatMsgs([...newMsgs, { role: "assistant", content: "Sorry, AI is not available right now. Make sure ANTHROPIC_API_KEY is set in Vercel." }]);
-    }
-    setChatLoading(false);
-    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
-  }
 
   const q = searchQuery.toLowerCase().trim();
   const searchFiltered = q
@@ -531,12 +316,6 @@ Active: ${clients.filter(c => c.status === "active").length} | Pending: ${client
           {loading && <span style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>Loading…</span>}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <button
-            onClick={() => setChatOpen(v => !v)}
-            style={{ height: "30px", padding: "0 0.875rem", borderRadius: "7px", border: "1px solid", borderColor: chatOpen ? "var(--primary)" : "var(--border)", background: chatOpen ? "oklch(0.60 0.18 165 / 0.12)" : "none", color: chatOpen ? "var(--primary)" : "var(--muted)", fontSize: "0.8125rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", display: "flex", alignItems: "center", gap: "0.4rem", transition: "all 150ms" }}>
-            <SparkleIcon />
-            AI
-          </button>
           <button onClick={handleSignOut} style={{ background: "none", border: "none", color: "var(--dim)", fontSize: "0.8125rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "color 150ms" }}
             onMouseEnter={e => (e.currentTarget.style.color = "var(--muted)")}
             onMouseLeave={e => (e.currentTarget.style.color = "var(--dim)")}>
@@ -588,7 +367,7 @@ Active: ${clients.filter(c => c.status === "active").length} | Pending: ${client
                 <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", padding: "0.75rem 0.625rem 0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
                   Applicants <span style={{ fontWeight: 300 }}>{applicants.length}</span>
                 </p>
-                {applicants.map(u => <ClientRow key={u.email} u={u} selected={selected} unreadCounts={unreadCounts} onSelect={selectClient} />)}
+                {applicants.map(u => <ClientRow key={u.email} u={u} selected={selected} unreadCounts={{}} onSelect={selectClient} />)}
               </>
             )}
 
@@ -598,7 +377,7 @@ Active: ${clients.filter(c => c.status === "active").length} | Pending: ${client
                 <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", padding: "0.75rem 0.625rem 0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
                   Paying 1:1 <span style={{ fontWeight: 300 }}>{paying1on1.length}</span>
                 </p>
-                {paying1on1.map(u => <ClientRow key={u.email} u={u} selected={selected} unreadCounts={unreadCounts} onSelect={selectClient} />)}
+                {paying1on1.map(u => <ClientRow key={u.email} u={u} selected={selected} unreadCounts={{}} onSelect={selectClient} />)}
               </>
             )}
 
@@ -608,7 +387,7 @@ Active: ${clients.filter(c => c.status === "active").length} | Pending: ${client
                 <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", padding: "0.75rem 0.625rem 0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
                   Skool <span style={{ fontWeight: 300 }}>{skoolClients.length}</span>
                 </p>
-                {skoolClients.map(u => <ClientRow key={u.email} u={u} selected={selected} unreadCounts={unreadCounts} onSelect={selectClient} />)}
+                {skoolClients.map(u => <ClientRow key={u.email} u={u} selected={selected} unreadCounts={{}} onSelect={selectClient} />)}
               </>
             )}
           </div>
@@ -645,155 +424,15 @@ Active: ${clients.filter(c => c.status === "active").length} | Pending: ${client
                     onSuspendClient={handleSuspendClient}
                     onAddPayment={handleAddPayment}
                     onRemovePayment={handleRemovePayment}
-                    whatsappNumber={WHATSAPP_NUMBER}
+                    whatsappNumber=""
                   />
                 </div>
 
-                {/* Right: messages */}
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-                  <div style={{ padding: "0.875rem 1.25rem", borderBottom: "1px solid var(--border-subtle)", flexShrink: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: brief || briefLoading ? "0.625rem" : 0 }}>
-                      <div>
-                        <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                          Messages
-                          {selectedClientActive && (
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", fontSize: "0.7rem", color: "var(--color-red)", fontWeight: 400 }}>
-                              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "oklch(0.7 0.15 145)", display: "inline-block" }} />
-                              on dashboard now
-                            </span>
-                          )}
-                        </p>
-                        <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>{selected.name}</p>
-                      </div>
-                    </div>
-                    {briefLoading && (
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 0.75rem", background: "var(--surface)", borderRadius: "7px", border: "1px solid var(--border-subtle)" }}>
-                        <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "var(--primary)", animation: "pulse 1.2s ease infinite" }} />
-                        <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, fontStyle: "italic" }}>Generating brief...</p>
-                      </div>
-                    )}
-                    {brief && !briefLoading && (
-                      <div style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", borderRadius: "7px", border: "1px solid var(--border-subtle)" }}>
-                        <p style={{ fontSize: "0.75rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.65 }}>{brief}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{ flex: 1, overflowY: "auto", padding: "1.25rem" }}>
-                    {messages.length === 0 && (
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%" }}>
-                        <p style={{ fontSize: "0.875rem", color: "var(--dim)", fontWeight: 300 }}>No messages yet</p>
-                      </div>
-                    )}
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                      {messages.map((msg, i) => {
-                        const isAdmin = msg.from === "admin";
-                        const showDate = i === 0 || new Date(messages[i - 1].ts).toDateString() !== new Date(msg.ts).toDateString();
-                        return (
-                          <div key={msg.id}>
-                            {showDate && (
-                              <p style={{ textAlign: "center", fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, margin: "0.75rem 0 0.375rem" }}>
-                                {new Date(msg.ts).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
-                              </p>
-                            )}
-                            <div style={{ display: "flex", justifyContent: isAdmin ? "flex-end" : "flex-start" }}>
-                              <div style={{ maxWidth: "75%", padding: "0.625rem 0.875rem", borderRadius: isAdmin ? "16px 16px 4px 16px" : "16px 16px 16px 4px", background: isAdmin ? "oklch(0.60 0.18 165 / 0.12)" : "var(--surface)", border: isAdmin ? "1px solid oklch(0.60 0.18 165 / 0.35)" : "1px solid var(--border)" }}>
-                                {msg.text && msg.attachmentType !== "audio" && <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 300, lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{msg.text}</p>}
-                                {msg.attachmentUrl && msg.attachmentType && (
-                                  msg.attachmentType === "audio"
-                                    ? (
-                                      <VoiceNotePlayer
-                                        url={msg.attachmentUrl}
-                                        isAdmin={isAdmin}
-                                        transcript={msg.text || undefined}
-                                      />
-                                    )
-                                    : msg.attachmentType === "image"
-                                    ? <img src={msg.attachmentUrl} alt={msg.attachmentName || "Image"} style={{ maxWidth: "200px", borderRadius: "8px", marginTop: "0.25rem", cursor: "pointer", display: "block" }} onClick={() => window.open(msg.attachmentUrl, "_blank")} />
-                                    : msg.attachmentType === "video"
-                                    ? <video controls src={msg.attachmentUrl} style={{ maxWidth: "200px", borderRadius: "8px", marginTop: "0.25rem", display: "block" }} />
-                                    : <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", fontSize: "0.8rem", color: "var(--primary)", textDecoration: "underline", marginTop: "0.25rem" }}>📎 {msg.attachmentName || "File"}</a>
-                                )}
-                                <p style={{ fontSize: "0.65rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.25rem", textAlign: isAdmin ? "right" : "left" }}>
-                                  {new Date(msg.ts).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      <div ref={msgEndRef} />
-                    </div>
-                  </div>
-
-                  <div style={{ padding: "1rem 1.25rem", borderTop: "1px solid var(--border-subtle)", flexShrink: 0 }}>
-                    {adminSendError && (
-                      <div style={{ padding: "0.375rem 0.75rem", background: "oklch(0.25 0.08 25 / 0.8)", border: "1px solid oklch(0.55 0.18 25 / 0.5)", borderRadius: "7px", marginBottom: "0.5rem", fontSize: "0.8rem", color: "oklch(0.85 0.12 25)" }}>
-                        {adminSendError}
-                        <button onClick={() => setAdminSendError(null)} style={{ marginLeft: "0.5rem", background: "none", border: "none", cursor: "pointer", color: "inherit", fontSize: "1rem", lineHeight: 1 }}>×</button>
-                      </div>
-                    )}
-                    {(adminPendingFile || adminAudioBlob) && (
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.375rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", marginBottom: "0.5rem", fontSize: "0.8rem", color: "var(--muted)" }}>
-                        {adminAudioBlob ? "Voice note ready" : adminPendingFile?.name}
-                        <button onClick={() => { setAdminPendingFile(null); setAdminPendingType(null); setAdminAudioBlob(null); }} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--dim)", fontSize: "1rem", lineHeight: 1 }}>×</button>
-                      </div>
-                    )}
-                    <input ref={adminFileInputRef} type="file" accept="image/*,video/*,application/pdf,.doc,.docx,.txt"
-                      onChange={e => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        const type: AttachmentType = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : "file";
-                        setAdminPendingFile(file);
-                        setAdminPendingType(type);
-                        e.target.value = "";
-                      }} style={{ display: "none" }} aria-hidden />
-                    <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end", background: "var(--surface)", borderRadius: "24px", border: "1px solid var(--border)", padding: "0.375rem 0.5rem" }}>
-                      {/* AI draft */}
-                      <button onClick={draftReply} disabled={drafting || messages.length === 0} title="Draft reply in THP's tone"
-                        style={{ width: "34px", height: "34px", borderRadius: "50%", background: "none", border: "none", cursor: (drafting || messages.length === 0) ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 150ms", opacity: messages.length === 0 ? 0.4 : 1, color: "var(--dim)" }}
-                        onMouseEnter={e => { if (messages.length > 0) { e.currentTarget.style.background = "oklch(0.60 0.18 165 / 0.08)"; e.currentTarget.style.color = "var(--primary)"; } }}
-                        onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = "var(--dim)"; }}>
-                        {drafting ? <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "var(--primary)", animation: "pulse 1s ease infinite" }} /> : <SparkleIcon />}
-                      </button>
-                      {/* Attach */}
-                      <button onClick={() => adminFileInputRef.current?.click()} title="Attach file, image, or video"
-                        style={{ width: "34px", height: "34px", borderRadius: "50%", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--dim)", transition: "background 150ms" }}
-                        onMouseEnter={e => { e.currentTarget.style.background = "var(--surface-2)"; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = "none"; }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-                      </button>
-                      {/* Mic */}
-                      <button onClick={adminRecording ? stopAdminRecording : startAdminRecording} title={adminRecording ? "Stop recording" : "Voice note"}
-                        style={{ width: "34px", height: "34px", borderRadius: "50%", background: adminRecording ? "#ef4444" : "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: adminRecording ? "white" : "var(--dim)", transition: "all 150ms" }}>
-                        {adminRecording
-                          ? <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-                          : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                        }
-                      </button>
-                      <textarea
-                        value={compose}
-                        onChange={e => setCompose(e.target.value)}
-                        onFocus={() => setComposeFocused(true)}
-                        onBlur={() => setComposeFocused(false)}
-                        onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendAdminMessage(); } }}
-                        placeholder="Message or hit ✦ to draft with AI..."
-                        rows={1}
-                        style={{ flex: 1, background: "none", border: "none", borderRadius: "0", padding: "0.375rem 0.25rem", fontSize: "0.9rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none", resize: "none", lineHeight: 1.5, minHeight: "34px", maxHeight: "120px", overflow: "auto" }}
-                      />
-                      {(compose.trim() || adminPendingFile || adminAudioBlob) && (
-                        <button onClick={sendAdminMessage}
-                          style={{ width: "36px", height: "36px", borderRadius: "50%", background: "var(--primary)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 150ms" }}
-                          onMouseEnter={e => (e.currentTarget.style.background = "var(--primary-hover)")}
-                          onMouseLeave={e => (e.currentTarget.style.background = "var(--primary)")}>
-                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
-                            <path d="M8 13V3M3 8l5-5 5 5" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                    <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.375rem" }}>Enter to send · Shift+Enter for new line</p>
-                  </div>
+                {/* Right panel: tracker analysis — built in Phase 6 */}
+                <div style={{ flex: 1, overflowY: "auto", padding: "1.5rem 1.25rem", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <p style={{ fontSize: "0.875rem", color: "var(--dim)", fontWeight: 300, textAlign: "center" }}>
+                    Tracker analysis coming soon.
+                  </p>
                 </div>
               </motion.div>
             )}
@@ -851,95 +490,6 @@ Active: ${clients.filter(c => c.status === "active").length} | Pending: ${client
           )}
         </AnimatePresence>
 
-        {/* AI Chat Panel */}
-        <AnimatePresence>
-          {chatOpen && (
-            <motion.div
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 320, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-              style={{ borderLeft: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", overflow: "hidden", flexShrink: 0 }}>
-              <div style={{ padding: "0.875rem 1rem", borderBottom: "1px solid var(--border-subtle)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <SparkleIcon />
-                  <span style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)" }}>AI Assistant</span>
-                </div>
-                {selected && (
-                  <span style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300 }}>{selected.name.split(" ")[0]}'s context</span>
-                )}
-              </div>
-
-              <div style={{ flex: 1, overflowY: "auto", padding: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                {chatMsgs.length === 0 && (
-                  <div style={{ padding: "1rem 0" }}>
-                    <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, lineHeight: 1.6, marginBottom: "0.75rem" }}>
-                      {selected
-                        ? `Ask me anything about ${selected.name.split(" ")[0]}, or have me draft a message for them.`
-                        : "Ask me anything about your clients or coaching practice."}
-                    </p>
-                    {[
-                      selected ? `Summarise ${selected.name.split(" ")[0]}'s progress` : "Who needs the most attention right now?",
-                      selected ? `Draft a check-in message for ${selected.name.split(" ")[0]}` : "What should I focus on this week?",
-                    ].map(prompt => (
-                      <button key={prompt} onClick={() => { setChatInput(prompt); }}
-                        style={{ display: "block", width: "100%", textAlign: "left", padding: "0.5rem 0.625rem", marginBottom: "0.375rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", color: "var(--muted)", fontSize: "0.8rem", fontWeight: 300, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "border-color 150ms" }}
-                        onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--border)")}
-                        onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border-subtle)")}>
-                        {prompt}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {chatMsgs.map((msg, i) => (
-                  <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
-                    <div style={{ maxWidth: "88%", padding: "0.5rem 0.75rem", borderRadius: msg.role === "user" ? "12px 12px 3px 12px" : "12px 12px 12px 3px", background: msg.role === "user" ? "var(--primary)" : "var(--surface)", border: msg.role === "user" ? "none" : "1px solid var(--border-subtle)" }}>
-                      {msg.role === "assistant" && (
-                        <p style={{ fontSize: "0.65rem", color: "var(--primary)", fontWeight: 500, marginBottom: "0.2rem" }}>AI</p>
-                      )}
-                      <p style={{ fontSize: "0.8125rem", color: msg.role === "user" ? "#ffffff" : "var(--ink)", fontWeight: 300, lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{msg.content}</p>
-                    </div>
-                  </div>
-                ))}
-                {chatLoading && (
-                  <div style={{ display: "flex", justifyContent: "flex-start" }}>
-                    <div style={{ padding: "0.5rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "12px 12px 12px 3px" }}>
-                      <p style={{ fontSize: "0.65rem", color: "var(--primary)", fontWeight: 500, marginBottom: "0.2rem" }}>AI</p>
-                      <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
-                        {[0, 1, 2].map(i => (
-                          <span key={i} style={{ width: "5px", height: "5px", borderRadius: "50%", background: "var(--dim)", animation: `dot 1.2s ${i * 0.2}s ease-in-out infinite` }} />
-                        ))}
-                        <style>{`@keyframes dot{0%,80%,100%{opacity:.2}40%{opacity:1}}`}</style>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <div ref={chatEndRef} />
-              </div>
-
-              <div style={{ padding: "0.75rem 1rem", borderTop: "1px solid var(--border-subtle)", flexShrink: 0 }}>
-                <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end" }}>
-                  <textarea
-                    value={chatInput}
-                    onChange={e => setChatInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } }}
-                    placeholder="Ask anything…"
-                    rows={1}
-                    style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "9px", padding: "0.5rem 0.75rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none", resize: "none", lineHeight: 1.5, transition: "border-color 150ms", minHeight: "34px", maxHeight: "100px", overflow: "auto" }}
-                    onFocus={e => (e.target.style.borderColor = "var(--primary)")}
-                    onBlur={e => (e.target.style.borderColor = "var(--border)")}
-                  />
-                  <button onClick={sendChatMessage} disabled={!chatInput.trim() || chatLoading}
-                    style={{ width: "34px", height: "34px", borderRadius: "9px", background: chatInput.trim() && !chatLoading ? "var(--primary)" : "var(--surface-2)", border: "none", cursor: chatInput.trim() && !chatLoading ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 150ms" }}>
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
-                      <path d="M8 13V3M3 8l5-5 5 5" stroke={chatInput.trim() && !chatLoading ? "#ffffff" : "var(--dim)"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
     </div>
   );
@@ -990,6 +540,8 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
   const [regeneratingQuestions, setRegeneratingQuestions] = useState(false);
   const [adminDiagnostics, setAdminDiagnostics] = useState<ClientDiagnostic[]>([]);
   const [publishingDiagId, setPublishingDiagId] = useState<string | null>(null);
+  const [diagGenerating, setDiagGenerating] = useState(false);
+  const [diagGenError, setDiagGenError] = useState("");
 
   useEffect(() => {
     getClientProtocols(client.email).then(setClientProtocols).catch(() => {});
@@ -1008,6 +560,36 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
     await publishDiagnosis(diagId);
     setAdminDiagnostics(prev => prev.map(d => d.id === diagId ? { ...d, published: true } : d));
     setPublishingDiagId(null);
+    // Notify client their diagnosis is ready
+    fetch('/api/push-send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userEmail: client.email,
+        adminPw: ADMIN_PASSWORD,
+        title: 'Your THP Diagnosis is Ready',
+        body: 'Ali has reviewed your intake. Your diagnosis is waiting on your dashboard.',
+      }),
+    }).catch(() => {});
+  }
+
+  async function handleGenerateDiagnosis() {
+    setDiagGenerating(true);
+    setDiagGenError("");
+    try {
+      const res = await fetch("/api/generate-diagnosis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientEmail: client.email, adminPw: ADMIN_PASSWORD }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Generation failed");
+      const updated = await getAdminDiagnostics(client.email);
+      setAdminDiagnostics(updated);
+    } catch (err) {
+      setDiagGenError(err instanceof Error ? err.message : "Unknown error");
+    }
+    setDiagGenerating(false);
   }
 
   async function handleGenerateInvite() {
@@ -1114,6 +696,27 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || "Generation failed");
+
+      // Refresh protocols list so THP sees the result immediately
+      const updated = await getClientProtocols(client.email);
+      setClientProtocols(updated);
+
+      // Reload admin diagnostics too (protocol generation also creates a diagnosis draft)
+      const updatedDiags = await getAdminDiagnostics(client.email);
+      setAdminDiagnostics(updatedDiags);
+
+      // Notify client that their protocol is ready
+      fetch('/api/push-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userEmail: client.email,
+          adminPw: ADMIN_PASSWORD,
+          title: 'Your THP Protocol is Ready',
+          body: 'Your protocol is live. Open your dashboard to read it.',
+        }),
+      }).catch(() => {}); // fire and forget
+
       onProtocolGenerated(data.notionPageId);
     } catch (err) {
       setGenError(err instanceof Error ? err.message : "Unknown error");
@@ -1193,9 +796,18 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
 
       {/* Diagnosis — THP review & send */}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem", paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
-        <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em" }}>Diagnosis</p>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em" }}>Diagnosis</p>
+          <button
+            onClick={handleGenerateDiagnosis}
+            disabled={diagGenerating}
+            style={{ height: "28px", padding: "0 0.75rem", background: diagGenerating ? "var(--surface-2)" : "oklch(0.55 0.18 30 / 0.15)", border: "1px solid oklch(0.55 0.18 30 / 0.4)", borderRadius: "6px", color: diagGenerating ? "var(--dim)" : "oklch(0.75 0.18 30)", fontSize: "0.7rem", fontWeight: 600, cursor: diagGenerating ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap" }}>
+            {diagGenerating ? "Generating…" : "+ Generate with AI"}
+          </button>
+        </div>
+        {diagGenError && <p style={{ fontSize: "0.75rem", color: "var(--primary)" }}>{diagGenError}</p>}
         {adminDiagnostics.length === 0 ? (
-          <p style={{ fontSize: "0.8rem", color: "var(--dim)", fontWeight: 300 }}>No diagnosis generated yet.</p>
+          <p style={{ fontSize: "0.8rem", color: "var(--dim)", fontWeight: 300 }}>No diagnosis yet. Click &quot;Generate with AI&quot; to run the diagnosis.</p>
         ) : (
           adminDiagnostics.map(diag => (
             <div key={diag.id} style={{ background: "var(--surface)", border: `1px solid ${diag.published ? "oklch(0.7 0.15 145 / 0.3)" : "oklch(0.75 0.15 80 / 0.3)"}`, borderRadius: "8px", padding: "0.75rem" }}>
