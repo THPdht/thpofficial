@@ -65,7 +65,7 @@ export async function GET(req: Request) {
     const data: RevenueData = {
       mrr,
       totalRevenue,
-      currency: 'GBP',
+      currency: 'USD',
       periods,
     };
 

@@ -110,8 +110,8 @@ async function main() {
 
     // Map the Skool intake answer to diagnosticData.whatTryingToFix
     const diagnosticData = answer1
-      ? { whatTryingToFix: answer1, skoolLtv: ltv, skoolPrice: price }
-      : { skoolLtv: ltv, skoolPrice: price };
+      ? { clientType: 'skool', whatTryingToFix: answer1, skoolLtv: ltv, skoolPrice: price }
+      : { clientType: 'skool', skoolLtv: ltv, skoolPrice: price };
 
     // Check if already exists
     const { data: existing } = await supabase.from('users').select('email, status').eq('email', email).maybeSingle();

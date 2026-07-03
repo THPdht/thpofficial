@@ -1015,9 +1015,12 @@ function BloodWorkTab({ user }: { user: StoredUser }) {
       )}
 
       {entries.length === 0 && !analysing ? (
-        <div style={{ padding: "2rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "12px", textAlign: "center" }}>
-          <p style={{ fontSize: "0.9375rem", color: "var(--dim)", fontWeight: 300 }}>No blood work uploaded yet.</p>
-          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.375rem" }}>Upload a photo of your lab results to get started.</p>
+        <div style={{ padding: "2.5rem 2rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "12px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem" }}>
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--dim)" }}><path d="M8 3v4M16 3v4M9 12l2 2 4-4M3 8h18M5 8v13a1 1 0 001 1h12a1 1 0 001-1V8"/></svg>
+          <div>
+            <p style={{ fontSize: "0.9375rem", color: "var(--muted)", fontWeight: 400, marginBottom: "0.375rem" }}>No blood work on file yet</p>
+            <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>Your coach will upload your results, or you can upload a photo of your lab report above.</p>
+          </div>
         </div>
       ) : latest?.markers && (
         <>

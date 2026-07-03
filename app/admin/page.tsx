@@ -32,6 +32,7 @@ export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [diagnosticOpen, setDiagnosticOpen] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [adminView, setAdminView] = useState<'overview' | 'clients'>('overview');
 
   // Create client modal
   const [showCreate, setShowCreate] = useState(false);
@@ -312,7 +313,16 @@ export default function AdminPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/images/thprebrandlogo2.png" alt="THP" style={{ height: "28px", width: "auto", filter: "brightness(0) invert(1)" }} />
           <span style={{ width: "1px", height: "14px", background: "var(--border)" }} />
-          <span style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 400 }}>Command Center</span>
+          <div style={{ display: "flex", gap: "0.25rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", padding: "3px" }}>
+            {(['overview', 'clients'] as const).map(v => (
+              <button key={v} onClick={() => { setAdminView(v); if (v === 'overview') setSelected(null); }}
+                style={{ height: "26px", padding: "0 0.75rem", borderRadius: "6px", border: "none", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "background 150ms, color 150ms",
+                  background: adminView === v ? "var(--primary)" : "transparent",
+                  color: adminView === v ? "#fff" : "var(--dim)" }}>
+                {v === 'overview' ? 'Dashboard' : 'Clients'}
+              </button>
+            ))}
+          </div>
           {loading && <span style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>Loading…</span>}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
@@ -325,8 +335,8 @@ export default function AdminPage() {
       </header>
 
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        {/* Sidebar */}
-        <aside style={{ width: "260px", borderRight: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden" }}>
+        {/* Sidebar — only visible in Clients view */}
+        {adminView === 'clients' && <aside style={{ width: "260px", borderRight: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", flexShrink: 0, overflow: "hidden" }}>
           {selected && (
             <div style={{ padding: "0.5rem 0.875rem", borderBottom: "1px solid var(--border-subtle)" }}>
               <button
@@ -391,14 +401,18 @@ export default function AdminPage() {
               </>
             )}
           </div>
-        </aside>
+        </aside>}
 
         {/* Main */}
         <main style={{ flex: 1, display: "flex", overflow: "hidden" }}>
           <AnimatePresence mode="wait">
-            {!selected ? (
+            {adminView === 'overview' ? (
               <motion.div key="overview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ flex: 1, overflowY: "auto", padding: "1.5rem 1.75rem" }}>
-                <OverviewPanel clients={clients} onSelect={selectClient} />
+                <OverviewPanel clients={clients} onSelect={(u) => { selectClient(u); setAdminView('clients'); }} />
+              </motion.div>
+            ) : !selected ? (
+              <motion.div key="clients-empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <p style={{ fontSize: "0.875rem", color: "var(--dim)", fontWeight: 300 }}>Select a client from the sidebar</p>
               </motion.div>
             ) : (
               <motion.div key={selected.email} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} style={{ flex: 1, display: "flex", overflow: "hidden" }}>
@@ -1133,7 +1147,7 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
                 onClick={() => {
                   const amt = parseFloat(paymentAmount);
                   if (!amt || isNaN(amt)) return;
-                  onAddPayment({ date: new Date().toISOString().split('T')[0], amount: amt, currency: '£', type: paymentType, note: paymentNote || undefined });
+                  onAddPayment({ date: new Date().toISOString().split('T')[0], amount: amt, currency: '$', type: paymentType, note: paymentNote || undefined });
                   setPaymentAmount(""); setPaymentNote(""); setAddingPayment(false);
                 }}
                 disabled={!paymentAmount}
@@ -1532,9 +1546,9 @@ function CrmPanel({ client }: { client: StoredUser }) {
       )}
 
       {/* Blood work */}
-      {bloodWork?.markers && (
-        <div>
-          {sectionLabel(`Blood work · ${bloodWork.test_date ?? new Date(bloodWork.uploaded_at).toLocaleDateString('en-GB')}`)}
+      <div>
+        {sectionLabel(bloodWork?.markers ? `Blood work · ${bloodWork.test_date ?? new Date(bloodWork.uploaded_at).toLocaleDateString('en-GB')}` : 'Blood work')}
+        {bloodWork?.markers ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "0.5rem" }}>
             {Object.entries(bloodWork.markers).slice(0, 12).map(([key, m]) => (
               <div key={key} style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: `1px solid ${m.flag && m.flag !== 'normal' ? 'oklch(0.65 0.14 65 / 0.35)' : 'var(--border-subtle)'}`, borderRadius: "8px" }}>
@@ -1545,8 +1559,13 @@ function CrmPanel({ client }: { client: StoredUser }) {
               </div>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div style={{ padding: "1.25rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px", display: "flex", alignItems: "center", gap: "0.875rem" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--dim)", flexShrink: 0 }}><path d="M8 3v4M16 3v4M9 12l2 2 4-4M3 8h18M5 8v13a1 1 0 001 1h12a1 1 0 001-1V8"/></svg>
+            <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>No blood work on file for this client</p>
+          </div>
+        )}
+      </div>
 
       {/* Payment + referrals */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
@@ -1555,9 +1574,9 @@ function CrmPanel({ client }: { client: StoredUser }) {
             <p style={{ fontSize: "0.65rem", color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.5rem" }}>Payment</p>
             {userData.deposit_paid ? (
               <>
-                <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 500 }}>£{userData.deposit_paid} deposit paid</p>
+                <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 500 }}>${userData.deposit_paid} deposit paid</p>
                 {userData.total_owed && userData.deposit_paid < userData.total_owed && (
-                  <p style={{ fontSize: "0.75rem", color: "oklch(0.75 0.12 65)", fontWeight: 300, marginTop: "0.25rem" }}>£{userData.total_owed - userData.deposit_paid} balance due</p>
+                  <p style={{ fontSize: "0.75rem", color: "oklch(0.75 0.12 65)", fontWeight: 300, marginTop: "0.25rem" }}>${userData.total_owed - userData.deposit_paid} balance due</p>
                 )}
               </>
             ) : (
@@ -1703,7 +1722,7 @@ function NotionIcon() {
 
 function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect: (u: StoredUser) => void }) {
   const today = new Date().toISOString().split('T')[0];
-  const active = clients.filter(c => c.status === 'active');
+  const active = clients.filter(c => c.status === 'active' && c.diagnosticData?.clientType !== 'skool');
   const pending = clients.filter(c => c.status === 'pending' || c.status === 'new');
   const paying1on1 = active.filter(c => c.diagnosticData?.clientType !== 'skool');
 
@@ -1773,10 +1792,11 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
         {sectionLabel('Overview')}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
           {[
-            { label: "MRR", value: revenue ? `£${Math.round(revenue.mrr)}` : '—', sub: "this calendar month" },
+            { label: "MRR", value: revenue ? `$${Math.round(revenue.mrr)}` : '—', sub: "this calendar month" },
             { label: "Active 1:1", value: paying1on1.length, sub: "paying clients" },
             { label: "Applicants", value: pending.length, sub: pending.length > 0 ? "need attention" : "all clear" },
-            { label: "Total Revenue", value: revenue ? `£${Math.round(revenue.totalRevenue)}` : '—', sub: "all time" },
+            { label: "Total Revenue", value: revenue ? `$${Math.round(revenue.totalRevenue)}` : '—', sub: "all time" },
+            { label: "Conversion", value: (paying1on1.length + pending.length) > 0 ? `${Math.round(paying1on1.length / (paying1on1.length + pending.length) * 100)}%` : '—', sub: "applicants → clients" },
           ].map(({ label, value, sub }) => (
             <div key={label} style={{ padding: "1rem 1.25rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px" }}>
               <p style={{ fontSize: "0.65rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.375rem" }}>{label}</p>
@@ -1787,34 +1807,37 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
         </div>
       </div>
 
-      {/* Alarm feed */}
-      {alarms.length > 0 && (
-        <div>
-          {sectionLabel('Alarms', alarms.length)}
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-            {alarms.map(a => {
-              const clientName = clients.find(c => c.email === a.user_email)?.name ?? a.user_email.split('@')[0];
-              return (
-                <div key={a.id} style={{ display: "flex", alignItems: "center", gap: "0.875rem", padding: "0.75rem 0.875rem", background: "var(--surface)", border: "1px solid oklch(0.65 0.14 65 / 0.2)", borderRadius: "9px" }}>
-                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "oklch(0.75 0.12 65)", flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: "0.8125rem", color: "var(--ink)", fontWeight: 400 }}>{a.message}</p>
-                    <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.125rem" }}>
-                      {clientName} · {new Date(a.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                  <button onClick={() => dismissAlarm(a.id)}
-                    style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: "0.75rem", fontFamily: "var(--font-ui), system-ui, sans-serif", padding: "0.25rem 0.5rem", borderRadius: "5px", transition: "color 150ms" }}
-                    onMouseEnter={e => e.currentTarget.style.color = 'var(--muted)'}
-                    onMouseLeave={e => e.currentTarget.style.color = 'var(--dim)'}>
-                    Dismiss
-                  </button>
+      {/* Alarm feed — always visible */}
+      <div>
+        {sectionLabel('Alarms', alarms.length > 0 ? alarms.length : undefined)}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+          {alarms.length === 0 ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.875rem", padding: "0.75rem 0.875rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "9px" }}>
+              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "oklch(0.7 0.15 145)", flexShrink: 0 }} />
+              <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>All clear · no active alarms</p>
+            </div>
+          ) : alarms.map(a => {
+            const clientName = clients.find(c => c.email === a.user_email)?.name ?? a.user_email.split('@')[0];
+            return (
+              <div key={a.id} style={{ display: "flex", alignItems: "center", gap: "0.875rem", padding: "0.75rem 0.875rem", background: "var(--surface)", border: "1px solid oklch(0.65 0.14 65 / 0.2)", borderRadius: "9px" }}>
+                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "oklch(0.75 0.12 65)", flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: "0.8125rem", color: "var(--ink)", fontWeight: 400 }}>{a.message}</p>
+                  <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.125rem" }}>
+                    {clientName} · {new Date(a.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </p>
                 </div>
-              );
-            })}
-          </div>
+                <button onClick={() => dismissAlarm(a.id)}
+                  style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: "0.75rem", fontFamily: "var(--font-ui), system-ui, sans-serif", padding: "0.25rem 0.5rem", borderRadius: "5px", transition: "color 150ms" }}
+                  onMouseEnter={e => e.currentTarget.style.color = 'var(--muted)'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'var(--dim)'}>
+                  Dismiss
+                </button>
+              </div>
+            );
+          })}
         </div>
-      )}
+      </div>
 
       {/* Protocols queue */}
       {pendingProtocols.length > 0 && (
