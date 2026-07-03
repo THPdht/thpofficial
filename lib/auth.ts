@@ -118,6 +118,7 @@ export type DiagnosticData = {
   suspended?: boolean;
   suspendedAt?: string;
   stripeCustomerId?: string;
+  freeMonthEarned?: boolean;
 };
 
 export type StoredUser = {

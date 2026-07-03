@@ -428,11 +428,9 @@ export default function AdminPage() {
                   />
                 </div>
 
-                {/* Right panel: tracker analysis — built in Phase 6 */}
-                <div style={{ flex: 1, overflowY: "auto", padding: "1.5rem 1.25rem", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <p style={{ fontSize: "0.875rem", color: "var(--dim)", fontWeight: 300, textAlign: "center" }}>
-                    Tracker analysis coming soon.
-                  </p>
+                {/* Right panel: CRM */}
+                <div style={{ flex: 1, overflowY: "auto", padding: "1.5rem 1.25rem" }}>
+                  <CrmPanel client={selected} />
                 </div>
               </motion.div>
             )}
@@ -1008,7 +1006,7 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
           style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem", height: "34px", padding: "0 0.875rem", background: "oklch(0.45 0.15 145 / 0.1)", border: "1px solid oklch(0.45 0.15 145 / 0.2)", borderRadius: "7px", color: "oklch(0.72 0.14 145)", textDecoration: "none", fontSize: "0.8125rem", fontWeight: 500, transition: "background 150ms", alignSelf: "flex-start" }}
           onMouseEnter={e => (e.currentTarget.style.background = "oklch(0.45 0.15 145 / 0.18)")}
           onMouseLeave={e => (e.currentTarget.style.background = "oklch(0.45 0.15 145 / 0.1)")}>
-          <WhatsAppIcon /> WhatsApp
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" /></svg> WhatsApp
         </a>
       </div>
 
@@ -1377,6 +1375,272 @@ function PromoteButton({ client, onSetStatus, onClientTypeChange }: { client: St
   );
 }
 
+// ─── CRM PANEL (right panel when client selected) ──────────────────────────
+
+function CrmPanel({ client }: { client: StoredUser }) {
+  const [analysis, setAnalysis] = useState<{ date: string; talking_points: string[]; flags: string[] } | null>(null);
+  const [trackers, setTrackers] = useState<{ date: string; vitals?: Record<string,unknown>; training?: Record<string,unknown>; circadian?: Record<string,unknown>; [k: string]: unknown }[]>([]);
+  const [expandedTracker, setExpandedTracker] = useState<string | null>(null);
+  const [bloodWork, setBloodWork] = useState<{ id: string; test_date: string | null; uploaded_at: string; markers: Record<string,{ value: number | null; unit: string; flag?: string | null }> | null } | null>(null);
+  const [userData, setUserData] = useState<{ deposit_paid: number | null; total_owed: number | null; telegram_username: string | null; last_login: string | null; last_tracker_date: string | null } | null>(null);
+  const [referralCount, setReferralCount] = useState(0);
+  const [notes, setNotes] = useState("");
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [telegramUsername, setTelegramUsername] = useState("");
+  const [pushMsg, setPushMsg] = useState("");
+  const [pushSending, setPushSending] = useState(false);
+  const [applyingFreeMonth, setApplyingFreeMonth] = useState(false);
+  const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    // Tracker analysis
+    supabase.from('tracker_analysis').select('date, talking_points, flags').eq('user_email', client.email)
+      .order('date', { ascending: false }).limit(1).maybeSingle()
+      .then(({ data }) => setAnalysis(data ?? null));
+
+    // Last 10 trackers
+    supabase.from('daily_trackers').select('*').eq('user_email', client.email)
+      .order('date', { ascending: false }).limit(10)
+      .then(({ data }) => setTrackers((data as typeof trackers) ?? []));
+
+    // Latest blood work
+    supabase.from('blood_work').select('id, test_date, uploaded_at, markers').eq('user_email', client.email)
+      .order('uploaded_at', { ascending: false }).limit(1).maybeSingle()
+      .then(({ data }) => setBloodWork(data as typeof bloodWork ?? null));
+
+    // User data (deposit, telegram, last login/tracker)
+    supabase.from('users').select('deposit_paid, total_owed, telegram_username, last_login, last_tracker_date')
+      .eq('email', client.email).maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setUserData(data as typeof userData);
+          setTelegramUsername(data.telegram_username ?? '');
+        }
+      });
+
+    // Referral count
+    supabase.from('referrals').select('id', { count: 'exact', head: true })
+      .eq('referrer_email', client.email).eq('status', 'paid')
+      .then(({ count }) => setReferralCount(count ?? 0));
+
+    // Private notes
+    supabase.from('applicant_notes').select('notes').eq('user_email', client.email).maybeSingle()
+      .then(({ data }) => setNotes(data?.notes ?? ''));
+  }, [client.email]);
+
+  const saveNotes = (val: string) => {
+    if (notesTimer.current) clearTimeout(notesTimer.current);
+    notesTimer.current = setTimeout(async () => {
+      setNotesSaving(true);
+      await supabase.from('applicant_notes').upsert({ user_email: client.email, notes: val, updated_at: new Date().toISOString() });
+      setNotesSaving(false);
+    }, 800);
+  };
+
+  const saveTelegram = async () => {
+    await supabase.from('users').update({ telegram_username: telegramUsername }).eq('email', client.email);
+  };
+
+  const sendPush = async () => {
+    if (!pushMsg.trim()) return;
+    setPushSending(true);
+    await fetch('/api/push-send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userEmail: client.email, adminPw: ADMIN_PASSWORD, title: 'THP', body: pushMsg.trim() }),
+    }).catch(() => {});
+    setPushMsg('');
+    setPushSending(false);
+  };
+
+  const applyFreeMonth = async () => {
+    setApplyingFreeMonth(true);
+    await supabase.from('users').update({ diagnostic_data: { ...(client.diagnosticData ?? {}), freeMonthEarned: true } }).eq('email', client.email);
+    setApplyingFreeMonth(false);
+  };
+
+  const firstName = client.name.split(' ')[0];
+
+  const sectionLabel = (text: string) => (
+    <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "0.75rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{text}</p>
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", maxWidth: "600px" }}>
+
+      {/* Talking points + flags */}
+      {analysis && (
+        <div>
+          {sectionLabel(`Analysis · ${analysis.date}`)}
+          {analysis.talking_points?.length > 0 && (
+            <div style={{ marginBottom: "0.875rem" }}>
+              {analysis.talking_points.map((pt, i) => (
+                <div key={i} style={{ display: "flex", gap: "0.5rem", padding: "0.4rem 0", borderBottom: "1px solid var(--border-subtle)" }}>
+                  <span style={{ color: "var(--primary)", fontFamily: "var(--font-mono), monospace", fontSize: "0.7rem", flexShrink: 0, paddingTop: "1px" }}>→</span>
+                  <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 300, lineHeight: 1.5 }}>{pt}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {analysis.flags?.length > 0 && (
+            <div style={{ padding: "0.875rem 1rem", background: "oklch(0.65 0.14 65 / 0.08)", border: "1px solid oklch(0.65 0.14 65 / 0.2)", borderRadius: "9px" }}>
+              <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "oklch(0.75 0.12 65)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.5rem" }}>Flags</p>
+              {analysis.flags.map((f, i) => (
+                <p key={i} style={{ fontSize: "0.8125rem", color: "oklch(0.75 0.12 65)", fontWeight: 300, lineHeight: 1.5, marginBottom: i < analysis.flags.length - 1 ? "0.25rem" : 0 }}>⚠ {f}</p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tracker history */}
+      {trackers.length > 0 && (
+        <div>
+          {sectionLabel('Recent trackers')}
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+            {trackers.map(t => (
+              <div key={t.date as string}>
+                <button onClick={() => setExpandedTracker(expandedTracker === t.date as string ? null : t.date as string)}
+                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.625rem 0.875rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", cursor: "pointer", textAlign: "left", transition: "border-color 150ms", fontFamily: "var(--font-ui), system-ui, sans-serif" }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = "var(--border)"}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border-subtle)"}>
+                  <span style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 400 }}>{t.date as string}</span>
+                  <span style={{ fontSize: "0.75rem", color: "var(--dim)" }}>{expandedTracker === t.date as string ? '▲' : '▼'}</span>
+                </button>
+                {expandedTracker === t.date as string && (
+                  <div style={{ padding: "0.875rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderTop: "none", borderRadius: "0 0 8px 8px", fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.7, fontFamily: "var(--font-mono), monospace" }}>
+                    {(['circadian','training','nutrition','vitals','psychological','business'] as const).map(sec => {
+                      const data = t[sec] as Record<string,unknown> | undefined;
+                      if (!data || Object.keys(data).length === 0) return null;
+                      return (
+                        <div key={sec} style={{ marginBottom: "0.625rem" }}>
+                          <span style={{ color: "var(--primary)", fontWeight: 600, textTransform: "uppercase", fontSize: "0.65rem", letterSpacing: "0.08em" }}>{sec}</span>
+                          <div style={{ marginTop: "0.25rem" }}>
+                            {Object.entries(data).map(([k, v]) => (
+                              <div key={k}><span style={{ color: "var(--dim)" }}>{k}:</span> {String(v)}</div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Blood work */}
+      {bloodWork?.markers && (
+        <div>
+          {sectionLabel(`Blood work · ${bloodWork.test_date ?? new Date(bloodWork.uploaded_at).toLocaleDateString('en-GB')}`)}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "0.5rem" }}>
+            {Object.entries(bloodWork.markers).slice(0, 12).map(([key, m]) => (
+              <div key={key} style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: `1px solid ${m.flag && m.flag !== 'normal' ? 'oklch(0.65 0.14 65 / 0.35)' : 'var(--border-subtle)'}`, borderRadius: "8px" }}>
+                <p style={{ fontSize: "0.65rem", color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.25rem" }}>{key.replace(/_/g,' ')}</p>
+                <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: m.flag && m.flag !== 'normal' ? 'oklch(0.75 0.12 65)' : 'var(--ink)', fontFamily: "var(--font-mono), monospace" }}>
+                  {m.value ?? '—'} <span style={{ fontSize: "0.65rem", fontWeight: 300, color: "var(--dim)" }}>{m.unit}</span>
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Payment + referrals */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+        {userData && (
+          <div style={{ padding: "1rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px" }}>
+            <p style={{ fontSize: "0.65rem", color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.5rem" }}>Payment</p>
+            {userData.deposit_paid ? (
+              <>
+                <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 500 }}>£{userData.deposit_paid} deposit paid</p>
+                {userData.total_owed && userData.deposit_paid < userData.total_owed && (
+                  <p style={{ fontSize: "0.75rem", color: "oklch(0.75 0.12 65)", fontWeight: 300, marginTop: "0.25rem" }}>£{userData.total_owed - userData.deposit_paid} balance due</p>
+                )}
+              </>
+            ) : (
+              <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>No deposit recorded</p>
+            )}
+          </div>
+        )}
+        <div style={{ padding: "1rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px" }}>
+          <p style={{ fontSize: "0.65rem", color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.5rem" }}>Referrals</p>
+          <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 500 }}>{referralCount} / 3 paying</p>
+          {referralCount >= 3 && (
+            <button onClick={applyFreeMonth} disabled={applyingFreeMonth || !!client.diagnosticData?.freeMonthEarned}
+              style={{ marginTop: "0.5rem", height: "28px", padding: "0 0.75rem", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: client.diagnosticData?.freeMonthEarned ? 0.5 : 1 }}>
+              {client.diagnosticData?.freeMonthEarned ? 'Applied' : 'Apply Free Month'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Telegram */}
+      <div>
+        {sectionLabel('Telegram')}
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <span style={{ fontSize: "0.875rem", color: "var(--dim)" }}>@</span>
+          <input value={telegramUsername} onChange={e => setTelegramUsername(e.target.value)}
+            placeholder="username"
+            style={{ flex: 1, height: "36px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none" }}
+            onFocus={e => e.target.style.borderColor = 'var(--primary)'}
+            onBlur={e => { e.target.style.borderColor = 'var(--border)'; saveTelegram(); }}
+          />
+          {telegramUsername && (
+            <a href={`https://t.me/${telegramUsername}`} target="_blank" rel="noopener noreferrer"
+              style={{ height: "36px", padding: "0 0.875rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: "var(--muted)", fontSize: "0.8125rem", textDecoration: "none", display: "inline-flex", alignItems: "center", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "border-color 150ms" }}
+              onMouseEnter={e => (e.currentTarget as HTMLAnchorElement).style.borderColor = 'var(--primary)'}
+              onMouseLeave={e => (e.currentTarget as HTMLAnchorElement).style.borderColor = 'var(--border)'}>
+              Open
+            </a>
+          )}
+        </div>
+      </div>
+
+      {/* Private notes */}
+      <div>
+        {sectionLabel(`Private notes${notesSaving ? ' · saving…' : ''}`)}
+        <textarea value={notes}
+          onChange={e => { setNotes(e.target.value); saveNotes(e.target.value); }} rows={4}
+          placeholder={`Notes about ${firstName} — only you see this`}
+          style={{ width: "100%", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", padding: "0.75rem 0.875rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none", resize: "vertical", lineHeight: 1.6, boxSizing: "border-box" }}
+          onFocus={e => e.target.style.borderColor = 'var(--primary)'}
+          onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+      </div>
+
+      {/* Manual push */}
+      <div>
+        {sectionLabel('Send push notification')}
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <input value={pushMsg} onChange={e => setPushMsg(e.target.value)}
+            placeholder={`Message to ${firstName}…`}
+            style={{ flex: 1, height: "36px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none" }}
+            onFocus={e => e.target.style.borderColor = 'var(--primary)'}
+            onBlur={e => e.target.style.borderColor = 'var(--border)'}
+            onKeyDown={e => { if (e.key === 'Enter') sendPush(); }} />
+          <button onClick={sendPush} disabled={pushSending || !pushMsg.trim()}
+            style={{ height: "36px", padding: "0 1rem", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "7px", fontSize: "0.8125rem", fontWeight: 500, cursor: pushSending || !pushMsg.trim() ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: pushSending || !pushMsg.trim() ? 0.6 : 1 }}>
+            {pushSending ? '…' : 'Send'}
+          </button>
+        </div>
+      </div>
+
+      {/* Activity */}
+      {userData && (
+        <div style={{ padding: "0.75rem 1rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "9px" }}>
+          <p style={{ fontSize: "0.65rem", color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.375rem" }}>Activity</p>
+          <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap" }}>
+            {userData.last_login && <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300 }}>Last login: {new Date(userData.last_login).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</p>}
+            {userData.last_tracker_date && <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300 }}>Last tracker: {userData.last_tracker_date}</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ClientRow({ u, selected, unreadCounts, onSelect }: { u: StoredUser; selected: StoredUser | null; unreadCounts: Record<string, number>; onSelect: (u: StoredUser) => void }) {
   const unread = unreadCounts[u.email] ?? 0;
   const isSelected = selected?.email === u.email;
@@ -1440,45 +1704,188 @@ function NotionIcon() {
 function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect: (u: StoredUser) => void }) {
   const today = new Date().toISOString().split('T')[0];
   const active = clients.filter(c => c.status === 'active');
-  const checkedInToday = active.filter(c => c.lastCheckIn === today);
-  const notCheckedIn = active.filter(c => c.lastCheckIn !== today);
   const pending = clients.filter(c => c.status === 'pending' || c.status === 'new');
+  const paying1on1 = active.filter(c => c.diagnosticData?.clientType !== 'skool');
 
-  const totalRevenue = clients.reduce((sum, c) => {
-    const payments = c.diagnosticData?.payments ?? [];
-    return sum + payments.reduce((s: number, p: Payment) => s + (p.amount || 0), 0);
-  }, 0);
+  const [alarms, setAlarms] = useState<{ id: string; user_email: string; type: string; message: string; created_at: string }[]>([]);
+  const [pendingProtocols, setPendingProtocols] = useState<{ id: string; user_email: string; title: string; tracker_count: number | null; month_start: string | null; content?: { text?: string } }[]>([]);
+  const [unsentDiagnoses, setUnsentDiagnoses] = useState<{ id: string; user_email: string; title: string; created_at: string }[]>([]);
+  const [editingProtocol, setEditingProtocol] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [sending, setSending] = useState<string | null>(null);
+  const [revenue, setRevenue] = useState<{ mrr: number; totalRevenue: number } | null>(null);
 
-  const statCard = (label: string, value: string | number, sub?: string, color?: string) => (
-    <div style={{ padding: "1rem 1.25rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px" }}>
-      <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.375rem" }}>{label}</p>
-      <p style={{ fontSize: "1.5rem", fontWeight: 500, color: color ?? "var(--ink)", lineHeight: 1, fontFamily: "var(--font-display), Georgia, serif" }}>{value}</p>
-      {sub && <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.25rem" }}>{sub}</p>}
-    </div>
+  useEffect(() => {
+    // Alarms
+    supabase.from('alarms').select('id, user_email, type, message, created_at')
+      .is('dismissed_at', null).order('created_at', { ascending: false }).limit(20)
+      .then(({ data }) => setAlarms((data as typeof alarms) ?? []));
+
+    // Pending protocols
+    supabase.from('protocols').select('id, user_email, title, tracker_count, month_start, content')
+      .eq('status', 'pending_review').order('created_at', { ascending: false })
+      .then(({ data }) => setPendingProtocols((data as typeof pendingProtocols) ?? []));
+
+    // Unsent diagnoses (published=false)
+    supabase.from('diagnostics').select('id, user_email, title, created_at')
+      .eq('published', false).order('created_at', { ascending: false })
+      .then(({ data }) => setUnsentDiagnoses((data as typeof unsentDiagnoses) ?? []));
+
+    // Revenue
+    fetch('/api/revenue').then(r => r.json()).then(d => setRevenue(d)).catch(() => {});
+  }, []);
+
+  const dismissAlarm = async (id: string) => {
+    await supabase.from('alarms').update({ dismissed_at: new Date().toISOString() }).eq('id', id);
+    setAlarms(prev => prev.filter(a => a.id !== id));
+  };
+
+  const sendProtocol = async (id: string) => {
+    setSending(id);
+    if (editingProtocol === id) {
+      // Save edits first
+      await supabase.from('protocols').update({ content: { text: editText } }).eq('id', id);
+      setEditingProtocol(null);
+    }
+    await fetch('/api/protocol-send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ protocolId: id }) });
+    setPendingProtocols(prev => prev.filter(p => p.id !== id));
+    setSending(null);
+  };
+
+  const sendDiagnosis = async (id: string) => {
+    setSending(id);
+    await fetch('/api/diagnosis-send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ diagnosisId: id }) });
+    setUnsentDiagnoses(prev => prev.filter(d => d.id !== id));
+    setSending(null);
+  };
+
+  const sectionLabel = (text: string, count?: number) => (
+    <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "0.75rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+      {text}{count !== undefined && count > 0 ? <span style={{ fontWeight: 300, marginLeft: "0.375rem" }}>{count}</span> : null}
+    </p>
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem", maxWidth: "860px" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "860px" }}>
+
+      {/* Top stats */}
       <div>
-        <p style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.875rem" }}>Overview</p>
+        {sectionLabel('Overview')}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
-          {statCard("Active clients", active.length)}
-          {statCard("Checked in today", checkedInToday.length, `of ${active.length} active`, checkedInToday.length === active.length ? "oklch(0.7 0.15 145)" : "var(--ink)")}
-          {statCard("Pending review", pending.length, pending.length > 0 ? "need protocols" : "all set")}
-          {statCard("Total revenue", `£${totalRevenue}`, "all clients combined")}
+          {[
+            { label: "MRR", value: revenue ? `£${Math.round(revenue.mrr)}` : '—', sub: "this calendar month" },
+            { label: "Active 1:1", value: paying1on1.length, sub: "paying clients" },
+            { label: "Applicants", value: pending.length, sub: pending.length > 0 ? "need attention" : "all clear" },
+            { label: "Total Revenue", value: revenue ? `£${Math.round(revenue.totalRevenue)}` : '—', sub: "all time" },
+          ].map(({ label, value, sub }) => (
+            <div key={label} style={{ padding: "1rem 1.25rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px" }}>
+              <p style={{ fontSize: "0.65rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.375rem" }}>{label}</p>
+              <p style={{ fontSize: "1.5rem", fontWeight: 500, color: "var(--ink)", lineHeight: 1, fontFamily: "var(--font-display), Georgia, serif" }}>{value}</p>
+              {sub && <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.25rem" }}>{sub}</p>}
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Today's check-in status */}
+      {/* Alarm feed */}
+      {alarms.length > 0 && (
+        <div>
+          {sectionLabel('Alarms', alarms.length)}
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+            {alarms.map(a => {
+              const clientName = clients.find(c => c.email === a.user_email)?.name ?? a.user_email.split('@')[0];
+              return (
+                <div key={a.id} style={{ display: "flex", alignItems: "center", gap: "0.875rem", padding: "0.75rem 0.875rem", background: "var(--surface)", border: "1px solid oklch(0.65 0.14 65 / 0.2)", borderRadius: "9px" }}>
+                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "oklch(0.75 0.12 65)", flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: "0.8125rem", color: "var(--ink)", fontWeight: 400 }}>{a.message}</p>
+                    <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.125rem" }}>
+                      {clientName} · {new Date(a.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                  <button onClick={() => dismissAlarm(a.id)}
+                    style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: "0.75rem", fontFamily: "var(--font-ui), system-ui, sans-serif", padding: "0.25rem 0.5rem", borderRadius: "5px", transition: "color 150ms" }}
+                    onMouseEnter={e => e.currentTarget.style.color = 'var(--muted)'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'var(--dim)'}>
+                    Dismiss
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Protocols queue */}
+      {pendingProtocols.length > 0 && (
+        <div>
+          {sectionLabel('Protocols to send', pendingProtocols.length)}
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            {pendingProtocols.map(p => {
+              const clientName = clients.find(c => c.email === p.user_email)?.name ?? p.user_email;
+              const isEditing = editingProtocol === p.id;
+              return (
+                <div key={p.id} style={{ padding: "1rem 1.25rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px" }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", marginBottom: isEditing ? "0.875rem" : 0 }}>
+                    <div>
+                      <p style={{ fontSize: "0.9rem", fontWeight: 500, color: "var(--ink)", marginBottom: "0.25rem" }}>{clientName}</p>
+                      <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>
+                        {p.month_start ?? 'Protocol'} · {p.tracker_count ?? 0}/30 trackers
+                      </p>
+                    </div>
+                    <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
+                      <button onClick={() => { setEditingProtocol(isEditing ? null : p.id); setEditText(p.content?.text ?? ''); }}
+                        style={{ height: "32px", padding: "0 0.75rem", background: "none", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--muted)", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                        {isEditing ? 'Collapse' : 'Review'}
+                      </button>
+                      <button onClick={() => sendProtocol(p.id)} disabled={sending === p.id}
+                        style={{ height: "32px", padding: "0 0.875rem", background: "var(--primary)", border: "none", borderRadius: "6px", color: "#fff", fontSize: "0.75rem", fontWeight: 500, cursor: sending === p.id ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: sending === p.id ? 0.7 : 1 }}>
+                        {sending === p.id ? '…' : 'Send'}
+                      </button>
+                    </div>
+                  </div>
+                  {isEditing && (
+                    <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={12}
+                      style={{ width: "100%", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0.75rem 0.875rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none", resize: "vertical", lineHeight: 1.7, boxSizing: "border-box" }} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Diagnosis queue */}
+      {unsentDiagnoses.length > 0 && (
+        <div>
+          {sectionLabel('Diagnoses to send', unsentDiagnoses.length)}
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            {unsentDiagnoses.map(d => {
+              const clientName = clients.find(c => c.email === d.user_email)?.name ?? d.user_email;
+              return (
+                <div key={d.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.875rem 1.125rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "9px" }}>
+                  <div>
+                    <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)", marginBottom: "0.125rem" }}>{clientName}</p>
+                    <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>{d.title} · {new Date(d.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</p>
+                  </div>
+                  <button onClick={() => sendDiagnosis(d.id)} disabled={sending === d.id}
+                    style={{ height: "32px", padding: "0 0.875rem", background: "var(--primary)", border: "none", borderRadius: "6px", color: "#fff", fontSize: "0.75rem", fontWeight: 500, cursor: sending === d.id ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: sending === d.id ? 0.7 : 1 }}>
+                    {sending === d.id ? '…' : 'Send to client'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Active clients today */}
       {active.length > 0 && (
         <div>
-          <p style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.75rem" }}>Today</p>
+          {sectionLabel('Active clients')}
           <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
             {active.map(c => {
               const checked = c.lastCheckIn === today;
-              const payments = c.diagnosticData?.payments ?? [];
-              const totalPaid = payments.reduce((s: number, p: Payment) => s + (p.amount || 0), 0);
-              const lastPayment = payments.length > 0 ? payments[payments.length - 1] : null;
               return (
                 <button key={c.email} onClick={() => onSelect(c)}
                   style={{ display: "flex", alignItems: "center", gap: "0.875rem", padding: "0.75rem 0.875rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "9px", cursor: "pointer", textAlign: "left", transition: "border-color 150ms", width: "100%" }}
@@ -1488,12 +1895,8 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)" }}>{c.name}</p>
                     <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>
-                      {checked ? `Checked in · ${c.streak} day streak` : c.lastCheckIn ? `Last check-in: ${new Date(c.lastCheckIn + 'T12:00:00').toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}` : "No check-ins yet"}
+                      {checked ? `Tracked today · ${c.streak} day streak` : c.lastCheckIn ? `Last tracker: ${new Date(c.lastCheckIn + 'T12:00:00').toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}` : "No trackers yet"}
                     </p>
-                  </div>
-                  <div style={{ textAlign: "right", flexShrink: 0 }}>
-                    {totalPaid > 0 && <p style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--muted)" }}>£{totalPaid}</p>}
-                    {lastPayment && <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300 }}>{lastPayment.type}</p>}
                   </div>
                 </button>
               );
@@ -1505,14 +1908,14 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
       {/* Pending clients */}
       {pending.length > 0 && (
         <div>
-          <p style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.75rem" }}>Needs attention</p>
+          {sectionLabel('Needs attention', pending.length)}
           <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
             {pending.map(c => (
               <button key={c.email} onClick={() => onSelect(c)}
                 style={{ display: "flex", alignItems: "center", gap: "0.875rem", padding: "0.75rem 0.875rem", background: "var(--surface)", border: "1px solid oklch(0.60 0.18 165 / 0.2)", borderRadius: "9px", cursor: "pointer", textAlign: "left", transition: "border-color 150ms", width: "100%" }}
                 onMouseEnter={e => e.currentTarget.style.borderColor = "oklch(0.60 0.18 165 / 0.4)"}
                 onMouseLeave={e => e.currentTarget.style.borderColor = "oklch(0.60 0.18 165 / 0.2)"}>
-                <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--accent)", animation: "pulse 2s ease infinite", flexShrink: 0 }} />
+                <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--accent)", flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
                   <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)" }}>{c.name}</p>
                   <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>
@@ -1524,126 +1927,7 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
           </div>
         </div>
       )}
-
-      {/* Payment summary */}
-      {clients.some(c => (c.diagnosticData?.payments ?? []).length > 0) && (
-        <div>
-          <p style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.75rem" }}>Payments</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-            {clients.filter(c => (c.diagnosticData?.payments ?? []).length > 0).map(c => {
-              const payments: Payment[] = c.diagnosticData?.payments ?? [];
-              const total = payments.reduce((s, p) => s + (p.amount || 0), 0);
-              const last = payments[payments.length - 1];
-              return (
-                <button key={c.email} onClick={() => onSelect(c)}
-                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 0.875rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "9px", cursor: "pointer", transition: "border-color 150ms", width: "100%" }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = "var(--border)"}
-                  onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border-subtle)"}>
-                  <div>
-                    <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)" }}>{c.name}</p>
-                    <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>
-                      Last: £{last.amount} {last.type} · {new Date(last.date + 'T12:00:00').toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                    </p>
-                  </div>
-                  <p style={{ fontSize: "1rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-display), Georgia, serif" }}>£{total}</p>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-function WhatsAppIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-    </svg>
-  );
-}
-
-// ─── Voice Note Player (matches client dashboard UI) ─────────────────────────
-
-const WAVEFORM_BARS = [0.4, 0.7, 0.5, 1.0, 0.6, 0.8, 0.3, 0.9, 0.5, 0.7, 0.4, 0.6, 0.8, 0.5, 0.9, 0.4, 0.7, 0.3, 0.6, 0.8];
-
-function VoiceNotePlayer({ url, isAdmin, transcript }: { url: string; isAdmin: boolean; transcript?: string }) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [duration, setDuration] = useState(0);
-  const [elapsed, setElapsed] = useState(0);
-  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const togglePlay = () => {
-    const a = audioRef.current;
-    if (!a) return;
-    if (playing) { a.pause(); } else { a.play(); }
-  };
-
-  const fmt = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${m}:${sec.toString().padStart(2, "0")}`;
-  };
-
-  useEffect(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    const onPlay = () => { setPlaying(true); tickRef.current = setInterval(() => setElapsed(a.currentTime), 100); };
-    const onPause = () => { setPlaying(false); if (tickRef.current) clearInterval(tickRef.current); };
-    const onEnded = () => { setPlaying(false); setElapsed(0); if (tickRef.current) clearInterval(tickRef.current); };
-    const onMeta = () => setDuration(isFinite(a.duration) ? a.duration : 0);
-    a.addEventListener("play", onPlay);
-    a.addEventListener("pause", onPause);
-    a.addEventListener("ended", onEnded);
-    a.addEventListener("loadedmetadata", onMeta);
-    return () => {
-      a.removeEventListener("play", onPlay);
-      a.removeEventListener("pause", onPause);
-      a.removeEventListener("ended", onEnded);
-      a.removeEventListener("loadedmetadata", onMeta);
-      if (tickRef.current) clearInterval(tickRef.current);
-    };
-  }, []);
-
-  const progress = duration > 0 ? elapsed / duration : 0;
-  const accent = isAdmin ? "var(--color-red)" : "oklch(0.70 0.20 220)";
-  const bg = isAdmin ? "oklch(0.60 0.18 165 / 0.12)" : "oklch(0.15 0.02 220 / 0.5)";
-
-  return (
-    <div style={{ marginTop: "0.375rem" }}>
-      <audio ref={audioRef} src={url} preload="metadata" style={{ display: "none" }} />
-      <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", padding: "0.5rem 0.75rem", background: bg, borderRadius: "10px", minWidth: "180px", maxWidth: "240px" }}>
-        <button onClick={togglePlay}
-          style={{ width: "32px", height: "32px", borderRadius: "50%", flexShrink: 0, background: accent, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "opacity 150ms" }}
-          onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = "0.8"}
-          onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = "1"}>
-          {playing
-            ? <svg width="10" height="10" viewBox="0 0 10 10" fill="#ffffff" aria-hidden><rect x="1" y="1" width="3" height="8" rx="1"/><rect x="6" y="1" width="3" height="8" rx="1"/></svg>
-            : <svg width="10" height="10" viewBox="0 0 10 10" fill="#ffffff" aria-hidden style={{ marginLeft: "1px" }}><polygon points="2,1 9,5 2,9"/></svg>
-          }
-        </button>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: "2px", height: "22px" }}>
-            {WAVEFORM_BARS.map((h, i) => (
-              <div key={i} style={{ width: "2.5px", borderRadius: "2px", flexShrink: 0, height: `${h * 100}%`, background: (i / WAVEFORM_BARS.length) <= progress ? accent : (isAdmin ? "oklch(0.60 0.18 165 / 0.35)" : "oklch(0.97 0.005 220 / 0.25)"), transition: "background 80ms" }} />
-            ))}
-          </div>
-          <span style={{ fontSize: "0.65rem", fontFamily: "var(--font-mono), monospace", color: isAdmin ? "var(--dim)" : "oklch(0.97 0.005 220 / 0.55)", fontWeight: 300 }}>
-            {playing || elapsed > 0 ? fmt(elapsed) : duration > 0 ? fmt(duration) : "0:00"}
-          </span>
-        </div>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={isAdmin ? "var(--dim)" : "oklch(0.97 0.005 220 / 0.4)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-        </svg>
-      </div>
-      {transcript && (
-        <p style={{ marginTop: "0.375rem", fontSize: "0.8rem", color: isAdmin ? "var(--muted)" : "oklch(0.97 0.005 220 / 0.7)", fontWeight: 300, lineHeight: 1.5, fontStyle: "italic", maxWidth: "240px" }}>
-          &ldquo;{transcript}&rdquo;
-        </p>
-      )}
-    </div>
-  );
-}
