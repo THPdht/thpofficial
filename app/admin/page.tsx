@@ -1394,14 +1394,15 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
     setGenError("");
     setDiagGenError("");
 
-    // Tracker analysis — load all so each tracker row can show its own analysis
-    supabase.from('tracker_analysis').select('date, talking_points, flags').eq('user_email', client.email)
-      .order('date', { ascending: false }).limit(20)
-      .then(({ data }) => {
+    // Tracker analysis — via API (bypasses RLS)
+    fetch(`/api/tracker-analysis?email=${encodeURIComponent(client.email)}&limit=20`)
+      .then(r => r.json())
+      .then(d => {
         const map: Record<string, { date: string; talking_points: string[]; flags: string[] }> = {};
-        (data ?? []).forEach(a => { map[a.date] = a; });
+        (d.analysis ?? []).forEach((a: { date: string; talking_points: string[]; flags: string[] }) => { map[a.date] = a; });
         setAnalysisMap(map);
-      });
+      })
+      .catch(() => {});
 
     // Last 10 trackers — via API (bypasses RLS)
     fetch(`/api/tracker-history?email=${encodeURIComponent(client.email)}&limit=10`)
