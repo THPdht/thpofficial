@@ -93,39 +93,44 @@ ${prevFlagsText}
 
 ${trackerText}
 
-Your job: give the coach exactly what he needs to know in 10 seconds before talking to this client.
+Your job: give the coach 3 structured speaking notes — concise, clinical, ready to use in a call.
 
-Output as JSON with two arrays:
-- "talking_points": 3-5 bullets, short and punchy (max 12 words each). What's worth mentioning today — wins, drops, patterns.
-- "flags": 1-3 bullets for things that need follow-up — broken promises, declining trends, missing data, inconsistencies vs baseline. If nothing flagged, return empty array.
+Output as JSON with these keys:
+- "section1": 3-4 sentences on TODAY's tracker — what's notable, wins, drops, specific readings worth mentioning.
+- "section2": 3-4 sentences on PATTERNS across the last 5 trackers — trends, consistency, anything improving or declining.
+- "section3": 3-4 sentences tying this back to the CLIENT'S DIAGNOSIS — how today fits their clinical picture, what's on track, what's drifting.
+- "flags": array of 1-3 SHORT bullets for urgent follow-ups (broken habits, declining trends, missing data). Empty array if nothing critical.
 
-No fluff. No filler. No summaries. Just signal.
+No fluff. No filler. Speak as if briefing the coach 10 seconds before the call.
 JSON only, no markdown.`;
 
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 400,
+      max_tokens: 600,
       messages: [{ role: "user", content: prompt }],
     });
 
     const raw = response.content[0].type === "text" ? response.content[0].text.trim() : "{}";
-    let parsed: { talking_points?: string[]; flags?: string[] };
+    let parsed: { section1?: string; section2?: string; section3?: string; flags?: string[] };
     try {
       parsed = JSON.parse(raw);
     } catch {
-      parsed = { talking_points: ["Analysis unavailable"], flags: [] };
+      parsed = { section1: "Analysis unavailable", section2: "", section3: "", flags: [] };
     }
+
+    // Store sections as talking_points array (3 items) — compatible with existing schema
+    const talkingPoints = [parsed.section1 ?? "", parsed.section2 ?? "", parsed.section3 ?? ""];
 
     // Upsert into tracker_analysis
     await supabase.from("tracker_analysis").upsert({
       user_email: userEmail,
       date,
-      talking_points: parsed.talking_points ?? [],
+      talking_points: talkingPoints,
       flags: parsed.flags ?? [],
       generated_at: new Date().toISOString(),
     }, { onConflict: "user_email,date" });
 
-    return new Response(JSON.stringify({ success: true, talking_points: parsed.talking_points, flags: parsed.flags }), {
+    return new Response(JSON.stringify({ success: true, talking_points: talkingPoints, flags: parsed.flags }), {
       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
     });
   } catch (err) {

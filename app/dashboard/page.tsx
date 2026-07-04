@@ -1129,8 +1129,16 @@ function BloodWorkTab({ user }: { user: StoredUser }) {
           const def = MARKER_DEFAULTS[selectedMarker];
           const latestEntry = entries[0];
           const refRange = parseRefRange(latestEntry?.markers?.[selectedMarker]?.reference_range);
-          if (chartData.length < 2) {
-            return <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>Upload at least 2 blood tests to see trends.</p>;
+          if (chartData.length === 0) {
+            return (
+              <div style={{ height: "220px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.875rem", borderRadius: "8px", border: "1px dashed var(--border-subtle)" }}>
+                <p style={{ fontSize: "0.875rem", color: "var(--dim)", fontWeight: 300, textAlign: "center" }}>No blood work uploaded yet.</p>
+                <button onClick={() => fileRef.current?.click()}
+                  style={{ padding: "0.5rem 1.25rem", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.875rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                  Upload results
+                </button>
+              </div>
+            );
           }
           return (
             <>
@@ -1153,97 +1161,6 @@ function BloodWorkTab({ user }: { user: StoredUser }) {
         })()}
       </div>
 
-      <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--dim)", textTransform: "uppercase", marginBottom: "0.875rem", fontFamily: "var(--font-mono), monospace" }}>
-        {latest?.test_date ? `Latest — ${latest.test_date}` : latest ? `Latest — ${new Date(latest.uploaded_at).toLocaleDateString("en-GB")}` : "Awaiting results"}
-      </p>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "0.625rem", marginBottom: "2rem" }}>
-        {Object.entries(MARKER_DEFAULTS).map(([key, def]) => {
-          const m = latest?.markers?.[key];
-          const prevVal = previous?.markers?.[key]?.value ?? undefined;
-          const delta = prevVal != null && m?.value != null ? m.value - prevVal : null;
-          const flagColor = m?.flag === "high" ? "oklch(0.75 0.16 25)" : m?.flag === "low" ? "oklch(0.70 0.12 260)" : "#c8102e";
-          const hasData = m?.value != null;
-          const isExpanded = expandedMarker === key;
-
-          // Build time-series for sparkline (oldest → newest, values only)
-          const history = entries
-            .map(e => ({ date: e.test_date ?? new Date(e.uploaded_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }), val: e.markers?.[key]?.value ?? null }))
-            .filter((p): p is { date: string; val: number } => p.val !== null)
-            .reverse();
-
-          return (
-            <div key={key}
-              onClick={() => setExpandedMarker(isExpanded ? null : key)}
-              style={{ padding: "0.875rem 1rem", background: isExpanded ? "var(--surface-hover, #1a1a1a)" : "var(--surface)", border: `1px solid ${isExpanded ? "#c8102e44" : m?.flag && m.flag !== "normal" ? flagColor + "44" : "var(--border)"}`, borderRadius: "10px", cursor: "pointer", transition: "border-color 0.15s" }}>
-              <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "0.375rem", fontFamily: "var(--font-mono), monospace" }}>{def.label}</p>
-              <p style={{ fontSize: "1.125rem", fontWeight: 600, color: hasData && m?.flag && m.flag !== "normal" ? flagColor : hasData ? "var(--ink)" : "var(--muted)", fontFamily: "var(--font-mono), monospace" }}>
-                {hasData ? m!.value : "—"} <span style={{ fontSize: "0.7rem", fontWeight: 400, color: "var(--dim)" }}>{hasData ? m!.unit : def.unit}</span>
-              </p>
-              {delta !== null && (
-                <p style={{ fontSize: "0.7rem", color: delta > 0 ? "oklch(0.65 0.15 145)" : "oklch(0.70 0.15 25)", marginTop: "0.25rem" }}>
-                  {delta > 0 ? "↑" : "↓"} {Math.abs(delta).toFixed(1)}
-                </p>
-              )}
-              {/* Sparkline — only when ≥2 data points */}
-              {history.length >= 2 && (
-                <div style={{ marginTop: "0.5rem", height: "32px" }}>
-                  <ResponsiveContainer width="100%" height={32}>
-                    <LineChart data={history} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
-                      <Line type="monotone" dataKey="val" stroke={m?.flag && m.flag !== "normal" ? flagColor : "#c8102e"} strokeWidth={1.5} dot={false} isAnimationActive={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-              {m?.reference_range && <p style={{ fontSize: "0.65rem", color: "var(--dim)", marginTop: "0.25rem", fontWeight: 300 }}>ref: {m.reference_range}</p>}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Expanded marker chart */}
-      {expandedMarker && (() => {
-        const def = MARKER_DEFAULTS[expandedMarker];
-        const history = entries
-          .map(e => ({ date: e.test_date ?? new Date(e.uploaded_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }), val: e.markers?.[expandedMarker]?.value ?? null, flag: e.markers?.[expandedMarker]?.flag }))
-          .filter((p): p is { date: string; val: number; flag: "high" | "low" | "normal" | null | undefined } => p.val !== null)
-          .reverse();
-        const latestM = latest?.markers?.[expandedMarker];
-        const refRange = parseRefRange(latestM?.reference_range);
-        const flagColor = latestM?.flag === "high" ? "oklch(0.75 0.16 25)" : latestM?.flag === "low" ? "oklch(0.70 0.12 260)" : "#c8102e";
-
-        return (
-          <div style={{ marginBottom: "2rem", padding: "1.25rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-              <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--ink)", fontFamily: "var(--font-mono), monospace" }}>{def.label} <span style={{ fontWeight: 400, color: "var(--dim)" }}>({def.unit})</span></p>
-              <button onClick={() => setExpandedMarker(null)} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: "1rem", lineHeight: 1 }}>✕</button>
-            </div>
-            {history.length < 2 ? (
-              <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>Need at least 2 uploads to show a trend.</p>
-            ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={history} margin={{ top: 10, right: 16, bottom: 0, left: 0 }}>
-                  {refRange && (
-                    <ReferenceArea y1={refRange[0]} y2={refRange[1]} fill="oklch(0.35 0.08 145)" fillOpacity={0.15} />
-                  )}
-                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: "var(--dim)", fontFamily: "var(--font-mono), monospace" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: "var(--dim)", fontFamily: "var(--font-mono), monospace" }} axisLine={false} tickLine={false} width={48} />
-                  <Tooltip
-                    contentStyle={{ background: "#111", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "0.8125rem", fontFamily: "var(--font-mono), monospace", color: "#fff" }}
-                    labelStyle={{ color: "var(--dim)", marginBottom: "0.25rem" }}
-                    formatter={(value) => [`${value} ${def.unit}`, def.label]}
-                  />
-                  <Line type="monotone" dataKey="val" stroke={flagColor} strokeWidth={2} dot={{ fill: flagColor, r: 4, strokeWidth: 0 }} activeDot={{ r: 6 }} isAnimationActive={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            )}
-            {refRange && (
-              <p style={{ fontSize: "0.7rem", color: "var(--dim)", marginTop: "0.75rem", fontFamily: "var(--font-mono), monospace" }}>
-                Reference range: {refRange[0]}–{refRange[1]} {def.unit}
-              </p>
-            )}
-          </div>
-        );
-      })()}
 
       {entries.length > 1 && (
         <details style={{ marginBottom: "1.5rem" }}>

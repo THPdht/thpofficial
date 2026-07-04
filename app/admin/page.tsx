@@ -1422,7 +1422,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
   onAddPayment: (p: Omit<Payment, 'id'>) => void;
   onRemovePayment: (id: string) => void;
 }) {
-  const [analysis, setAnalysis] = useState<{ date: string; talking_points: string[]; flags: string[] } | null>(null);
+  const [analysisMap, setAnalysisMap] = useState<Record<string, { date: string; talking_points: string[]; flags: string[] }>>({});
   const [trackers, setTrackers] = useState<{ date: string; vitals?: Record<string,unknown>; training?: Record<string,unknown>; circadian?: Record<string,unknown>; [k: string]: unknown }[]>([]);
   const [expandedTracker, setExpandedTracker] = useState<string | null>(null);
   const [bloodWorkEntries, setBloodWorkEntries] = useState<{ id: string; test_date: string | null; uploaded_at: string; markers: Record<string,{ value: number | null; unit: string; flag?: string | null }> | null }[]>([]);
@@ -1488,10 +1488,14 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
     setGenError("");
     setDiagGenError("");
 
-    // Tracker analysis
+    // Tracker analysis — load all so each tracker row can show its own analysis
     supabase.from('tracker_analysis').select('date, talking_points, flags').eq('user_email', client.email)
-      .order('date', { ascending: false }).limit(1).maybeSingle()
-      .then(({ data }) => setAnalysis(data ?? null));
+      .order('date', { ascending: false }).limit(20)
+      .then(({ data }) => {
+        const map: Record<string, { date: string; talking_points: string[]; flags: string[] }> = {};
+        (data ?? []).forEach(a => { map[a.date] = a; });
+        setAnalysisMap(map);
+      });
 
     // Last 10 trackers
     supabase.from('daily_trackers').select('*').eq('user_email', client.email)
@@ -1709,34 +1713,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         </div>
       </div>
 
-      {/* Talking points + flags — always visible */}
-      <div>
-        {sectionLabel(analysis ? `Analysis · ${analysis.date}` : 'Analysis')}
-        {!analysis ? (
-          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, fontStyle: "italic" }}>No AI analysis yet. Will appear after client submits their first tracker.</p>
-        ) : (
-          <>
-            {analysis.talking_points?.length > 0 && (
-              <div style={{ marginBottom: "0.875rem" }}>
-                {analysis.talking_points.map((pt, i) => (
-                  <div key={i} style={{ display: "flex", gap: "0.5rem", padding: "0.4rem 0", borderBottom: "1px solid var(--border-subtle)" }}>
-                    <span style={{ color: "var(--primary)", fontFamily: "var(--font-mono), monospace", fontSize: "0.7rem", flexShrink: 0, paddingTop: "1px" }}>→</span>
-                    <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 300, lineHeight: 1.5 }}>{pt}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-            {analysis.flags?.length > 0 && (
-              <div style={{ padding: "0.875rem 1rem", background: "oklch(0.65 0.14 65 / 0.08)", border: "1px solid oklch(0.65 0.14 65 / 0.2)", borderRadius: "9px" }}>
-                <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "oklch(0.75 0.12 65)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.5rem" }}>Flags</p>
-                {analysis.flags.map((f, i) => (
-                  <p key={i} style={{ fontSize: "0.8125rem", color: "oklch(0.75 0.12 65)", fontWeight: 300, lineHeight: 1.5, marginBottom: i < analysis.flags.length - 1 ? "0.25rem" : 0 }}>⚠ {f}</p>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
 
       {/* Tracker history — always visible */}
       <div id="crm-trackers">
@@ -1754,40 +1730,68 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
                   <span style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 400 }}>{t.date as string}</span>
                   <span style={{ fontSize: "0.75rem", color: "var(--dim)" }}>{expandedTracker === t.date as string ? '▲' : '▼'}</span>
                 </button>
-                {expandedTracker === t.date as string && (
-                  <div style={{ padding: "0.875rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderTop: "none", borderRadius: "0 0 8px 8px", fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.7, fontFamily: "var(--font-mono), monospace" }}>
-                    {(['circadian','training','nutrition','vitals','psychological','business'] as const).map(sec => {
-                      const data = t[sec] as Record<string,unknown> | undefined;
-                      if (!data || Object.keys(data).length === 0) return null;
-                      return (
-                        <div key={sec} style={{ marginBottom: "0.625rem" }}>
-                          <span style={{ color: "var(--primary)", fontWeight: 600, textTransform: "uppercase", fontSize: "0.65rem", letterSpacing: "0.08em" }}>{sec}</span>
-                          <div style={{ marginTop: "0.25rem" }}>
-                            {Object.entries(data).map(([k, v]) => (
-                              <div key={k}><span style={{ color: "var(--dim)" }}>{k}:</span> {String(v)}</div>
-                            ))}
-                          </div>
+                {expandedTracker === t.date as string && (() => {
+                  const dayAnalysis = analysisMap[t.date as string];
+                  const SECTION_LABELS = ["Today's tracker", "Last 5 sessions", "Diagnosis connection"];
+                  return (
+                    <div style={{ border: "1px solid var(--border-subtle)", borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden" }}>
+                      {/* Tracker raw data */}
+                      <div style={{ padding: "0.875rem", background: "var(--surface)", fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.7, fontFamily: "var(--font-mono), monospace", borderBottom: dayAnalysis ? "1px solid var(--border-subtle)" : "none" }}>
+                        {(['circadian','training','nutrition','vitals','psychological','business'] as const).map(sec => {
+                          const data = t[sec] as Record<string,unknown> | undefined;
+                          if (!data || Object.keys(data).length === 0) return null;
+                          return (
+                            <div key={sec} style={{ marginBottom: "0.625rem" }}>
+                              <span style={{ color: "var(--primary)", fontWeight: 600, textTransform: "uppercase", fontSize: "0.65rem", letterSpacing: "0.08em" }}>{sec}</span>
+                              <div style={{ marginTop: "0.25rem" }}>
+                                {Object.entries(data).map(([k, v]) => (
+                                  <div key={k}><span style={{ color: "var(--dim)" }}>{k}:</span> {String(v)}</div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {/* AI speaking notes — inline per tracker */}
+                      {dayAnalysis ? (
+                        <div style={{ padding: "0.875rem", background: "oklch(0.08 0.01 0)" }}>
+                          <p style={{ fontSize: "0.6rem", fontWeight: 600, letterSpacing: "0.12em", color: "var(--primary)", textTransform: "uppercase", marginBottom: "0.75rem", fontFamily: "var(--font-mono), monospace" }}>Speaking notes</p>
+                          {dayAnalysis.talking_points.map((section, i) => section ? (
+                            <div key={i} style={{ marginBottom: i < 2 ? "0.875rem" : 0 }}>
+                              <p style={{ fontSize: "0.6rem", fontWeight: 600, letterSpacing: "0.08em", color: "var(--dim)", textTransform: "uppercase", marginBottom: "0.25rem", fontFamily: "var(--font-mono), monospace" }}>{SECTION_LABELS[i] ?? `Section ${i + 1}`}</p>
+                              <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.6 }}>{section}</p>
+                            </div>
+                          ) : null)}
+                          {dayAnalysis.flags?.length > 0 && (
+                            <div style={{ marginTop: "0.75rem", padding: "0.625rem 0.75rem", background: "oklch(0.65 0.14 65 / 0.08)", border: "1px solid oklch(0.65 0.14 65 / 0.2)", borderRadius: "7px" }}>
+                              <p style={{ fontSize: "0.6rem", fontWeight: 600, color: "oklch(0.75 0.12 65)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.375rem" }}>Flags</p>
+                              {dayAnalysis.flags.map((f, i) => (
+                                <p key={i} style={{ fontSize: "0.8125rem", color: "oklch(0.75 0.12 65)", fontWeight: 300, lineHeight: 1.5, marginBottom: i < dayAnalysis.flags.length - 1 ? "0.2rem" : 0 }}>⚠ {f}</p>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                      ) : (
+                        <div style={{ padding: "0.75rem 0.875rem", background: "oklch(0.08 0.01 0)" }}>
+                          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, fontStyle: "italic" }}>No AI analysis for this date yet.</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* Blood work — always-on scoreboard */}
+      {/* Blood work — chart with marker dropdown */}
       {(() => {
         const bwLatest = bloodWorkEntries[0] ?? null;
-        const bwPrevious = bloodWorkEntries[1] ?? null;
         return (
           <div>
             {sectionLabel(bwLatest?.test_date ? `Blood Work · ${bwLatest.test_date}` : 'Blood Work')}
-
-            {/* Prominent trends chart with marker dropdown */}
-            <div style={{ marginBottom: "1rem", padding: "1rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px" }}>
+            <div style={{ padding: "1rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
                 <p style={{ fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--dim)", textTransform: "uppercase", fontFamily: "var(--font-mono), monospace" }}>Trends</p>
                 <select value={selectedMarker} onChange={e => setSelectedMarker(e.target.value)}
@@ -1806,8 +1810,12 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
                   }))
                   .filter((p): p is { date: string; val: number } => p.val !== null);
                 const def = MARKER_DEFAULTS[selectedMarker];
-                if (chartData.length < 2) {
-                  return <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>Upload at least 2 blood tests to see trends.</p>;
+                if (chartData.length === 0) {
+                  return (
+                    <div style={{ height: "180px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.5rem", borderRadius: "6px", border: "1px dashed var(--border-subtle)" }}>
+                      <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>No blood work uploaded yet.</p>
+                    </div>
+                  );
                 }
                 return (
                   <ResponsiveContainer width="100%" height={200}>
@@ -1815,87 +1823,12 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
                       <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--dim)", fontFamily: "var(--font-mono), monospace" }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 10, fill: "var(--dim)", fontFamily: "var(--font-mono), monospace" }} axisLine={false} tickLine={false} width={40} />
                       <Tooltip contentStyle={{ background: "#111", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "0.75rem", fontFamily: "var(--font-mono), monospace", color: "#fff" }} formatter={(value) => [`${value} ${def.unit}`, def.label]} />
-                      <Line type="monotone" dataKey="val" stroke="#c8102e" strokeWidth={2} dot={{ fill: "#c8102e", r: 3, strokeWidth: 0 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+                      <Line type="monotone" dataKey="val" stroke="#c8102e" strokeWidth={2} dot={{ fill: "#c8102e", r: 4, strokeWidth: 0 }} activeDot={{ r: 6 }} isAnimationActive={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 );
               })()}
             </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "0.5rem", marginBottom: "1rem" }}>
-              {Object.entries(MARKER_DEFAULTS).map(([key, def]) => {
-                const m = bwLatest?.markers?.[key];
-                const prevVal = bwPrevious?.markers?.[key]?.value ?? undefined;
-                const delta = prevVal != null && m?.value != null ? m.value - prevVal : null;
-                const flagColor = m?.flag === "high" ? "oklch(0.75 0.16 25)" : m?.flag === "low" ? "oklch(0.70 0.12 260)" : "#c8102e";
-                const hasData = m?.value != null;
-                const isExpanded = expandedBWMarker === key;
-
-                const history = bloodWorkEntries
-                  .map(e => ({ date: e.test_date ?? new Date(e.uploaded_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }), val: e.markers?.[key]?.value ?? null }))
-                  .filter((p): p is { date: string; val: number } => p.val !== null)
-                  .reverse();
-
-                return (
-                  <div key={key}
-                    onClick={() => setExpandedBWMarker(isExpanded ? null : key)}
-                    style={{ padding: "0.75rem", background: isExpanded ? "var(--surface-hover, #1a1a1a)" : "var(--surface)", border: `1px solid ${isExpanded ? "#c8102e44" : m?.flag && m.flag !== "normal" ? flagColor + "44" : "var(--border)"}`, borderRadius: "8px", cursor: "pointer", transition: "border-color 0.15s" }}>
-                    <p style={{ fontSize: "0.65rem", color: "var(--dim)", fontWeight: 500, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "0.25rem", fontFamily: "var(--font-mono), monospace" }}>{def.label}</p>
-                    <p style={{ fontSize: "1rem", fontWeight: 600, color: hasData && m?.flag && m.flag !== "normal" ? flagColor : hasData ? "var(--ink)" : "var(--muted)", fontFamily: "var(--font-mono), monospace" }}>
-                      {hasData ? m!.value : "—"} <span style={{ fontSize: "0.65rem", fontWeight: 400, color: "var(--dim)" }}>{hasData ? m!.unit : def.unit}</span>
-                    </p>
-                    {delta !== null && (
-                      <p style={{ fontSize: "0.65rem", color: delta > 0 ? "oklch(0.65 0.15 145)" : "oklch(0.70 0.15 25)", marginTop: "0.2rem" }}>
-                        {delta > 0 ? "↑" : "↓"} {Math.abs(delta).toFixed(1)}
-                      </p>
-                    )}
-                    {history.length >= 2 && (
-                      <div style={{ marginTop: "0.375rem", height: "28px" }}>
-                        <ResponsiveContainer width="100%" height={28}>
-                          <LineChart data={history} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
-                            <Line type="monotone" dataKey="val" stroke={m?.flag && m.flag !== "normal" ? flagColor : "#c8102e"} strokeWidth={1.5} dot={false} isAnimationActive={false} />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Expanded marker chart */}
-            {expandedBWMarker && (() => {
-              const def = MARKER_DEFAULTS[expandedBWMarker];
-              const history = bloodWorkEntries
-                .map(e => ({ date: e.test_date ?? new Date(e.uploaded_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }), val: e.markers?.[expandedBWMarker]?.value ?? null }))
-                .filter((p): p is { date: string; val: number } => p.val !== null)
-                .reverse();
-              const latestM = bwLatest?.markers?.[expandedBWMarker];
-              const flagColor = latestM?.flag === "high" ? "oklch(0.75 0.16 25)" : latestM?.flag === "low" ? "oklch(0.70 0.12 260)" : "#c8102e";
-              return (
-                <div style={{ marginBottom: "1rem", padding: "1rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-                    <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--ink)", fontFamily: "var(--font-mono), monospace" }}>{def.label} <span style={{ fontWeight: 400, color: "var(--dim)" }}>({def.unit})</span></p>
-                    <button onClick={() => setExpandedBWMarker(null)} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: "0.875rem" }}>✕</button>
-                  </div>
-                  {history.length < 2 ? (
-                    <p style={{ fontSize: "0.75rem", color: "var(--dim)" }}>Need ≥2 uploads for a trend.</p>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={180}>
-                      <LineChart data={history} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
-                        <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--dim)", fontFamily: "var(--font-mono), monospace" }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fontSize: 10, fill: "var(--dim)", fontFamily: "var(--font-mono), monospace" }} axisLine={false} tickLine={false} width={40} />
-                        <Tooltip
-                          contentStyle={{ background: "#111", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "0.75rem", fontFamily: "var(--font-mono), monospace", color: "#fff" }}
-                          formatter={(value) => [`${value} ${def.unit}`, def.label]}
-                        />
-                        <Line type="monotone" dataKey="val" stroke={flagColor} strokeWidth={2} dot={{ fill: flagColor, r: 3, strokeWidth: 0 }} activeDot={{ r: 5 }} isAnimationActive={false} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-              );
-            })()}
           </div>
         );
       })()}
