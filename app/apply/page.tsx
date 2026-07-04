@@ -87,6 +87,7 @@ type FormState = {
   email: string;
   phone: string;
   instagram: string;
+  telegram: string;
   password: string;
   confirmPassword: string;
 };
@@ -99,7 +100,7 @@ const EMPTY: FormState = {
   whatTried: "", howLongStuck: "", whyStoppedWorking: "", whyStillLooking: "",
   hoursPerWeek: "", currentTrainingProgram: "", medicalConditions: "", stressSleepSituation: "",
   consequences: "", lifeSolved: "", howFoundUs: "", commitmentLevel: 7,
-  investmentRange: "", wasReferred: "", referredBy: "", email: "", phone: "", instagram: "",
+  investmentRange: "", wasReferred: "", referredBy: "", email: "", phone: "", instagram: "", telegram: "",
   password: "", confirmPassword: "",
 };
 
@@ -325,10 +326,11 @@ export default function ApplyPage() {
       instagram: form.instagram,
     });
 
-    // Update status to pending and tag as 1:1 applicant
+    // Update status to pending, tag as 1:1 applicant, save telegram if provided
     await supabase.from('users').update({
       status: 'pending',
       diagnostic_data: { clientType: '1on1', source: 'apply' },
+      ...(form.telegram.trim() ? { telegram_username: form.telegram.trim().replace(/^@/, '') } : {}),
     }).eq('email', form.email.trim().toLowerCase());
 
     if (!error) {
@@ -609,6 +611,7 @@ export default function ApplyPage() {
                 <div><Label>Email</Label><TInput value={form.email} onChange={set("email")} placeholder="your@email.com" type="email" /></div>
                 <div><Label>Phone</Label><TInput value={form.phone} onChange={set("phone")} placeholder="+1 555 000 0000" type="tel" /></div>
                 <div><Label>Instagram (optional)</Label><TInput value={form.instagram} onChange={set("instagram")} placeholder="@handle" /></div>
+                <div><Label>Telegram username (optional)</Label><TInput value={form.telegram} onChange={set("telegram")} placeholder="@username" /></div>
               </div>
             )}
 

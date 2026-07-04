@@ -415,7 +415,7 @@ export default function AdminPage() {
             {paying1on1.length > 0 && (
               <>
                 <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", padding: "0.75rem 0.625rem 0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-                  Paying 1:1 <span style={{ fontWeight: 300 }}>{paying1on1.length}</span>
+                  Clients <span style={{ fontWeight: 300 }}>{paying1on1.length}</span>
                 </p>
                 {paying1on1.map(u => <ClientRow key={u.email} u={u} selected={selected} unreadCounts={{}} onSelect={selectClient} />)}
               </>
@@ -1675,41 +1675,35 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
       {/* Compact top strip */}
       <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.5rem", paddingBottom: "1rem", borderBottom: "1px solid var(--border)" }}>
         <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: "0.875rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>← Back</button>
-        <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "var(--surface)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: "0.8rem", fontWeight: 600, color: statusColor(client.status), fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-          {initials}
-        </div>
         <div style={{ flex: 1 }}>
           <h2 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.25rem", fontWeight: 400, color: "var(--ink)", margin: 0 }}>{client.name}</h2>
-          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", margin: "0.2rem 0 0", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{client.email}</p>
+          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", margin: "0.2rem 0 0", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+            {client.email} · joined {joinedDate}
+          </p>
         </div>
         <span style={{ padding: "0.25rem 0.625rem", borderRadius: "20px", fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", background: client.status === "active" ? "oklch(0.25 0.08 145)" : "var(--surface)", color: client.status === "active" ? "oklch(0.65 0.15 145)" : "var(--dim)", border: "1px solid", borderColor: client.status === "active" ? "oklch(0.4 0.12 145)" : "var(--border)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{client.status}</span>
-        {client.diagnosticData?.clientType && (
-          <span style={{ padding: "0.25rem 0.625rem", borderRadius: "20px", fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", background: "var(--surface)", color: "var(--dim)", border: "1px solid var(--border)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{client.diagnosticData.clientType === 'skool' ? 'Skool' : '1:1'}</span>
-        )}
         {userData?.telegram_username && (
           <a href={`https://t.me/${userData.telegram_username}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--dim)", textDecoration: "none", fontSize: "0.8125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>✈ Telegram</a>
         )}
       </div>
 
       {/* Quick stats strip */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "0.5rem" }}>
-        {[
-          { label: "Joined", value: joinedDate },
-          { label: "Streak", value: client.streak > 0 ? `${client.streak} days` : "0 days" },
-          { label: "Protocol", value: client.diagnosticData?.protocolStatus || "None" },
-          { label: "Referrals", value: `${referralCount} / 3 paying` },
-        ].map(s => (
-          <div key={s.label} style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px" }}>
-            <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{s.label}</p>
-            <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{s.value}</p>
-          </div>
-        ))}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.5rem" }}>
+        <div onClick={() => document.getElementById("crm-trackers")?.scrollIntoView({ behavior: "smooth" })}
+          style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", cursor: "pointer" }}>
+          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Streak</p>
+          <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{client.streak > 0 ? `${client.streak >= 7 ? "🔥" : "⚡"} ${client.streak} days` : "0 days"}</p>
+        </div>
+        <div onClick={() => document.getElementById("crm-protocol")?.scrollIntoView({ behavior: "smooth" })}
+          style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", cursor: "pointer" }}>
+          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Protocol</p>
+          <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{client.diagnosticData?.protocolStatus || "None"}</p>
+        </div>
+        <div style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px" }}>
+          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Referrals</p>
+          <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{referralCount} / 3</p>
+        </div>
       </div>
-
-      {/* Promote button for new/pending */}
-      {(client.status === "new" || client.status === "pending") && (
-        <PromoteButton client={client} onSetStatus={onSetStatus} onClientTypeChange={onClientTypeChange} />
-      )}
 
       {/* Talking points + flags */}
       {analysis && (
@@ -1917,17 +1911,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         )}
       </div>
 
-      {/* Referrals */}
-      <div style={{ padding: "1rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px", marginBottom: "1.5rem" }}>
-        <p style={{ fontSize: "0.65rem", color: "var(--dim)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.5rem" }}>Referrals</p>
-        <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 500 }}>{referralCount} / 3 paying</p>
-        {referralCount >= 3 && (
-          <button onClick={applyFreeMonth} disabled={applyingFreeMonth || !!client.diagnosticData?.freeMonthEarned}
-            style={{ marginTop: "0.5rem", height: "28px", padding: "0 0.75rem", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: client.diagnosticData?.freeMonthEarned ? 0.5 : 1 }}>
-            {client.diagnosticData?.freeMonthEarned ? 'Applied' : 'Apply Free Month'}
-          </button>
-        )}
-      </div>
 
       {/* Telegram */}
       <div>
@@ -1962,23 +1945,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
           onBlur={e => e.target.style.borderColor = 'var(--border)'} />
       </div>
 
-      {/* Manual push */}
-      <div>
-        {sectionLabel('Send push notification')}
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <input value={pushMsg} onChange={e => setPushMsg(e.target.value)}
-            placeholder={`Message to ${firstName}…`}
-            style={{ flex: 1, height: "36px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none" }}
-            onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-            onBlur={e => e.target.style.borderColor = 'var(--border)'}
-            onKeyDown={e => { if (e.key === 'Enter') sendPush(); }} />
-          <button onClick={sendPush} disabled={pushSending || !pushMsg.trim()}
-            style={{ height: "36px", padding: "0 1rem", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "7px", fontSize: "0.8125rem", fontWeight: 500, cursor: pushSending || !pushMsg.trim() ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: pushSending || !pushMsg.trim() ? 0.6 : 1 }}>
-            {pushSending ? '…' : 'Send'}
-          </button>
-        </div>
-      </div>
-
       {/* Activity */}
       {userData && (
         <div style={{ padding: "0.75rem 1rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "9px" }}>
@@ -1993,22 +1959,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
       {/* ── ACTIONS SECTION ── */}
       <div style={{ paddingTop: "1.5rem", borderTop: "1px solid var(--border)" }}>
         {sectionLabel('Actions')}
-
-        {/* Client type */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginBottom: "1.25rem" }}>
-          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Client Type</p>
-          <div style={{ display: "flex", gap: "0.375rem" }}>
-            {(['skool', '1on1'] as const).map(t => {
-              const active = client.diagnosticData?.clientType === t;
-              return (
-                <button key={t} onClick={() => onClientTypeChange(t)}
-                  style={{ flex: 1, height: "32px", borderRadius: "6px", border: "1px solid", borderColor: active ? (t === 'skool' ? "oklch(0.72 0.15 260 / 0.5)" : "oklch(0.72 0.14 145 / 0.5)") : "var(--border)", background: active ? (t === 'skool' ? "oklch(0.72 0.15 260 / 0.1)" : "oklch(0.72 0.14 145 / 0.1)") : "none", color: active ? (t === 'skool' ? "oklch(0.72 0.15 260)" : "oklch(0.72 0.14 145)") : "var(--dim)", fontSize: "0.75rem", fontWeight: active ? 600 : 400, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "all 150ms" }}>
-                  {t === 'skool' ? 'Skool' : '1:1 Coaching'}
-                </button>
-              );
-            })}
-          </div>
-        </div>
 
         {/* Diagnosis */}
         <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
@@ -2096,7 +2046,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         </div>
 
         {/* Protocol generate */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
+        <div id="crm-protocol" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
           <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Protocol</p>
           {!client.notionPageId && (
             <button onClick={handleGenerateProtocol} disabled={generating}
@@ -2137,7 +2087,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
 
         {/* Tracker section */}
         {clientProtocols.length > 0 && (
-          <div style={{ paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
+          <div id="crm-trackers" style={{ paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
             <TrackerSection
               protocols={clientProtocols}
               summary={trackerSummary}
@@ -2164,40 +2114,15 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         {/* Account controls */}
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
           <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Account</p>
-          {(() => {
-            const as = client.diagnosticData?.accountStatus ?? 'active';
-            const asMeta: Record<string, { label: string; color: string }> = {
-              active:  { label: "Active",   color: "oklch(0.7 0.15 145)" },
-              hold:    { label: "On hold",  color: "oklch(0.82 0.10 62)" },
-              limited: { label: "Limited",  color: "oklch(0.65 0.14 300)" },
-            };
-            const meta = asMeta[as] ?? asMeta['active'];
-            return (
-              <>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "7px" }}>
-                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: meta.color, flexShrink: 0 }} />
-                  <span style={{ fontSize: "0.8125rem", fontWeight: 500, color: meta.color }}>{meta.label}</span>
-                </div>
-                <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
-                  {as !== 'active' && <button onClick={() => onAccountStatusChange('active')} style={{ height: "28px", padding: "0 0.75rem", background: "oklch(0.45 0.15 145 / 0.08)", border: "1px solid oklch(0.45 0.15 145 / 0.2)", borderRadius: "6px", color: "oklch(0.7 0.15 145)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Activate</button>}
-                  {as !== 'hold' && <button onClick={() => onAccountStatusChange('hold')} style={{ height: "28px", padding: "0 0.75rem", background: "oklch(0.65 0.14 65 / 0.08)", border: "1px solid oklch(0.65 0.14 65 / 0.2)", borderRadius: "6px", color: "oklch(0.82 0.10 62)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Put on hold</button>}
-                  {as !== 'limited' && <button onClick={() => onAccountStatusChange('limited')} style={{ height: "28px", padding: "0 0.75rem", background: "oklch(0.65 0.14 300 / 0.08)", border: "1px solid oklch(0.65 0.14 300 / 0.2)", borderRadius: "6px", color: "oklch(0.65 0.14 300)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Limit access</button>}
-                  <button onClick={onSuspendClient} style={{ height: "28px", padding: "0 0.75rem", background: client.diagnosticData?.suspended ? "oklch(0.60 0.18 165 / 0.08)" : "oklch(0.55 0.18 25 / 0.06)", border: `1px solid ${client.diagnosticData?.suspended ? "oklch(0.60 0.18 165 / 0.3)" : "oklch(0.65 0.15 50 / 0.3)"}`, borderRadius: "6px", color: client.diagnosticData?.suspended ? "var(--primary)" : "oklch(0.72 0.14 50)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-                    {client.diagnosticData?.suspended ? "Unsuspend" : "Suspend"}
-                  </button>
-                  <button onClick={onRemoveClient} style={{ height: "28px", padding: "0 0.75rem", background: "oklch(0.55 0.18 25 / 0.08)", border: "1px solid oklch(0.55 0.18 25 / 0.25)", borderRadius: "6px", color: "oklch(0.68 0.18 25)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Remove client</button>
-                </div>
-                <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap", marginTop: "0.25rem" }}>
-                  {(["pending", "active", "alumni"] as ClientStatus[]).filter(s => s !== client.status).map(s => (
-                    <button key={s} onClick={() => onSetStatus(s)}
-                      style={{ height: "28px", padding: "0 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "6px", color: "var(--dim)", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-                      Set {s}
-                    </button>
-                  ))}
-                </div>
-              </>
-            );
-          })()}
+          <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
+            {client.status !== "active" && (
+              <button onClick={() => onSetStatus("active")} style={{ height: "28px", padding: "0 0.75rem", background: "oklch(0.45 0.15 145 / 0.08)", border: "1px solid oklch(0.45 0.15 145 / 0.2)", borderRadius: "6px", color: "oklch(0.7 0.15 145)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Mark active</button>
+            )}
+            {client.status === "active" && (
+              <button onClick={() => onSetStatus("alumni")} style={{ height: "28px", padding: "0 0.75rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--dim)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Mark inactive</button>
+            )}
+            <button onClick={onRemoveClient} style={{ height: "28px", padding: "0 0.75rem", background: "oklch(0.55 0.18 25 / 0.08)", border: "1px solid oklch(0.55 0.18 25 / 0.25)", borderRadius: "6px", color: "oklch(0.68 0.18 25)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Remove client</button>
+          </div>
         </div>
 
         {/* Legacy payment log (addPayment/removePayment) */}
@@ -2326,13 +2251,9 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
 function ClientRow({ u, selected, unreadCounts, onSelect }: { u: StoredUser; selected: StoredUser | null; unreadCounts: Record<string, number>; onSelect: (u: StoredUser) => void }) {
   const unread = unreadCounts[u.email] ?? 0;
   const isSelected = selected?.email === u.email;
-  const initials = u.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
   return (
     <button key={u.email} onClick={() => onSelect(u)}
       style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.75rem 0.625rem", borderRadius: "9px", border: "none", borderLeft: isSelected ? "3px solid var(--primary)" : "3px solid transparent", background: isSelected ? "var(--surface-hover)" : "none", cursor: "pointer", textAlign: "left", transition: "background 150ms, border-color 150ms" }}>
-      <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "var(--surface-2)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: "0.7rem", fontWeight: 600, color: statusColor(u.status), fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-        {initials}
-      </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{u.name}</p>
@@ -2346,11 +2267,6 @@ function ClientRow({ u, selected, unreadCounts, onSelect }: { u: StoredUser; sel
             {u.diagnosticData?.protocolStatus || u.status}
             {u.streak > 0 ? ` · ${u.streak >= 7 ? "🔥" : "⚡"}${u.streak}` : ""}
           </span>
-          {u.diagnosticData?.clientType && (
-            <span style={{ fontSize: "0.6rem", fontWeight: 600, color: u.diagnosticData.clientType === 'skool' ? "oklch(0.72 0.15 260)" : "oklch(0.72 0.14 145)", background: u.diagnosticData.clientType === 'skool' ? "oklch(0.72 0.15 260 / 0.12)" : "oklch(0.72 0.14 145 / 0.12)", borderRadius: "4px", padding: "1px 5px", flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-              {u.diagnosticData.clientType === 'skool' ? 'Skool' : '1:1'}
-            </span>
-          )}
         </div>
       </div>
     </button>
