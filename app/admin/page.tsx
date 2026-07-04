@@ -2371,7 +2371,7 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "860px" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "860px", margin: "0 auto" }}>
 
       {/* Top stats */}
       <div>
@@ -2464,55 +2464,17 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
         </div>
       )}
 
-      {/* Diagnosis queue */}
+      {/* Diagnosis queue — count only, go to client to send */}
       {unsentDiagnoses.length > 0 && (
-        <div>
-          {sectionLabel('Diagnoses to send', unsentDiagnoses.length)}
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            {unsentDiagnoses.map(d => {
-              const clientName = clients.find(c => c.email === d.user_email)?.name ?? d.user_email;
-              return (
-                <div key={d.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.875rem 1.125rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "9px" }}>
-                  <div>
-                    <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)", marginBottom: "0.125rem" }}>{clientName}</p>
-                    <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>{d.title} · {new Date(d.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</p>
-                  </div>
-                  <button onClick={() => sendDiagnosis(d.id)} disabled={sending === d.id}
-                    style={{ height: "32px", padding: "0 0.875rem", background: "var(--primary)", border: "none", borderRadius: "6px", color: "#fff", fontSize: "0.75rem", fontWeight: 500, cursor: sending === d.id ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: sending === d.id ? 0.7 : 1 }}>
-                    {sending === d.id ? '…' : 'Send to client'}
-                  </button>
-                </div>
-              );
-            })}
+        <div style={{ padding: "0.875rem 1.125rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "9px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.08em", color: "var(--dim)", textTransform: "uppercase", marginBottom: "0.25rem" }}>Diagnoses to send</p>
+            <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 400 }}>{unsentDiagnoses.length} unsent — open client to review &amp; send</p>
           </div>
+          <span style={{ padding: "0.25rem 0.625rem", background: "oklch(0.65 0.14 65 / 0.12)", border: "1px solid oklch(0.65 0.14 65 / 0.3)", borderRadius: "20px", fontSize: "0.75rem", fontWeight: 600, color: "oklch(0.75 0.12 65)" }}>{unsentDiagnoses.length}</span>
         </div>
       )}
 
-      {/* Active clients today */}
-      {active.length > 0 && (
-        <div>
-          {sectionLabel('Active clients')}
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-            {active.map(c => {
-              const checked = c.lastCheckIn === today;
-              return (
-                <button key={c.email} onClick={() => onSelect(c)}
-                  style={{ display: "flex", alignItems: "center", gap: "0.875rem", padding: "0.75rem 0.875rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "9px", cursor: "pointer", textAlign: "left", transition: "border-color 150ms", width: "100%" }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = "var(--border)"}
-                  onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border-subtle)"}>
-                  <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: checked ? "oklch(0.7 0.15 145)" : "oklch(0.65 0.14 65 / 0.6)", flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)" }}>{c.name}</p>
-                    <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>
-                      {checked ? `Tracked today · ${c.streak} day streak` : c.lastCheckIn ? `Last tracker: ${new Date(c.lastCheckIn + 'T12:00:00').toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}` : "No trackers yet"}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Pending clients */}
       {pending.length > 0 && (
