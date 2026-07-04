@@ -63,15 +63,7 @@ export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [diagnosticOpen, setDiagnosticOpen] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [adminView, setAdminView] = useState<'overview' | 'clients'>('overview');
-
-  // Create client modal
-  const [showCreate, setShowCreate] = useState(false);
-  const [createName, setCreateName] = useState("");
-  const [createEmail, setCreateEmail] = useState("");
-  const [createPassword, setCreatePassword] = useState("");
-  const [createError, setCreateError] = useState("");
-  const [creating, setCreating] = useState(false);
+  const [adminView, setAdminView] = useState<'overview' | 'clients' | 'tools'>('overview');
 
   // Check auth on mount
   useEffect(() => {
@@ -187,23 +179,6 @@ export default function AdminPage() {
   function selectClient(u: StoredUser) {
     setSelected(u);
   }
-
-  async function handleCreateClient() {
-    if (!createName.trim() || !createEmail.trim()) return;
-    setCreating(true);
-    setCreateError("");
-    const pw = createPassword.trim() || Math.random().toString(36).slice(2, 10);
-    const result = await createClient(createName.trim(), createEmail.trim(), pw);
-    if (!result.success) {
-      setCreateError(result.error ?? "Failed to create client.");
-      setCreating(false);
-      return;
-    }
-    setCreatePassword(pw); // show the generated password
-    await refreshClients();
-    setCreating(false);
-  }
-
 
   async function activateClient(_protocolId?: ProtocolId) {
     if (!selected) return;
@@ -344,12 +319,12 @@ export default function AdminPage() {
           <img src="/images/thprebrandlogo2.png" alt="THP" style={{ height: "28px", width: "auto", filter: "brightness(0) invert(1)" }} />
           <span style={{ width: "1px", height: "14px", background: "var(--border)" }} />
           <div style={{ display: "flex", gap: "0.25rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", padding: "3px" }}>
-            {(['overview', 'clients'] as const).map(v => (
+            {(['overview', 'clients', 'tools'] as const).map(v => (
               <button key={v} onClick={() => { setAdminView(v); if (v === 'overview') setSelected(null); }}
                 style={{ height: "26px", padding: "0 0.75rem", borderRadius: "6px", border: "none", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "background 150ms, color 150ms",
                   background: adminView === v ? "var(--primary)" : "transparent",
                   color: adminView === v ? "#fff" : "var(--dim)" }}>
-                {v === 'overview' ? 'Dashboard' : 'Clients'}
+                {v === 'overview' ? 'Dashboard' : v === 'clients' ? 'Clients' : 'Tools'}
               </button>
             ))}
           </div>
@@ -387,8 +362,8 @@ export default function AdminPage() {
               onFocus={e => (e.target.style.borderColor = "var(--primary)")}
               onBlur={e => (e.target.style.borderColor = "var(--border-subtle)")}
             />
-            <button onClick={() => { setShowCreate(true); setCreateName(""); setCreateEmail(""); setCreatePassword(""); setCreateError(""); }}
-              title="Add client manually"
+            <button onClick={() => setAdminView('tools')}
+              title="Create client (Tools)"
               style={{ width: "30px", height: "30px", borderRadius: "6px", border: "1px solid var(--border-subtle)", background: "none", color: "var(--dim)", fontSize: "1rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "border-color 150ms, color 150ms" }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--primary)"; e.currentTarget.style.color = "var(--primary)"; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border-subtle)"; e.currentTarget.style.color = "var(--dim)"; }}>
@@ -432,6 +407,10 @@ export default function AdminPage() {
               <motion.div key="overview" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ flex: 1, overflowY: "auto", padding: "1.5rem 1.75rem" }}>
                 <OverviewPanel clients={clients} onSelect={(u) => { selectClient(u); setAdminView('clients'); }} />
               </motion.div>
+            ) : adminView === 'tools' ? (
+              <motion.div key="tools" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ flex: 1, overflowY: "auto", padding: "1.5rem 1.75rem" }}>
+                <ToolsPanel clients={clients} onClientCreated={refreshClients} />
+              </motion.div>
             ) : !selected ? (
               <motion.div key="clients-empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <p style={{ fontSize: "0.875rem", color: "var(--dim)", fontWeight: 300 }}>Select a client from the sidebar</p>
@@ -464,57 +443,6 @@ export default function AdminPage() {
             )}
           </AnimatePresence>
         </main>
-
-        {/* Create client modal */}
-        <AnimatePresence>
-          {showCreate && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              style={{ position: "fixed", inset: 0, zIndex: 400, background: "oklch(0.06 0 0 / 0.7)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5rem" }}
-              onClick={() => setShowCreate(false)}>
-              <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "16px", padding: "1.75rem", width: "100%", maxWidth: "400px" }}
-                onClick={e => e.stopPropagation()}>
-                <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)", marginBottom: "0.25rem" }}>Add client</p>
-                <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, marginBottom: "1.25rem" }}>Creates an active account. They sign in at mentorship.thp.coach.</p>
-
-                {[
-                  { label: "Full name", value: createName, set: setCreateName, placeholder: "Tom Bradley", type: "text" },
-                  { label: "Email", value: createEmail, set: setCreateEmail, placeholder: "tom@email.com", type: "email" },
-                  { label: "Password", value: createPassword, set: setCreatePassword, placeholder: "Leave blank to auto-generate", type: "text" },
-                ].map(({ label, value, set, placeholder, type }) => (
-                  <div key={label} style={{ marginBottom: "0.875rem" }}>
-                    <label style={{ display: "block", fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{label}</label>
-                    <input type={type} value={value} onChange={e => set(e.target.value)} placeholder={placeholder}
-                      style={{ width: "100%", height: "36px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", boxSizing: "border-box" }} />
-                  </div>
-                ))}
-
-                {/* Show generated password after creation */}
-                {!creating && !createError && createPassword && createEmail && clients.find(c => c.email === createEmail.toLowerCase().trim()) && (
-                  <div style={{ padding: "0.625rem 0.75rem", background: "oklch(0.45 0.15 145 / 0.08)", border: "1px solid oklch(0.45 0.15 145 / 0.2)", borderRadius: "7px", marginBottom: "0.875rem" }}>
-                    <p style={{ fontSize: "0.75rem", color: "oklch(0.72 0.14 145)", fontWeight: 400 }}>Account created. Password: <strong style={{ fontFamily: "monospace" }}>{createPassword}</strong></p>
-                    <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.2rem" }}>Send this to them so they can log in.</p>
-                  </div>
-                )}
-
-                {createError && (
-                  <p style={{ fontSize: "0.75rem", color: "oklch(0.68 0.18 25)", marginBottom: "0.75rem" }}>{createError}</p>
-                )}
-
-                <div style={{ display: "flex", gap: "0.5rem" }}>
-                  <button onClick={handleCreateClient} disabled={creating || !createName.trim() || !createEmail.trim()}
-                    style={{ flex: 1, height: "38px", background: (creating || !createName.trim() || !createEmail.trim()) ? "var(--surface-2)" : "var(--primary)", border: "none", borderRadius: "8px", color: (creating || !createName.trim() || !createEmail.trim()) ? "var(--dim)" : "#ffffff", fontSize: "0.875rem", fontWeight: 500, cursor: (creating || !createName.trim() || !createEmail.trim()) ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-                    {creating ? "Creating..." : "Create account"}
-                  </button>
-                  <button onClick={() => setShowCreate(false)}
-                    style={{ height: "38px", padding: "0 1rem", background: "none", border: "1px solid var(--border-subtle)", borderRadius: "8px", color: "var(--dim)", fontSize: "0.875rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-                    Cancel
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
       </div>
     </div>
@@ -1443,26 +1371,10 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
   const [paySaving, setPaySaving] = useState(false);
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ProfilePanel-equivalent state (merged into single column)
+  // Protocol generation state
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
-  const [linkUrl, setLinkUrl] = useState("");
-  const [linking, setLinking] = useState(false);
-  const [linkError, setLinkError] = useState("");
-  const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentType, setPaymentType] = useState<Payment['type']>('monthly');
-  const [paymentNote, setPaymentNote] = useState("");
-  const [addingPayment, setAddingPayment] = useState(false);
   const [clientProtocols, setClientProtocols] = useState<ClientProtocol[]>([]);
-  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
-  const [inviteLoading, setInviteLoading] = useState(false);
-  const [inviteCopied, setInviteCopied] = useState(false);
-  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
-  const [paymentLinkLoading, setPaymentLinkLoading] = useState(false);
-  const [paymentLinkCopied, setPaymentLinkCopied] = useState(false);
-  const [paymentLinkError, setPaymentLinkError] = useState("");
-  const [checkoutAmount, setCheckoutAmount] = useState("2000");
-  const [checkoutPaymentType, setCheckoutPaymentType] = useState<"deposit" | "monthly">("deposit");
   const [trackerSummary, setTrackerSummary] = useState<{
     trends: { category: string; avgScore: number; direction: string; delta: number }[];
     flagged: { date: string; questionLabel: string; value: string | number | boolean; category: string }[];
@@ -1479,12 +1391,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
   useEffect(() => {
     // Reset profile-panel state on client change
     setTrackerSummary(null);
-    setInviteUrl(null);
-    setInviteCopied(false);
-    setPaymentUrl(null);
-    setPaymentLinkCopied(false);
-    setPaymentLinkError("");
-    setCheckoutAmount("2000");
     setGenError("");
     setDiagGenError("");
 
@@ -1586,36 +1492,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
     setDiagGenerating(false);
   }
 
-  async function handleGenerateInvite() {
-    setInviteLoading(true);
-    try {
-      const res = await fetch('/api/invite', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD }, body: JSON.stringify({ email: client.email }) });
-      const data = await res.json();
-      if (data.url) setInviteUrl(data.url);
-    } catch { /* ignore */ }
-    setInviteLoading(false);
-  }
-
-  function copyInviteUrl() {
-    if (!inviteUrl) return;
-    navigator.clipboard.writeText(inviteUrl).then(() => { setInviteCopied(true); setTimeout(() => setInviteCopied(false), 2000); });
-  }
-
-  async function handleGeneratePaymentLink() {
-    setPaymentLinkLoading(true); setPaymentLinkError("");
-    try {
-      const res = await fetch('/api/stripe/create-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: client.email, adminPw: ADMIN_PASSWORD, amount: Number(checkoutAmount), paymentType: checkoutPaymentType }) });
-      const data = await res.json();
-      if (data.url) { setPaymentUrl(data.url); } else { setPaymentLinkError(data.error ?? "Failed to create payment link"); }
-    } catch { setPaymentLinkError("Network error. Please try again."); }
-    setPaymentLinkLoading(false);
-  }
-
-  function copyPaymentUrl() {
-    if (!paymentUrl) return;
-    navigator.clipboard.writeText(paymentUrl).then(() => { setPaymentLinkCopied(true); setTimeout(() => setPaymentLinkCopied(false), 2000); });
-  }
-
   async function loadTrackerSummary() {
     setTrackerLoading(true);
     try {
@@ -1656,18 +1532,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
     setGenerating(false);
   }
 
-  async function handleLinkNotion() {
-    const raw = linkUrl.trim();
-    if (!raw) return;
-    const match = raw.match(/([0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})/i) || raw.match(/([0-9a-f]{32})/i);
-    if (!match) { setLinkError("Paste a Notion page URL or ID"); return; }
-    const rawId = match[1].replace(/-/g, "");
-    const pageId = `${rawId.slice(0,8)}-${rawId.slice(8,12)}-${rawId.slice(12,16)}-${rawId.slice(16,20)}-${rawId.slice(20)}`;
-    setLinking(true); setLinkError("");
-    try { await linkNotionPage(client.email, pageId); onProtocolGenerated(pageId); setLinkUrl(""); } catch { setLinkError("Failed to link page"); }
-    setLinking(false);
-  }
-
   const firstName = client.name.split(' ')[0];
 
   const sectionLabel = (text: string) => (
@@ -1685,14 +1549,23 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: "0.875rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>← Back</button>
         <div style={{ flex: 1 }}>
           <h2 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.25rem", fontWeight: 400, color: "var(--ink)", margin: 0 }}>{client.name}</h2>
-          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", margin: "0.2rem 0 0", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-            {client.email} · joined {joinedDate}
-          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginTop: "0.2rem" }}>
+            <span style={{ fontSize: "0.8125rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>@</span>
+            <input
+              value={telegramUsername}
+              onChange={e => setTelegramUsername(e.target.value)}
+              placeholder="telegram"
+              onFocus={e => e.target.style.borderColor = 'var(--primary)'}
+              onBlur={e => { e.target.style.borderColor = 'transparent'; saveTelegram(); }}
+              style={{ width: "110px", height: "22px", background: "transparent", border: "1px solid transparent", borderRadius: "4px", padding: "0 0.25rem", fontSize: "0.8125rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", transition: "border-color 150ms" }}
+            />
+            <span style={{ fontSize: "0.8125rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>· joined {joinedDate}</span>
+            {telegramUsername && (
+              <a href={`https://t.me/${telegramUsername}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--dim)", textDecoration: "none", fontSize: "0.75rem", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: 0.6 }}>↗</a>
+            )}
+          </div>
         </div>
         <span style={{ padding: "0.25rem 0.625rem", borderRadius: "20px", fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", background: client.status === "active" ? "oklch(0.25 0.08 145)" : "var(--surface)", color: client.status === "active" ? "oklch(0.65 0.15 145)" : "var(--dim)", border: "1px solid", borderColor: client.status === "active" ? "oklch(0.4 0.12 145)" : "var(--border)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{client.status}</span>
-        {userData?.telegram_username && (
-          <a href={`https://t.me/${userData.telegram_username}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--dim)", textDecoration: "none", fontSize: "0.8125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>✈ Telegram</a>
-        )}
       </div>
 
       {/* Quick stats strip */}
@@ -1785,54 +1658,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         )}
       </div>
 
-      {/* Blood work — chart with marker dropdown */}
-      {(() => {
-        const bwLatest = bloodWorkEntries[0] ?? null;
-        return (
-          <div>
-            {sectionLabel(bwLatest?.test_date ? `Blood Work · ${bwLatest.test_date}` : 'Blood Work')}
-            <div style={{ padding: "1rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
-                <p style={{ fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--dim)", textTransform: "uppercase", fontFamily: "var(--font-mono), monospace" }}>Trends</p>
-                <select value={selectedMarker} onChange={e => setSelectedMarker(e.target.value)}
-                  style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--muted)", fontSize: "0.75rem", padding: "0.25rem 0.5rem", fontFamily: "var(--font-mono), monospace", cursor: "pointer" }}>
-                  {Object.entries(MARKER_DEFAULTS).map(([key, def]) => (
-                    <option key={key} value={key}>{def.label} ({def.unit})</option>
-                  ))}
-                </select>
-              </div>
-              {(() => {
-                const chartData = [...bloodWorkEntries]
-                  .reverse()
-                  .map(e => ({
-                    date: e.test_date ?? new Date(e.uploaded_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
-                    val: e.markers?.[selectedMarker]?.value ?? null,
-                  }))
-                  .filter((p): p is { date: string; val: number } => p.val !== null);
-                const def = MARKER_DEFAULTS[selectedMarker];
-                if (chartData.length === 0) {
-                  return (
-                    <div style={{ height: "180px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.5rem", borderRadius: "6px", border: "1px dashed var(--border-subtle)" }}>
-                      <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>No blood work uploaded yet.</p>
-                    </div>
-                  );
-                }
-                return (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={chartData} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
-                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--dim)", fontFamily: "var(--font-mono), monospace" }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 10, fill: "var(--dim)", fontFamily: "var(--font-mono), monospace" }} axisLine={false} tickLine={false} width={40} />
-                      <Tooltip contentStyle={{ background: "#111", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "0.75rem", fontFamily: "var(--font-mono), monospace", color: "#fff" }} formatter={(value) => [`${value} ${def.unit}`, def.label]} />
-                      <Line type="monotone" dataKey="val" stroke="#c8102e" strokeWidth={2} dot={{ fill: "#c8102e", r: 4, strokeWidth: 0 }} activeDot={{ r: 6 }} isAnimationActive={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                );
-              })()}
-            </div>
-          </div>
-        );
-      })()}
-
       {/* Payments — deposit + monthly */}
       <div style={{ marginBottom: "1.5rem" }}>
         <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--dim)", textTransform: "uppercase", marginBottom: "0.75rem", fontFamily: "var(--font-mono), monospace" }}>Payments</p>
@@ -1917,27 +1742,53 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
       </div>
 
 
-      {/* Telegram */}
-      <div>
-        {sectionLabel('Telegram')}
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-          <span style={{ fontSize: "0.875rem", color: "var(--dim)" }}>@</span>
-          <input value={telegramUsername} onChange={e => setTelegramUsername(e.target.value)}
-            placeholder="username"
-            style={{ flex: 1, height: "36px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none" }}
-            onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-            onBlur={e => { e.target.style.borderColor = 'var(--border)'; saveTelegram(); }}
-          />
-          {telegramUsername && (
-            <a href={`https://t.me/${telegramUsername}`} target="_blank" rel="noopener noreferrer"
-              style={{ height: "36px", padding: "0 0.875rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: "var(--muted)", fontSize: "0.8125rem", textDecoration: "none", display: "inline-flex", alignItems: "center", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "border-color 150ms" }}
-              onMouseEnter={e => (e.currentTarget as HTMLAnchorElement).style.borderColor = 'var(--primary)'}
-              onMouseLeave={e => (e.currentTarget as HTMLAnchorElement).style.borderColor = 'var(--border)'}>
-              Open
-            </a>
-          )}
-        </div>
-      </div>
+      {/* Blood work — chart with marker dropdown */}
+      {(() => {
+        const bwLatest = bloodWorkEntries[0] ?? null;
+        return (
+          <div>
+            {sectionLabel(bwLatest?.test_date ? `Blood Work · ${bwLatest.test_date}` : 'Blood Work')}
+            <div style={{ padding: "1rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
+                <p style={{ fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--dim)", textTransform: "uppercase", fontFamily: "var(--font-mono), monospace" }}>Trends</p>
+                <select value={selectedMarker} onChange={e => setSelectedMarker(e.target.value)}
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--muted)", fontSize: "0.75rem", padding: "0.25rem 0.5rem", fontFamily: "var(--font-mono), monospace", cursor: "pointer" }}>
+                  {Object.entries(MARKER_DEFAULTS).map(([key, def]) => (
+                    <option key={key} value={key}>{def.label} ({def.unit})</option>
+                  ))}
+                </select>
+              </div>
+              {(() => {
+                const chartData = [...bloodWorkEntries]
+                  .reverse()
+                  .map(e => ({
+                    date: e.test_date ?? new Date(e.uploaded_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+                    val: e.markers?.[selectedMarker]?.value ?? null,
+                  }))
+                  .filter((p): p is { date: string; val: number } => p.val !== null);
+                const def = MARKER_DEFAULTS[selectedMarker];
+                if (chartData.length === 0) {
+                  return (
+                    <div style={{ height: "180px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.5rem", borderRadius: "6px", border: "1px dashed var(--border-subtle)" }}>
+                      <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>No blood work uploaded yet.</p>
+                    </div>
+                  );
+                }
+                return (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={chartData} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--dim)", fontFamily: "var(--font-mono), monospace" }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10, fill: "var(--dim)", fontFamily: "var(--font-mono), monospace" }} axisLine={false} tickLine={false} width={40} />
+                      <Tooltip contentStyle={{ background: "#111", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "0.75rem", fontFamily: "var(--font-mono), monospace", color: "#fff" }} formatter={(value) => [`${value} ${def.unit}`, def.label]} />
+                      <Line type="monotone" dataKey="val" stroke="#c8102e" strokeWidth={2} dot={{ fill: "#c8102e", r: 4, strokeWidth: 0 }} activeDot={{ r: 6 }} isAnimationActive={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                );
+              })()}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Private notes */}
       <div>
@@ -1999,77 +1850,12 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
           ))}
         </div>
 
-        {/* Portal Access (invite link) */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
-          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Portal Access</p>
-          {!inviteUrl ? (
-            <button onClick={handleGenerateInvite} disabled={inviteLoading}
-              style={{ height: "36px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: inviteLoading ? "var(--dim)" : "var(--muted)", fontSize: "0.8125rem", fontWeight: 500, cursor: inviteLoading ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-              {inviteLoading ? "Generating…" : "Generate invite link"}
-            </button>
-          ) : (
-            <div style={{ display: "flex", gap: "0.375rem" }}>
-              <input readOnly value={inviteUrl} style={{ flex: 1, height: "34px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.625rem", fontSize: "0.75rem", color: "var(--dim)", fontFamily: "var(--font-mono), monospace", outline: "none" }} />
-              <button onClick={copyInviteUrl} style={{ height: "34px", padding: "0 0.75rem", background: inviteCopied ? "oklch(0.60 0.18 165 / 0.12)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: inviteCopied ? "var(--primary)" : "var(--muted)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap" }}>
-                {inviteCopied ? "Copied!" : "Copy"}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Payment link */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
-          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Send Payment Link</p>
-          {!paymentUrl ? (
-            <>
-              <div style={{ display: "flex", gap: "0.25rem", marginBottom: "0.125rem" }}>
-                {(["deposit", "monthly"] as const).map(t => (
-                  <button key={t} onClick={() => setCheckoutPaymentType(t)}
-                    style={{ flex: 1, height: "28px", borderRadius: "6px", border: "1px solid", borderColor: checkoutPaymentType === t ? "var(--primary)" : "var(--border)", background: checkoutPaymentType === t ? "oklch(0.60 0.18 165 / 0.1)" : "none", color: checkoutPaymentType === t ? "var(--primary)" : "var(--dim)", fontSize: "0.75rem", fontWeight: checkoutPaymentType === t ? 600 : 400, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-                    {t === "deposit" ? "Deposit" : "Monthly"}
-                  </button>
-                ))}
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
-                <span style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 500, flexShrink: 0 }}>$</span>
-                <input type="number" min="1" value={checkoutAmount} onChange={e => setCheckoutAmount(e.target.value)}
-                  placeholder={checkoutPaymentType === "monthly" && agreedMonthly ? agreedMonthly : "2000"}
-                  style={{ flex: 1, height: "34px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.625rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }}
-                  onFocus={e => (e.target.style.borderColor = "var(--primary)")} onBlur={e => (e.target.style.borderColor = "var(--border)")} />
-              </div>
-              <button onClick={handleGeneratePaymentLink} disabled={paymentLinkLoading || !checkoutAmount || Number(checkoutAmount) < 1}
-                style={{ height: "36px", background: (paymentLinkLoading || !checkoutAmount || Number(checkoutAmount) < 1) ? "var(--surface-2)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: (paymentLinkLoading || !checkoutAmount || Number(checkoutAmount) < 1) ? "var(--dim)" : "var(--muted)", fontSize: "0.8125rem", fontWeight: 500, cursor: (paymentLinkLoading || !checkoutAmount || Number(checkoutAmount) < 1) ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-                {paymentLinkLoading ? "Generating…" : `Generate ${checkoutPaymentType} link · $${checkoutAmount || '—'}`}
-              </button>
-              {paymentLinkError && <p style={{ fontSize: "0.75rem", color: "var(--danger)" }}>{paymentLinkError}</p>}
-            </>
-          ) : (
-            <>
-              <p style={{ fontSize: "0.75rem", color: "oklch(0.7 0.15 145)", fontWeight: 400 }}>${checkoutAmount} checkout link ready</p>
-              <div style={{ display: "flex", gap: "0.375rem" }}>
-                <input readOnly value={paymentUrl} style={{ flex: 1, height: "34px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.625rem", fontSize: "0.75rem", color: "var(--dim)", fontFamily: "var(--font-mono), monospace", outline: "none" }} />
-                <button onClick={copyPaymentUrl} style={{ height: "34px", padding: "0 0.75rem", background: paymentLinkCopied ? "oklch(0.60 0.18 165 / 0.12)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: paymentLinkCopied ? "var(--primary)" : "var(--muted)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap" }}>
-                  {paymentLinkCopied ? "Copied!" : "Copy"}
-                </button>
-              </div>
-              <button onClick={() => { setPaymentUrl(null); setPaymentLinkCopied(false); }} style={{ height: "28px", background: "none", border: "none", color: "var(--dim)", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", textAlign: "left" }}>
-                ← Generate different amount
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* Protocol generate */}
+        {/* Protocol status */}
         <div id="crm-protocol" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
           <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Protocol</p>
-          {!client.notionPageId && (
-            <button onClick={handleGenerateProtocol} disabled={generating}
-              style={{ height: "36px", background: generating ? "var(--surface-2)" : "oklch(0.60 0.18 165 / 0.12)", border: "1px solid oklch(0.60 0.18 165 / 0.3)", borderRadius: "7px", color: generating ? "var(--dim)" : "var(--primary)", fontSize: "0.8125rem", fontWeight: 500, cursor: generating ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.375rem" }}>
-              <SparkleIcon />
-              {generating ? "Generating…" : clientProtocols.length === 0 ? "Generate protocol with AI" : `Regenerate stage ${clientProtocols[clientProtocols.length - 1].stage} with AI`}
-            </button>
-          )}
-          {client.notionPageId && (() => {
+          {!client.notionPageId ? (
+            <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>No protocol generated yet. Use Tools → Generate Extra Protocol.</p>
+          ) : (() => {
             const ps = client.diagnosticData?.protocolStatus ?? 'active';
             const statusMeta: Record<string, { label: string; color: string; bg: string }> = {
               active:   { label: "Live",     color: "oklch(0.72 0.14 145)", bg: "oklch(0.45 0.15 145 / 0.1)" },
@@ -2088,20 +1874,14 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
                   {ps !== 'updating' && <button onClick={() => onProtocolStatusChange('updating')} style={{ flex: 1, height: "32px", background: "oklch(0.65 0.14 65 / 0.08)", border: "1px solid oklch(0.65 0.14 65 / 0.2)", borderRadius: "6px", color: "oklch(0.84 0.12 65)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Mark as updating</button>}
                   {ps !== 'building' && <button onClick={() => onProtocolStatusChange('building')} style={{ flex: 1, height: "32px", background: "oklch(0.60 0.18 165 / 0.08)", border: "1px solid oklch(0.60 0.18 165 / 0.2)", borderRadius: "6px", color: "var(--primary)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Mark as building</button>}
                 </div>
-                <button onClick={handleGenerateProtocol} disabled={generating}
-                  style={{ height: "32px", background: generating ? "var(--surface-2)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "6px", color: generating ? "var(--dim)" : "var(--muted)", fontSize: "0.75rem", fontWeight: 500, cursor: generating ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.375rem" }}>
-                  <SparkleIcon /> {generating ? "Generating…" : "Regenerate with AI"}
-                </button>
               </>
             );
           })()}
-          {genError && <p style={{ fontSize: "0.75rem", color: "var(--danger)", fontWeight: 300 }}>{genError}</p>}
-          {linkError && <p style={{ fontSize: "0.75rem", color: "var(--danger)", fontWeight: 300 }}>{linkError}</p>}
         </div>
 
         {/* Tracker section */}
         {clientProtocols.length > 0 && (
-          <div id="crm-trackers" style={{ paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
+          <div style={{ paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
             <TrackerSection
               protocols={clientProtocols}
               summary={trackerSummary}
@@ -2137,46 +1917,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
             )}
             <button onClick={onRemoveClient} style={{ height: "28px", padding: "0 0.75rem", background: "oklch(0.55 0.18 25 / 0.08)", border: "1px solid oklch(0.55 0.18 25 / 0.25)", borderRadius: "6px", color: "oklch(0.68 0.18 25)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Remove client</button>
           </div>
-        </div>
-
-        {/* Legacy payment log (addPayment/removePayment) */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
-          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Payment History</p>
-          {(client.diagnosticData?.payments ?? []).length > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem", marginBottom: "0.25rem" }}>
-              {(client.diagnosticData?.payments ?? []).map((p: Payment) => (
-                <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.5rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "7px" }}>
-                  <div>
-                    <span style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)" }}>{p.currency}{p.amount}</span>
-                    <span style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, marginLeft: "0.5rem" }}>{p.type} · {new Date(p.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
-                    {p.note && <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.15rem" }}>{p.note}</p>}
-                  </div>
-                  <button onClick={() => onRemovePayment(p.id)} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: "0.75rem", padding: "0 0.25rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>×</button>
-                </div>
-              ))}
-            </div>
-          )}
-          {!addingPayment ? (
-            <button onClick={() => setAddingPayment(true)} style={{ height: "32px", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "6px", color: "var(--dim)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>+ Log payment</button>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem", padding: "0.75rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px" }}>
-              <div style={{ display: "flex", gap: "0.375rem" }}>
-                <input type="number" min="0" placeholder="Amount" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} style={{ flex: 1, height: "32px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "0 0.625rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }} />
-                <select value={paymentType} onChange={e => setPaymentType(e.target.value as Payment['type'])} style={{ height: "32px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "0 0.5rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }}>
-                  <option value="deposit">Deposit</option>
-                  <option value="full">Full</option>
-                  <option value="monthly">Monthly</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              <input type="text" placeholder="Note (optional)" value={paymentNote} onChange={e => setPaymentNote(e.target.value)} style={{ height: "32px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "0 0.625rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }} />
-              <div style={{ display: "flex", gap: "0.375rem" }}>
-                <button onClick={() => { const amt = parseFloat(paymentAmount); if (!amt || isNaN(amt)) return; onAddPayment({ date: new Date().toISOString().split('T')[0], amount: amt, currency: '$', type: paymentType, note: paymentNote || undefined }); setPaymentAmount(""); setPaymentNote(""); setAddingPayment(false); }} disabled={!paymentAmount}
-                  style={{ flex: 1, height: "30px", background: paymentAmount ? "var(--primary)" : "var(--surface-2)", border: "none", borderRadius: "6px", color: paymentAmount ? "#ffffff" : "var(--dim)", fontSize: "0.75rem", fontWeight: 500, cursor: paymentAmount ? "pointer" : "default", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Save</button>
-                <button onClick={() => { setAddingPayment(false); setPaymentAmount(""); setPaymentNote(""); }} style={{ height: "30px", padding: "0 0.625rem", background: "none", border: "1px solid var(--border-subtle)", borderRadius: "6px", color: "var(--dim)", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Cancel</button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Referral: apply free month */}
@@ -2258,6 +1998,259 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         </div>
       )}
 
+    </div>
+  );
+}
+
+// ─── TOOLS PANEL ─────────────────────────────────────────────────────────────
+
+function ToolsPanel({ clients, onClientCreated }: { clients: StoredUser[]; onClientCreated: () => void }) {
+  const ADMIN_PW = ADMIN_PASSWORD;
+
+  // Tool 1 — Create Client
+  const [createName, setCreateName] = useState("");
+  const [createEmail, setCreateEmail] = useState("");
+  const [createTelegram, setCreateTelegram] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [inviteCopied, setInviteCopied] = useState(false);
+
+  // Tool 2 — Send Payment Link
+  const [toolsClientEmail, setToolsClientEmail] = useState("");
+  const [toolsPayType, setToolsPayType] = useState<"deposit" | "monthly">("deposit");
+  const [toolsAmount, setToolsAmount] = useState("");
+  const [toolsPayUrl, setToolsPayUrl] = useState<string | null>(null);
+  const [toolsPayCopied, setToolsPayCopied] = useState(false);
+  const [toolsPayLoading, setToolsPayLoading] = useState(false);
+  const [toolsPayError, setToolsPayError] = useState("");
+
+  // Tool 3 — Generate Extra Protocol
+  const [protoClientEmail, setProtoClientEmail] = useState("");
+  const [protoNote, setProtoNote] = useState("");
+  const [protoGenerating, setProtoGenerating] = useState(false);
+  const [protoResult, setProtoResult] = useState<"done" | "error" | null>(null);
+
+  const activeClients = clients.filter(c => c.status === 'active' || c.status === 'pending');
+
+  async function handleCreateClient() {
+    if (!createName.trim() || !createEmail.trim()) return;
+    setCreating(true);
+    setCreateError("");
+    setInviteUrl(null);
+    // Create account with random password (client will set their own via invite)
+    const randomPw = Math.random().toString(36).slice(2, 14) + Math.random().toString(36).slice(2, 6);
+    const result = await createClient(createName.trim(), createEmail.trim(), randomPw);
+    if (!result.success) {
+      setCreateError(result.error ?? "Failed to create client.");
+      setCreating(false);
+      return;
+    }
+    // Generate invite link
+    try {
+      const res = await fetch('/api/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PW },
+        body: JSON.stringify({ email: createEmail.trim().toLowerCase() }),
+      });
+      const data = await res.json();
+      if (data.url) setInviteUrl(data.url);
+    } catch { /* ignore */ }
+    await onClientCreated();
+    setCreating(false);
+  }
+
+  async function handleSendPaymentLink() {
+    if (!toolsClientEmail || !toolsAmount || Number(toolsAmount) < 1) return;
+    setToolsPayLoading(true);
+    setToolsPayError("");
+    setToolsPayUrl(null);
+    try {
+      const res = await fetch('/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: toolsClientEmail, adminPw: ADMIN_PW, amount: Number(toolsAmount), paymentType: toolsPayType }),
+      });
+      const data = await res.json();
+      if (data.url) { setToolsPayUrl(data.url); } else { setToolsPayError(data.error ?? "Failed to create link"); }
+    } catch { setToolsPayError("Network error. Try again."); }
+    setToolsPayLoading(false);
+  }
+
+  async function handleGenerateExtraProtocol() {
+    if (!protoClientEmail) return;
+    const clientData = clients.find(c => c.email === protoClientEmail);
+    if (!clientData) return;
+    setProtoGenerating(true);
+    setProtoResult(null);
+    try {
+      const res = await fetch("/api/generate-protocol", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientEmail: clientData.email,
+          clientName: clientData.name,
+          diagnosticData: clientData.diagnosticData ?? null,
+          customNote: protoNote.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Failed");
+      setProtoResult("done");
+    } catch { setProtoResult("error"); }
+    setProtoGenerating(false);
+  }
+
+  const toolCard = (title: string, note: string, children: React.ReactNode) => (
+    <div style={{ padding: "1.5rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", display: "flex", flexDirection: "column", gap: "1rem" }}>
+      <div>
+        <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--ink)", marginBottom: "0.25rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{title}</p>
+        <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{note}</p>
+      </div>
+      {children}
+    </div>
+  );
+
+  const fieldInput = (label: string, props: React.InputHTMLAttributes<HTMLInputElement>) => (
+    <div>
+      <label style={{ display: "block", fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{label}</label>
+      <input {...props} style={{ width: "100%", height: "36px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", boxSizing: "border-box", ...props.style }}
+        onFocus={e => (e.target.style.borderColor = "var(--primary)")} onBlur={e => (e.target.style.borderColor = "var(--border)")} />
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth: "540px", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+      <div>
+        <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "1rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Tools</p>
+      </div>
+
+      {/* Tool 1: Create Client */}
+      {toolCard("Create Client", "Creates an account with a random password. Client sets their own password via the invite link.", (
+        <>
+          {fieldInput("Full name", { type: "text", value: createName, onChange: e => setCreateName(e.target.value), placeholder: "Tom Bradley" })}
+          {fieldInput("Email", { type: "email", value: createEmail, onChange: e => setCreateEmail(e.target.value), placeholder: "tom@email.com" })}
+          <div>
+            <label style={{ display: "block", fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Telegram username</label>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+              <span style={{ fontSize: "0.875rem", color: "var(--dim)", flexShrink: 0 }}>@</span>
+              <input type="text" value={createTelegram} onChange={e => setCreateTelegram(e.target.value)} placeholder="username"
+                style={{ flex: 1, height: "36px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }}
+                onFocus={e => (e.target.style.borderColor = "var(--primary)")} onBlur={e => (e.target.style.borderColor = "var(--border)")} />
+            </div>
+          </div>
+          {createError && <p style={{ fontSize: "0.75rem", color: "var(--danger)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{createError}</p>}
+          {inviteUrl ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <p style={{ fontSize: "0.75rem", color: "oklch(0.7 0.15 145)", fontWeight: 400, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Account created. Send this invite link to {createName || "the client"}:</p>
+              <div style={{ display: "flex", gap: "0.375rem" }}>
+                <input readOnly value={inviteUrl} style={{ flex: 1, height: "34px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.625rem", fontSize: "0.75rem", color: "var(--dim)", fontFamily: "var(--font-mono), monospace", outline: "none" }} />
+                <button onClick={() => { navigator.clipboard.writeText(inviteUrl).then(() => { setInviteCopied(true); setTimeout(() => setInviteCopied(false), 2000); }); }}
+                  style={{ height: "34px", padding: "0 0.75rem", background: inviteCopied ? "oklch(0.60 0.18 165 / 0.12)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: inviteCopied ? "var(--primary)" : "var(--muted)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+                  {inviteCopied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+              <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Client will set their own password via the invite link.</p>
+              <button onClick={() => { setCreateName(""); setCreateEmail(""); setCreateTelegram(""); setInviteUrl(null); setCreateError(""); }}
+                style={{ height: "32px", background: "none", border: "1px solid var(--border-subtle)", borderRadius: "7px", color: "var(--dim)", fontSize: "0.8125rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                Create another
+              </button>
+            </div>
+          ) : (
+            <button onClick={handleCreateClient} disabled={creating || !createName.trim() || !createEmail.trim()}
+              style={{ height: "38px", background: (creating || !createName.trim() || !createEmail.trim()) ? "var(--surface-2)" : "var(--primary)", border: "none", borderRadius: "8px", color: (creating || !createName.trim() || !createEmail.trim()) ? "var(--dim)" : "#ffffff", fontSize: "0.875rem", fontWeight: 500, cursor: (creating || !createName.trim() || !createEmail.trim()) ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+              {creating ? "Creating…" : "Create account + generate invite link"}
+            </button>
+          )}
+        </>
+      ))}
+
+      {/* Tool 2: Send Payment Link */}
+      {toolCard("Send Payment Link", "Generate a Stripe checkout link for any active client.", (
+        <>
+          <div>
+            <label style={{ display: "block", fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Client</label>
+            <select value={toolsClientEmail} onChange={e => { setToolsClientEmail(e.target.value); setToolsPayUrl(null); setToolsPayError(""); }}
+              style={{ width: "100%", height: "36px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.875rem", color: toolsClientEmail ? "var(--ink)" : "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }}>
+              <option value="">Select client…</option>
+              {activeClients.map(c => <option key={c.email} value={c.email}>{c.name} · {c.email}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Type</label>
+            <div style={{ display: "flex", gap: "0.375rem" }}>
+              {(["deposit", "monthly"] as const).map(t => (
+                <button key={t} onClick={() => setToolsPayType(t)}
+                  style={{ flex: 1, height: "32px", borderRadius: "6px", border: "1px solid", borderColor: toolsPayType === t ? "var(--primary)" : "var(--border)", background: toolsPayType === t ? "oklch(0.60 0.18 165 / 0.1)" : "none", color: toolsPayType === t ? "var(--primary)" : "var(--dim)", fontSize: "0.8125rem", fontWeight: toolsPayType === t ? 600 : 400, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                  {t === "deposit" ? "Deposit" : "Monthly"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Amount</label>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+              <span style={{ fontSize: "0.875rem", color: "var(--dim)", flexShrink: 0 }}>$</span>
+              <input type="number" min="1" value={toolsAmount} onChange={e => setToolsAmount(e.target.value)} placeholder="2000"
+                style={{ flex: 1, height: "36px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }}
+                onFocus={e => (e.target.style.borderColor = "var(--primary)")} onBlur={e => (e.target.style.borderColor = "var(--border)")} />
+            </div>
+          </div>
+          {toolsPayError && <p style={{ fontSize: "0.75rem", color: "var(--danger)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{toolsPayError}</p>}
+          {toolsPayUrl ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <p style={{ fontSize: "0.75rem", color: "oklch(0.7 0.15 145)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>${toolsAmount} checkout link ready</p>
+              <div style={{ display: "flex", gap: "0.375rem" }}>
+                <input readOnly value={toolsPayUrl} style={{ flex: 1, height: "34px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.625rem", fontSize: "0.75rem", color: "var(--dim)", fontFamily: "var(--font-mono), monospace", outline: "none" }} />
+                <button onClick={() => { navigator.clipboard.writeText(toolsPayUrl!).then(() => { setToolsPayCopied(true); setTimeout(() => setToolsPayCopied(false), 2000); }); }}
+                  style={{ height: "34px", padding: "0 0.75rem", background: toolsPayCopied ? "oklch(0.60 0.18 165 / 0.12)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: toolsPayCopied ? "var(--primary)" : "var(--muted)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap" }}>
+                  {toolsPayCopied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+              <button onClick={() => { setToolsPayUrl(null); setToolsPayCopied(false); }} style={{ height: "28px", background: "none", border: "none", color: "var(--dim)", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", textAlign: "left" }}>
+                ← Generate different amount
+              </button>
+            </div>
+          ) : (
+            <button onClick={handleSendPaymentLink} disabled={toolsPayLoading || !toolsClientEmail || !toolsAmount || Number(toolsAmount) < 1}
+              style={{ height: "38px", background: (toolsPayLoading || !toolsClientEmail || !toolsAmount || Number(toolsAmount) < 1) ? "var(--surface-2)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", color: (toolsPayLoading || !toolsClientEmail || !toolsAmount || Number(toolsAmount) < 1) ? "var(--dim)" : "var(--muted)", fontSize: "0.875rem", fontWeight: 500, cursor: (toolsPayLoading || !toolsClientEmail || !toolsAmount || Number(toolsAmount) < 1) ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+              {toolsPayLoading ? "Generating…" : `Generate ${toolsPayType} link · $${toolsAmount || '—'}`}
+            </button>
+          )}
+        </>
+      ))}
+
+      {/* Tool 3: Generate Extra Protocol */}
+      {toolCard("Generate Extra Protocol", "Run the AI protocol generator for any client with an optional instruction note.", (
+        <>
+          <div>
+            <label style={{ display: "block", fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Client</label>
+            <select value={protoClientEmail} onChange={e => { setProtoClientEmail(e.target.value); setProtoResult(null); }}
+              style={{ width: "100%", height: "36px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.875rem", color: protoClientEmail ? "var(--ink)" : "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }}>
+              <option value="">Select client…</option>
+              {activeClients.map(c => <option key={c.email} value={c.email}>{c.name} · {c.email}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Instruction note (optional)</label>
+            <textarea value={protoNote} onChange={e => setProtoNote(e.target.value)} rows={3}
+              placeholder="e.g. Focus on optimizing sleep protocol"
+              style={{ width: "100%", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0.5rem 0.75rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", resize: "vertical", lineHeight: 1.5, boxSizing: "border-box" }}
+              onFocus={e => (e.target.style.borderColor = "var(--primary)")} onBlur={e => (e.target.style.borderColor = "var(--border)")} />
+          </div>
+          {protoResult === "done" && (
+            <p style={{ fontSize: "0.8125rem", color: "oklch(0.7 0.15 145)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Done — check client&apos;s protocols tab.</p>
+          )}
+          {protoResult === "error" && (
+            <p style={{ fontSize: "0.8125rem", color: "var(--danger)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Generation failed. Try again.</p>
+          )}
+          <button onClick={handleGenerateExtraProtocol} disabled={protoGenerating || !protoClientEmail}
+            style={{ height: "38px", background: (protoGenerating || !protoClientEmail) ? "var(--surface-2)" : "oklch(0.60 0.18 165 / 0.12)", border: "1px solid", borderColor: (protoGenerating || !protoClientEmail) ? "var(--border)" : "oklch(0.60 0.18 165 / 0.3)", borderRadius: "8px", color: (protoGenerating || !protoClientEmail) ? "var(--dim)" : "var(--primary)", fontSize: "0.875rem", fontWeight: 500, cursor: (protoGenerating || !protoClientEmail) ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.375rem" }}>
+            {!protoGenerating && <SparkleIcon />}
+            {protoGenerating ? "Generating…" : "Generate protocol"}
+          </button>
+        </>
+      ))}
     </div>
   );
 }
