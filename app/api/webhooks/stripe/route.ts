@@ -59,16 +59,18 @@ export async function POST(req: Request) {
       };
       if (existing.status === 'new') updates.status = 'pending';
 
-      // Deposit tracking
+      // Payment type tracking
       if (paymentType === 'deposit') {
-        // THP sets total_owed in metadata when creating the payment link
         const totalOwed = metadata.total_owed ? parseFloat(metadata.total_owed) : null;
         updates.deposit_paid = amountPaid;
         if (totalOwed !== null) updates.total_owed = totalOwed;
       } else if (paymentType === 'balance') {
-        // Balance received — clear the deposit tracking
         const { data: u } = await supabaseAdmin.from('users').select('total_owed').eq('email', email).maybeSingle();
         updates.deposit_paid = u?.total_owed ?? amountPaid;
+      } else if (paymentType === 'monthly') {
+        updates.last_monthly_paid = new Date().toISOString().split('T')[0];
+        updates.last_monthly_amount = amountPaid;
+        if (metadata.agreed_monthly) updates.agreed_monthly = parseFloat(metadata.agreed_monthly);
       }
 
       await supabaseAdmin.from('users').update(updates).eq('email', email);

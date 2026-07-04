@@ -12,7 +12,7 @@ import Stripe from 'stripe';
 
 export async function POST(req: Request) {
   try {
-    const { email, adminPw, amount } = await req.json();
+    const { email, adminPw, amount, paymentType = 'deposit' } = await req.json();
 
     if (!adminPw || adminPw !== process.env.ADMIN_PASSWORD) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
@@ -39,6 +39,7 @@ export async function POST(req: Request) {
         },
         quantity: 1,
       }],
+      metadata: { payment_type: paymentType, user_email: email },
       success_url: `${appUrl}/onboarding?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/`,
     });

@@ -349,6 +349,13 @@ export default function ApplyPage() {
       }
     }
 
+    // Auto-generate a draft diagnosis from intake data (fires and forgets — don't block the redirect)
+    fetch('/api/generate-diagnosis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientEmail: form.email.trim().toLowerCase(), adminPw: process.env.NEXT_PUBLIC_INTERNAL_API_KEY }),
+    }).catch(() => {});
+
     setSubmitting(false);
     window.location.href = "https://cal.com/ali-filali-uks4xi/30min";
   }

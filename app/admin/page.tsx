@@ -647,7 +647,7 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
       const res = await fetch('/api/stripe/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: client.email, adminPw: ADMIN_PASSWORD, amount: Number(checkoutAmount) }),
+        body: JSON.stringify({ email: client.email, adminPw: ADMIN_PASSWORD, amount: Number(checkoutAmount), paymentType: 'deposit' }),
       });
       const data = await res.json();
       if (data.url) {
@@ -1427,7 +1427,8 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
   const [expandedTracker, setExpandedTracker] = useState<string | null>(null);
   const [bloodWorkEntries, setBloodWorkEntries] = useState<{ id: string; test_date: string | null; uploaded_at: string; markers: Record<string,{ value: number | null; unit: string; flag?: string | null }> | null }[]>([]);
   const [expandedBWMarker, setExpandedBWMarker] = useState<string | null>(null);
-  const [userData, setUserData] = useState<{ deposit_paid: number | null; total_owed: number | null; telegram_username: string | null; last_login: string | null; last_tracker_date: string | null } | null>(null);
+  const [userData, setUserData] = useState<{ deposit_paid: number | null; total_owed: number | null; telegram_username: string | null; last_login: string | null; last_tracker_date: string | null; agreed_monthly: number | null; last_monthly_paid: string | null; last_monthly_amount: number | null } | null>(null);
+  const [agreedMonthly, setAgreedMonthly] = useState("");
   const [referralCount, setReferralCount] = useState(0);
   const [notes, setNotes] = useState("");
   const [notesSaving, setNotesSaving] = useState(false);
@@ -1460,6 +1461,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
   const [paymentLinkCopied, setPaymentLinkCopied] = useState(false);
   const [paymentLinkError, setPaymentLinkError] = useState("");
   const [checkoutAmount, setCheckoutAmount] = useState("2000");
+  const [checkoutPaymentType, setCheckoutPaymentType] = useState<"deposit" | "monthly">("deposit");
   const [trackerSummary, setTrackerSummary] = useState<{
     trends: { category: string; avgScore: number; direction: string; delta: number }[];
     flagged: { date: string; questionLabel: string; value: string | number | boolean; category: string }[];
@@ -1501,12 +1503,13 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
       .then(({ data }) => setBloodWorkEntries((data as typeof bloodWorkEntries) ?? []));
 
     // User data (deposit, telegram, last login/tracker)
-    supabase.from('users').select('deposit_paid, total_owed, telegram_username, last_login, last_tracker_date')
+    supabase.from('users').select('deposit_paid, total_owed, telegram_username, last_login, last_tracker_date, agreed_monthly, last_monthly_paid, last_monthly_amount')
       .eq('email', client.email).maybeSingle()
       .then(({ data }) => {
         if (data) {
           setUserData(data as typeof userData);
           setTelegramUsername(data.telegram_username ?? '');
+          setAgreedMonthly(data.agreed_monthly ? String(data.agreed_monthly) : '');
         }
       });
 
@@ -1596,7 +1599,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
   async function handleGeneratePaymentLink() {
     setPaymentLinkLoading(true); setPaymentLinkError("");
     try {
-      const res = await fetch('/api/stripe/create-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: client.email, adminPw: ADMIN_PASSWORD, amount: Number(checkoutAmount) }) });
+      const res = await fetch('/api/stripe/create-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: client.email, adminPw: ADMIN_PASSWORD, amount: Number(checkoutAmount), paymentType: checkoutPaymentType }) });
       const data = await res.json();
       if (data.url) { setPaymentUrl(data.url); } else { setPaymentLinkError(data.error ?? "Failed to create payment link"); }
     } catch { setPaymentLinkError("Network error. Please try again."); }
@@ -1853,38 +1856,38 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         );
       })()}
 
-      {/* Payments — always visible with manual entry */}
+      {/* Payments — deposit + monthly */}
       <div style={{ marginBottom: "1.5rem" }}>
         <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--dim)", textTransform: "uppercase", marginBottom: "0.75rem", fontFamily: "var(--font-mono), monospace" }}>Payments</p>
-        {userData?.deposit_paid != null ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ fontSize: "0.875rem", color: "var(--muted)" }}>Deposit paid</span>
-              <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--ink)" }}>${userData.deposit_paid}</span>
-            </div>
-            {userData.total_owed != null && userData.total_owed > userData.deposit_paid && (
+
+        {/* Deposit row */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem", marginBottom: "0.75rem" }}>
+          {userData?.deposit_paid != null ? (
+            <>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ fontSize: "0.875rem", color: "var(--muted)" }}>Balance due</span>
-                <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "oklch(0.75 0.16 25)" }}>${userData.total_owed - userData.deposit_paid}</span>
+                <span style={{ fontSize: "0.875rem", color: "var(--muted)" }}>Deposit paid</span>
+                <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--ink)" }}>${userData.deposit_paid}</span>
               </div>
-            )}
-            {userData.total_owed != null && userData.deposit_paid >= userData.total_owed && userData.total_owed > 0 && (
-              <p style={{ fontSize: "0.8125rem", color: "oklch(0.65 0.15 145)" }}>All settled ✓</p>
-            )}
-            <button onClick={() => setShowPayForm(v => !v)} style={{ marginTop: "0.25rem", background: "none", border: "none", fontSize: "0.75rem", color: "var(--dim)", cursor: "pointer", textAlign: "left", padding: 0 }}>
-              Edit payment →
-            </button>
-          </div>
-        ) : (
-          <div>
-            <p style={{ fontSize: "0.8125rem", color: "var(--dim)", marginBottom: "0.5rem" }}>No deposit recorded.</p>
-            <button onClick={() => setShowPayForm(v => !v)} style={{ background: "none", border: "1px solid var(--border)", borderRadius: "6px", padding: "0.375rem 0.75rem", fontSize: "0.75rem", color: "var(--muted)", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-              Log payment
-            </button>
-          </div>
-        )}
+              {userData.total_owed != null && userData.total_owed > userData.deposit_paid && (
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: "0.875rem", color: "var(--muted)" }}>Balance due</span>
+                  <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "oklch(0.75 0.16 25)" }}>${userData.total_owed - userData.deposit_paid}</span>
+                </div>
+              )}
+              {userData.total_owed != null && userData.deposit_paid >= userData.total_owed && userData.total_owed > 0 && (
+                <p style={{ fontSize: "0.8125rem", color: "oklch(0.65 0.15 145)" }}>Deposit settled ✓</p>
+              )}
+            </>
+          ) : (
+            <p style={{ fontSize: "0.8125rem", color: "var(--dim)" }}>No deposit recorded.</p>
+          )}
+          <button onClick={() => setShowPayForm(v => !v)} style={{ background: "none", border: "none", fontSize: "0.75rem", color: "var(--dim)", cursor: "pointer", textAlign: "left", padding: 0 }}>
+            {showPayForm ? "Cancel" : "Log deposit manually →"}
+          </button>
+        </div>
+
         {showPayForm && (
-          <div style={{ marginTop: "0.75rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <div style={{ marginBottom: "0.75rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
               <label style={{ fontSize: "0.75rem", color: "var(--dim)", minWidth: "90px" }}>Deposit $</label>
               <input value={payDeposit} onChange={e => setPayDeposit(e.target.value)} placeholder="0" type="number"
@@ -1902,13 +1905,38 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
               await supabase.from('users').update({ deposit_paid: d, total_owed: t }).eq('email', client.email);
               setPaySaving(false);
               setShowPayForm(false);
-              const { data } = await supabase.from('users').select('deposit_paid, total_owed, telegram_username, last_login, last_tracker_date').eq('email', client.email).maybeSingle();
+              const { data } = await supabase.from('users').select('deposit_paid, total_owed, telegram_username, last_login, last_tracker_date, agreed_monthly, last_monthly_paid, last_monthly_amount').eq('email', client.email).maybeSingle();
               if (data) setUserData(data as typeof userData);
             }} style={{ alignSelf: "flex-start", padding: "0.375rem 0.875rem", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.8125rem", cursor: paySaving ? "not-allowed" : "pointer", opacity: paySaving ? 0.7 : 1 }}>
               {paySaving ? "Saving…" : "Save"}
             </button>
           </div>
         )}
+
+        {/* Monthly row */}
+        <div style={{ paddingTop: "0.75rem", borderTop: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: "0.875rem", color: "var(--muted)" }}>Monthly agreed</span>
+            <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
+              <span style={{ fontSize: "0.75rem", color: "var(--dim)" }}>$</span>
+              <input value={agreedMonthly} onChange={e => setAgreedMonthly(e.target.value)}
+                onBlur={async () => {
+                  const v = parseFloat(agreedMonthly) || null;
+                  await supabase.from('users').update({ agreed_monthly: v }).eq('email', client.email);
+                }}
+                placeholder="—" type="number"
+                style={{ width: "70px", padding: "0.2rem 0.375rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "5px", color: "var(--ink)", fontSize: "0.875rem", fontFamily: "var(--font-mono), monospace", textAlign: "right", outline: "none" }} />
+            </div>
+          </div>
+          {userData?.last_monthly_paid && (
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "0.8125rem", color: "var(--muted)" }}>Last monthly</span>
+              <span style={{ fontSize: "0.8125rem", fontWeight: 500, color: "oklch(0.65 0.15 145)" }}>
+                ${userData.last_monthly_amount ?? "?"} · {new Date(userData.last_monthly_paid + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
 
@@ -2017,15 +2045,24 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
           <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Send Payment Link</p>
           {!paymentUrl ? (
             <>
+              <div style={{ display: "flex", gap: "0.25rem", marginBottom: "0.125rem" }}>
+                {(["deposit", "monthly"] as const).map(t => (
+                  <button key={t} onClick={() => setCheckoutPaymentType(t)}
+                    style={{ flex: 1, height: "28px", borderRadius: "6px", border: "1px solid", borderColor: checkoutPaymentType === t ? "var(--primary)" : "var(--border)", background: checkoutPaymentType === t ? "oklch(0.60 0.18 165 / 0.1)" : "none", color: checkoutPaymentType === t ? "var(--primary)" : "var(--dim)", fontSize: "0.75rem", fontWeight: checkoutPaymentType === t ? 600 : 400, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                    {t === "deposit" ? "Deposit" : "Monthly"}
+                  </button>
+                ))}
+              </div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
                 <span style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 500, flexShrink: 0 }}>$</span>
-                <input type="number" min="1" value={checkoutAmount} onChange={e => setCheckoutAmount(e.target.value)} placeholder="2000"
+                <input type="number" min="1" value={checkoutAmount} onChange={e => setCheckoutAmount(e.target.value)}
+                  placeholder={checkoutPaymentType === "monthly" && agreedMonthly ? agreedMonthly : "2000"}
                   style={{ flex: 1, height: "34px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.625rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }}
                   onFocus={e => (e.target.style.borderColor = "var(--primary)")} onBlur={e => (e.target.style.borderColor = "var(--border)")} />
               </div>
               <button onClick={handleGeneratePaymentLink} disabled={paymentLinkLoading || !checkoutAmount || Number(checkoutAmount) < 1}
                 style={{ height: "36px", background: (paymentLinkLoading || !checkoutAmount || Number(checkoutAmount) < 1) ? "var(--surface-2)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: (paymentLinkLoading || !checkoutAmount || Number(checkoutAmount) < 1) ? "var(--dim)" : "var(--muted)", fontSize: "0.8125rem", fontWeight: 500, cursor: (paymentLinkLoading || !checkoutAmount || Number(checkoutAmount) < 1) ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-                {paymentLinkLoading ? "Generating…" : `Generate $${checkoutAmount || '—'} link`}
+                {paymentLinkLoading ? "Generating…" : `Generate ${checkoutPaymentType} link · $${checkoutAmount || '—'}`}
               </button>
               {paymentLinkError && <p style={{ fontSize: "0.75rem", color: "var(--danger)" }}>{paymentLinkError}</p>}
             </>
