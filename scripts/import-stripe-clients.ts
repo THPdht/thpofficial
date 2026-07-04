@@ -18,7 +18,7 @@ const supabase = createClient(
 const STRIPE_LIVE_KEY =
   "REDACTED";
 
-const stripe = new Stripe(STRIPE_LIVE_KEY, { apiVersion: "2025-05-28.basil" });
+const stripe = new Stripe(STRIPE_LIVE_KEY, { apiVersion: "2026-06-24.dahlia" });
 
 const DEFAULT_PASSWORD = "THP2025!";
 
@@ -66,7 +66,8 @@ async function main() {
 
   for (const sub of allSubs) {
     const customer = sub.customer as Stripe.Customer;
-    if (!customer || customer.deleted) continue;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!customer || (customer as any).deleted) continue;
     const email = (customer.email ?? "").toLowerCase().trim();
     if (!email) continue;
 

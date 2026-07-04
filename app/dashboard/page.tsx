@@ -1048,9 +1048,10 @@ function BloodWorkTab({ user }: { user: StoredUser }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    supabase.from('blood_work').select('*').eq('user_email', user.email)
-      .order('uploaded_at', { ascending: false })
-      .then(({ data }) => { setEntries((data as BloodWorkEntry[]) ?? []); setLoading(false); });
+    fetch(`/api/blood-work-history?email=${encodeURIComponent(user.email)}`)
+      .then(r => r.json())
+      .then(d => { setEntries((d.entries ?? []) as BloodWorkEntry[]); setLoading(false); })
+      .catch(() => setLoading(false));
   }, [user.email]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1067,11 +1068,12 @@ function BloodWorkTab({ user }: { user: StoredUser }) {
       let attempts = 0;
       const poll = setInterval(async () => {
         attempts++;
-        const { data } = await supabase.from('blood_work').select('*').eq('id', res.uploadId).maybeSingle();
-        if (data?.markers || attempts > 20) {
+        const d = await fetch(`/api/blood-work-history?email=${encodeURIComponent(user.email)}`).then(r => r.json()).catch(() => null);
+        const fresh = (d?.entries ?? []).find((e: BloodWorkEntry) => e.id === res.uploadId);
+        if (fresh?.markers || attempts > 20) {
           clearInterval(poll);
           setAnalysing(false);
-          setEntries(prev => [data as BloodWorkEntry, ...prev.filter(e => e.id !== res.uploadId)]);
+          if (fresh) setEntries(prev => [fresh, ...prev.filter(e => e.id !== res.uploadId)]);
         }
       }, 3000);
     }
@@ -1310,18 +1312,13 @@ function TrackerHistoryTab({ user }: { user: StoredUser }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
-    import('@/lib/supabase').then(({ supabase }) => {
-      supabase
-        .from('daily_trackers')
-        .select('id, date, circadian, training, nutrition, vitals, psychological, business')
-        .eq('user_email', user.email)
-        .order('date', { ascending: false })
-        .limit(60)
-        .then(({ data }) => {
-          setEntries((data ?? []) as TrackerEntry[]);
-          setLoading(false);
-        });
-    });
+    fetch(`/api/tracker-history?email=${encodeURIComponent(user.email)}&limit=60`)
+      .then(r => r.json())
+      .then(d => {
+        setEntries((d.trackers ?? []) as TrackerEntry[]);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, [user.email]);
 
   const formatDate = (d: string) =>

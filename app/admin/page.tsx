@@ -1403,15 +1403,17 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         setAnalysisMap(map);
       });
 
-    // Last 10 trackers
-    supabase.from('daily_trackers').select('*').eq('user_email', client.email)
-      .order('date', { ascending: false }).limit(10)
-      .then(({ data }) => setTrackers((data as typeof trackers) ?? []));
+    // Last 10 trackers — via API (bypasses RLS)
+    fetch(`/api/tracker-history?email=${encodeURIComponent(client.email)}&limit=10`)
+      .then(r => r.json())
+      .then(d => setTrackers((d.trackers ?? []) as typeof trackers))
+      .catch(() => {});
 
-    // Blood work entries — all for sparklines/charts, latest 2 used for delta
-    supabase.from('blood_work').select('id, test_date, uploaded_at, markers').eq('user_email', client.email)
-      .order('uploaded_at', { ascending: false })
-      .then(({ data }) => setBloodWorkEntries((data as typeof bloodWorkEntries) ?? []));
+    // Blood work entries — via API (bypasses RLS)
+    fetch(`/api/blood-work-history?email=${encodeURIComponent(client.email)}`)
+      .then(r => r.json())
+      .then(d => setBloodWorkEntries((d.entries ?? []) as typeof bloodWorkEntries))
+      .catch(() => {});
 
     // User data (deposit, telegram, last login/tracker)
     supabase.from('users').select('deposit_paid, total_owed, telegram_username, last_login, last_tracker_date, agreed_monthly, last_monthly_paid, last_monthly_amount')
