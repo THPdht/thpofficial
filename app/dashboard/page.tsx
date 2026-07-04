@@ -1046,6 +1046,7 @@ function BloodWorkTab({ user }: { user: StoredUser }) {
   const [uploading, setUploading] = useState(false);
   const [analysing, setAnalysing] = useState(false);
   const [expandedMarker, setExpandedMarker] = useState<string | null>(null);
+  const [selectedMarker, setSelectedMarker] = useState("total_t");
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -1105,6 +1106,52 @@ function BloodWorkTab({ user }: { user: StoredUser }) {
           <p style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300 }}>Extracting markers from your results…</p>
         </div>
       )}
+
+      {/* Prominent trends chart with marker dropdown */}
+      <div style={{ marginBottom: "2rem", padding: "1.25rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.625rem" }}>
+          <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--dim)", textTransform: "uppercase", fontFamily: "var(--font-mono), monospace" }}>Trends</p>
+          <select value={selectedMarker} onChange={e => setSelectedMarker(e.target.value)}
+            style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "8px", color: "var(--muted)", fontSize: "0.8125rem", padding: "0.375rem 0.625rem", fontFamily: "var(--font-mono), monospace", cursor: "pointer" }}>
+            {Object.entries(MARKER_DEFAULTS).map(([key, def]) => (
+              <option key={key} value={key}>{def.label} ({def.unit})</option>
+            ))}
+          </select>
+        </div>
+        {(() => {
+          const chartData = [...entries]
+            .reverse()
+            .map(e => ({
+              date: e.test_date ?? new Date(e.uploaded_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+              val: e.markers?.[selectedMarker]?.value ?? null,
+            }))
+            .filter((p): p is { date: string; val: number } => p.val !== null);
+          const def = MARKER_DEFAULTS[selectedMarker];
+          const latestEntry = entries[0];
+          const refRange = parseRefRange(latestEntry?.markers?.[selectedMarker]?.reference_range);
+          if (chartData.length < 2) {
+            return <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>Upload at least 2 blood tests to see trends.</p>;
+          }
+          return (
+            <>
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={chartData} margin={{ top: 10, right: 16, bottom: 0, left: 0 }}>
+                  {refRange && <ReferenceArea y1={refRange[0]} y2={refRange[1]} fill="oklch(0.35 0.08 145)" fillOpacity={0.15} />}
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: "var(--dim)", fontFamily: "var(--font-mono), monospace" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "var(--dim)", fontFamily: "var(--font-mono), monospace" }} axisLine={false} tickLine={false} width={48} />
+                  <Tooltip contentStyle={{ background: "#111", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "0.8125rem", fontFamily: "var(--font-mono), monospace", color: "#fff" }} labelStyle={{ color: "var(--dim)", marginBottom: "0.25rem" }} formatter={(value) => [`${value} ${def.unit}`, def.label]} />
+                  <Line type="monotone" dataKey="val" stroke="#c8102e" strokeWidth={2} dot={{ fill: "#c8102e", r: 4, strokeWidth: 0 }} activeDot={{ r: 6 }} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+              {refRange && (
+                <p style={{ fontSize: "0.7rem", color: "var(--dim)", marginTop: "0.75rem", fontFamily: "var(--font-mono), monospace" }}>
+                  Reference range: {refRange[0]}–{refRange[1]} {def.unit}
+                </p>
+              )}
+            </>
+          );
+        })()}
+      </div>
 
       <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--dim)", textTransform: "uppercase", marginBottom: "0.875rem", fontFamily: "var(--font-mono), monospace" }}>
         {latest?.test_date ? `Latest — ${latest.test_date}` : latest ? `Latest — ${new Date(latest.uploaded_at).toLocaleDateString("en-GB")}` : "Awaiting results"}

@@ -1427,6 +1427,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
   const [expandedTracker, setExpandedTracker] = useState<string | null>(null);
   const [bloodWorkEntries, setBloodWorkEntries] = useState<{ id: string; test_date: string | null; uploaded_at: string; markers: Record<string,{ value: number | null; unit: string; flag?: string | null }> | null }[]>([]);
   const [expandedBWMarker, setExpandedBWMarker] = useState<string | null>(null);
+  const [selectedMarker, setSelectedMarker] = useState("total_t");
   const [userData, setUserData] = useState<{ deposit_paid: number | null; total_owed: number | null; telegram_username: string | null; last_login: string | null; last_tracker_date: string | null; agreed_monthly: number | null; last_monthly_paid: string | null; last_monthly_amount: number | null } | null>(null);
   const [agreedMonthly, setAgreedMonthly] = useState("");
   const [referralCount, setReferralCount] = useState(0);
@@ -1708,35 +1709,41 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         </div>
       </div>
 
-      {/* Talking points + flags */}
-      {analysis && (
-        <div>
-          {sectionLabel(`Analysis · ${analysis.date}`)}
-          {analysis.talking_points?.length > 0 && (
-            <div style={{ marginBottom: "0.875rem" }}>
-              {analysis.talking_points.map((pt, i) => (
-                <div key={i} style={{ display: "flex", gap: "0.5rem", padding: "0.4rem 0", borderBottom: "1px solid var(--border-subtle)" }}>
-                  <span style={{ color: "var(--primary)", fontFamily: "var(--font-mono), monospace", fontSize: "0.7rem", flexShrink: 0, paddingTop: "1px" }}>→</span>
-                  <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 300, lineHeight: 1.5 }}>{pt}</p>
-                </div>
-              ))}
-            </div>
-          )}
-          {analysis.flags?.length > 0 && (
-            <div style={{ padding: "0.875rem 1rem", background: "oklch(0.65 0.14 65 / 0.08)", border: "1px solid oklch(0.65 0.14 65 / 0.2)", borderRadius: "9px" }}>
-              <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "oklch(0.75 0.12 65)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.5rem" }}>Flags</p>
-              {analysis.flags.map((f, i) => (
-                <p key={i} style={{ fontSize: "0.8125rem", color: "oklch(0.75 0.12 65)", fontWeight: 300, lineHeight: 1.5, marginBottom: i < analysis.flags.length - 1 ? "0.25rem" : 0 }}>⚠ {f}</p>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Talking points + flags — always visible */}
+      <div>
+        {sectionLabel(analysis ? `Analysis · ${analysis.date}` : 'Analysis')}
+        {!analysis ? (
+          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, fontStyle: "italic" }}>No AI analysis yet. Will appear after client submits their first tracker.</p>
+        ) : (
+          <>
+            {analysis.talking_points?.length > 0 && (
+              <div style={{ marginBottom: "0.875rem" }}>
+                {analysis.talking_points.map((pt, i) => (
+                  <div key={i} style={{ display: "flex", gap: "0.5rem", padding: "0.4rem 0", borderBottom: "1px solid var(--border-subtle)" }}>
+                    <span style={{ color: "var(--primary)", fontFamily: "var(--font-mono), monospace", fontSize: "0.7rem", flexShrink: 0, paddingTop: "1px" }}>→</span>
+                    <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 300, lineHeight: 1.5 }}>{pt}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {analysis.flags?.length > 0 && (
+              <div style={{ padding: "0.875rem 1rem", background: "oklch(0.65 0.14 65 / 0.08)", border: "1px solid oklch(0.65 0.14 65 / 0.2)", borderRadius: "9px" }}>
+                <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "oklch(0.75 0.12 65)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.5rem" }}>Flags</p>
+                {analysis.flags.map((f, i) => (
+                  <p key={i} style={{ fontSize: "0.8125rem", color: "oklch(0.75 0.12 65)", fontWeight: 300, lineHeight: 1.5, marginBottom: i < analysis.flags.length - 1 ? "0.25rem" : 0 }}>⚠ {f}</p>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
-      {/* Tracker history */}
-      {trackers.length > 0 && (
-        <div>
-          {sectionLabel('Recent trackers')}
+      {/* Tracker history — always visible */}
+      <div id="crm-trackers">
+        {sectionLabel('Recent trackers')}
+        {trackers.length === 0 ? (
+          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, fontStyle: "italic" }}>No trackers submitted yet.</p>
+        ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
             {trackers.map(t => (
               <div key={t.date as string}>
@@ -1768,8 +1775,8 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Blood work — always-on scoreboard */}
       {(() => {
@@ -1778,6 +1785,43 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         return (
           <div>
             {sectionLabel(bwLatest?.test_date ? `Blood Work · ${bwLatest.test_date}` : 'Blood Work')}
+
+            {/* Prominent trends chart with marker dropdown */}
+            <div style={{ marginBottom: "1rem", padding: "1rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
+                <p style={{ fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--dim)", textTransform: "uppercase", fontFamily: "var(--font-mono), monospace" }}>Trends</p>
+                <select value={selectedMarker} onChange={e => setSelectedMarker(e.target.value)}
+                  style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--muted)", fontSize: "0.75rem", padding: "0.25rem 0.5rem", fontFamily: "var(--font-mono), monospace", cursor: "pointer" }}>
+                  {Object.entries(MARKER_DEFAULTS).map(([key, def]) => (
+                    <option key={key} value={key}>{def.label} ({def.unit})</option>
+                  ))}
+                </select>
+              </div>
+              {(() => {
+                const chartData = [...bloodWorkEntries]
+                  .reverse()
+                  .map(e => ({
+                    date: e.test_date ?? new Date(e.uploaded_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+                    val: e.markers?.[selectedMarker]?.value ?? null,
+                  }))
+                  .filter((p): p is { date: string; val: number } => p.val !== null);
+                const def = MARKER_DEFAULTS[selectedMarker];
+                if (chartData.length < 2) {
+                  return <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>Upload at least 2 blood tests to see trends.</p>;
+                }
+                return (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={chartData} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--dim)", fontFamily: "var(--font-mono), monospace" }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10, fill: "var(--dim)", fontFamily: "var(--font-mono), monospace" }} axisLine={false} tickLine={false} width={40} />
+                      <Tooltip contentStyle={{ background: "#111", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "0.75rem", fontFamily: "var(--font-mono), monospace", color: "#fff" }} formatter={(value) => [`${value} ${def.unit}`, def.label]} />
+                      <Line type="monotone" dataKey="val" stroke="#c8102e" strokeWidth={2} dot={{ fill: "#c8102e", r: 3, strokeWidth: 0 }} activeDot={{ r: 5 }} isAnimationActive={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                );
+              })()}
+            </div>
+
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "0.5rem", marginBottom: "1rem" }}>
               {Object.entries(MARKER_DEFAULTS).map(([key, def]) => {
                 const m = bwLatest?.markers?.[key];
@@ -1882,7 +1926,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
             <p style={{ fontSize: "0.8125rem", color: "var(--dim)" }}>No deposit recorded.</p>
           )}
           <button onClick={() => setShowPayForm(v => !v)} style={{ background: "none", border: "none", fontSize: "0.75rem", color: "var(--dim)", cursor: "pointer", textAlign: "left", padding: 0 }}>
-            {showPayForm ? "Cancel" : "Log deposit manually →"}
+            {showPayForm ? "Cancel" : "Past clients (pre-Stripe): enter manually →"}
           </button>
         </div>
 
@@ -1916,7 +1960,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         {/* Monthly row */}
         <div style={{ paddingTop: "0.75rem", borderTop: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", gap: "0.375rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: "0.875rem", color: "var(--muted)" }}>Monthly agreed</span>
+            <span style={{ fontSize: "0.875rem", color: "var(--muted)" }}>Agreed monthly rate</span>
             <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
               <span style={{ fontSize: "0.75rem", color: "var(--dim)" }}>$</span>
               <input value={agreedMonthly} onChange={e => setAgreedMonthly(e.target.value)}
