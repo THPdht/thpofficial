@@ -219,17 +219,20 @@ export async function login(
   email: string,
   password: string
 ): Promise<{ success: boolean; user?: StoredUser; error?: string }> {
-  const norm = email.toLowerCase().trim();
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('email', norm)
-    .maybeSingle();
-  if (error || !data) return { success: false, error: 'No account found with this email.' };
-  if (data.password !== password) return { success: false, error: 'Incorrect password.' };
-  const user = rowToUser(data);
-  cacheUser(user);
-  return { success: true, user };
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const json = await res.json();
+    if (!res.ok || json.error) return { success: false, error: json.error || 'Sign in failed.' };
+    const user = rowToUser(json.user);
+    cacheUser(user);
+    return { success: true, user };
+  } catch {
+    return { success: false, error: 'Network error. Please try again.' };
+  }
 }
 
 export async function updateUser(email: string, updates: Partial<StoredUser>): Promise<void> {
