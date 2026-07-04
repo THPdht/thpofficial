@@ -20,6 +20,8 @@ export default function Dashboard() {
   const [protocol, setProtocol] = useState<Protocol | null>(null);
   const [showPwaBanner, setShowPwaBanner] = useState(false);
   const [suspended, setSuspended] = useState(false);
+  type DashTab = 'today' | 'diagnosis' | 'protocol' | 'trackers' | 'blood-work' | 'referrals';
+  const [dashTab, setDashTab] = useState<DashTab>('today');
 
   useEffect(() => {
     let isMounted = true;
@@ -132,20 +134,16 @@ export default function Dashboard() {
     return () => { isMounted = false; supabase.removeChannel(userChannel); };
   }, [router]);
 
-  // Deep-link scroll: ?tab= or ?section= URL param scrolls to section on mount
+  // Deep-link: ?tab= URL param switches to that tab on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const target = params.get("tab") || params.get("section");
     if (!target) return;
-    const map: Record<string, string> = {
-      protocol: "protocol-section",
-      diagnosis: "diagnosis-section",
-      "blood-work": "blood-work-section",
-      referrals: "referrals-section",
-      payments: "payments-section",
-    };
-    const id = map[target] ?? target + "-section";
-    setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }), 300);
+    const validTabs: DashTab[] = ['today', 'diagnosis', 'protocol', 'trackers', 'blood-work', 'referrals'];
+    const mapped: Record<string, DashTab> = { 'blood-work': 'blood-work', 'bloodwork': 'blood-work', payments: 'today' };
+    const tab = mapped[target] ?? (validTabs.includes(target as DashTab) ? (target as DashTab) : null);
+    if (tab) setDashTab(tab);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSignOut = () => { signOut(); router.push("/"); };
@@ -225,59 +223,51 @@ export default function Dashboard() {
   return (
     <div style={{ minHeight: "100dvh", background: "var(--bg)", display: "flex", flexDirection: "column" }}>
       {/* Sticky nav */}
+      {/* Header */}
       <header style={{
         position: "sticky",
         top: 0,
         zIndex: 200,
-        background: "oklch(0.07 0.008 165 / 0.92)",
+        background: "oklch(0.07 0.008 165 / 0.95)",
         backdropFilter: "blur(16px)",
         WebkitBackdropFilter: "blur(16px)",
         borderBottom: "1px solid var(--border-subtle)",
-        padding: "0 clamp(1.25rem, 4vw, 2.5rem)",
+        padding: "0 clamp(1rem, 4vw, 2rem)",
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        height: "56px",
+        height: "60px",
+        gap: "1rem",
       }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/images/thprebrandlogo2.png" alt="THP" style={{ height: "28px", width: "auto", filter: "brightness(0) invert(1)" }} />
-        <div style={{ display: "flex", alignItems: "center", gap: "0.875rem" }}>
+        <img src="/images/thprebrandlogo2.png" alt="THP" style={{ height: "28px", width: "auto", filter: "brightness(0) invert(1)", flexShrink: 0 }} />
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           {user.streak > 0 && (
-            <div style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.375rem",
-              padding: "0.25rem 0.625rem",
-              background: "var(--surface)",
-              border: "1px solid oklch(0.60 0.18 165 / 0.35)",
-              borderRadius: "100px",
-            }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.25rem 0.625rem", background: "var(--surface)", border: "1px solid oklch(0.60 0.18 165 / 0.35)", borderRadius: "100px" }}>
               <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--primary)", flexShrink: 0 }} aria-hidden />
               <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--ink)", fontFamily: "var(--font-mono), monospace" }}>{user.streak}</span>
               <span style={{ fontSize: "0.7rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>day streak</span>
             </div>
           )}
+          {/* Book a Call — THP red, prominent */}
           <a href={CAL_LINK} target="_blank" rel="noopener noreferrer"
-            style={{ height: "32px", padding: "0 0.875rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: "var(--muted)", fontSize: "0.75rem", fontWeight: 500, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "border-color 150ms, color 150ms", whiteSpace: "nowrap" }}
-            onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "var(--primary)"; (e.currentTarget as HTMLAnchorElement).style.color = "var(--primary)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLAnchorElement).style.color = "var(--muted)"; }}>
-            <CalIcon /> Book
+            style={{ height: "38px", padding: "0 1.125rem", background: "var(--color-red)", border: "none", borderRadius: "8px", color: "#ffffff", fontSize: "0.8125rem", fontWeight: 600, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif", letterSpacing: "0.01em", whiteSpace: "nowrap", transition: "opacity 150ms" }}
+            onMouseEnter={e => (e.currentTarget as HTMLAnchorElement).style.opacity = "0.88"}
+            onMouseLeave={e => (e.currentTarget as HTMLAnchorElement).style.opacity = "1"}>
+            <CalIcon /> Book a Call
           </a>
           <span style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{firstName}</span>
-          <button
-            onClick={handleSignOut}
+          <button onClick={handleSignOut}
             style={{ background: "none", border: "none", color: "var(--dim)", fontSize: "0.8125rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "color 150ms" }}
             onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = "var(--muted)"}
             onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = "var(--dim)"}
-          >
-            Sign out
-          </button>
+          >Sign out</button>
         </div>
       </header>
 
       {/* Limited access banner */}
       {isLimited && (
-        <div style={{ background: "oklch(0.65 0.14 65 / 0.1)", borderBottom: "1px solid oklch(0.65 0.14 65 / 0.25)", padding: "0.625rem clamp(1.25rem, 4vw, 2.5rem)", display: "flex", alignItems: "center", gap: "0.625rem" }}>
+        <div style={{ background: "oklch(0.65 0.14 65 / 0.1)", borderBottom: "1px solid oklch(0.65 0.14 65 / 0.25)", padding: "0.625rem clamp(1rem, 4vw, 2rem)", display: "flex", alignItems: "center", gap: "0.625rem" }}>
           <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "oklch(0.82 0.10 62)", flexShrink: 0 }} />
           <p style={{ fontSize: "0.8125rem", color: "oklch(0.82 0.10 62)", fontWeight: 400, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
             Your access is currently limited. Message THP to continue.
@@ -285,69 +275,77 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Single-scroll content */}
-      <div style={{ flex: 1, padding: "2rem clamp(1.25rem, 4vw, 2.5rem)", maxWidth: "760px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "3rem" }}>
+      {/* Body: sidebar + content */}
+      <style>{`
+        .dash-layout { display: flex; flex-direction: row; flex: 1; }
+        .dash-sidebar {
+          width: 200px; flex-shrink: 0; border-right: 1px solid var(--border-subtle);
+          padding: 1.5rem 0.75rem; display: flex; flex-direction: column; gap: 0.125rem;
+          position: sticky; top: 60px; height: calc(100dvh - 60px); overflow-y: auto;
+        }
+        .dash-nav-item {
+          display: flex; align-items: center; gap: 0.625rem;
+          padding: 0.625rem 0.875rem; border-radius: 8px; border: none;
+          background: none; cursor: pointer; font-size: 0.875rem; font-weight: 400;
+          font-family: var(--font-ui), system-ui, sans-serif;
+          color: var(--muted); text-align: left; width: 100%; transition: all 120ms;
+          white-space: nowrap;
+        }
+        .dash-nav-item:hover { background: var(--surface); color: var(--ink); }
+        .dash-nav-item.active { background: color-mix(in srgb, var(--color-red) 10%, transparent); color: var(--ink); font-weight: 500; }
+        .dash-nav-item.active .dash-nav-dot { background: var(--color-red); }
+        .dash-nav-dot { width: 5px; height: 5px; border-radius: 50%; background: transparent; flex-shrink: 0; transition: background 120ms; }
+        .dash-content { flex: 1; padding: 2rem clamp(1rem, 3vw, 2rem); max-width: 820px; min-width: 0; }
+        @media (max-width: 768px) {
+          .dash-layout { flex-direction: column; }
+          .dash-sidebar {
+            width: 100%; height: auto; position: static;
+            border-right: none; border-bottom: 1px solid var(--border-subtle);
+            padding: 0.5rem 1rem; flex-direction: row; overflow-x: auto; overflow-y: hidden;
+            gap: 0.25rem; scrollbar-width: none;
+          }
+          .dash-sidebar::-webkit-scrollbar { display: none; }
+          .dash-nav-item { padding: 0.5rem 0.875rem; font-size: 0.8125rem; white-space: nowrap; flex-shrink: 0; }
+          .dash-nav-dot { display: none; }
+          .dash-content { padding: 1.5rem 1.25rem; }
+        }
+      `}</style>
+      <div className="dash-layout">
 
-        {/* Tracker hero — only active/alumni non-limited */}
-        {!isLimited && (user.status === "active" || user.status === "alumni") && (
-          <TodayTab user={user} firstName={firstName} greeting={greeting} todayFormatted={todayFormatted} isAlumni={user.status === "alumni"} />
-        )}
+        {/* Sidebar nav */}
+        <nav className="dash-sidebar">
+          {[
+            { id: 'today', label: 'Today', show: !isLimited && (user.status === 'active' || user.status === 'alumni') },
+            { id: 'diagnosis', label: 'Diagnosis', show: true },
+            { id: 'protocol', label: 'Protocol', show: true },
+            { id: 'trackers', label: 'My Trackers', show: !isLimited },
+            { id: 'blood-work', label: 'Blood Work', show: !isLimited },
+            { id: 'referrals', label: 'Referrals', show: !isLimited },
+          ].filter(t => t.show).map(t => (
+            <button
+              key={t.id}
+              className={`dash-nav-item${dashTab === t.id ? ' active' : ''}`}
+              onClick={() => setDashTab(t.id as DashTab)}
+            >
+              <span className="dash-nav-dot" />
+              {t.label}
+            </button>
+          ))}
+        </nav>
 
-        {/* Protocol section */}
-        <section id="protocol-section">
-          <details open style={{ border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}>
-            <summary style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", background: "var(--surface)", cursor: "pointer", listStyle: "none", fontFamily: "var(--font-ui), system-ui, sans-serif", userSelect: "none" }}>
-              <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--ink)" }}>
-                Protocol
-                {user.diagnosticData?.protocolStatus === "active" && (
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", padding: "0.1rem 0.45rem", borderRadius: "100px", background: "oklch(0.60 0.18 165 / 0.15)", border: "1px solid oklch(0.60 0.18 165 / 0.35)", fontSize: "0.6rem", fontWeight: 600, color: "var(--primary)", letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "var(--font-mono), monospace" }}>
-                    <span style={{ width: "4px", height: "4px", borderRadius: "50%", background: "var(--primary)", animation: "pulse 2s ease infinite" }} aria-hidden />
-                    live
-                  </span>
-                )}
-              </span>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden style={{ color: "var(--dim)", flexShrink: 0 }}><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </summary>
-            <div style={{ padding: "1.5rem 1.25rem", borderTop: "1px solid var(--border-subtle)" }}>
-              <ProtocolTab user={user} protocol={protocol} notionPageId={user.notionPageId} />
-            </div>
-          </details>
-        </section>
-
-        {/* Diagnosis section */}
-        <section id="diagnosis-section">
-          <details open style={{ border: "1px solid var(--border)", borderRadius: "12px", overflow: "hidden" }}>
-            <summary style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", background: "var(--surface)", cursor: "pointer", listStyle: "none", fontFamily: "var(--font-ui), system-ui, sans-serif", userSelect: "none" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--ink)" }}>Diagnosis</span>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden style={{ color: "var(--dim)", flexShrink: 0 }}><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </summary>
-            <div style={{ padding: "1.5rem 1.25rem", borderTop: "1px solid var(--border-subtle)" }}>
-              <DiagnosisTab user={user} />
-            </div>
-          </details>
-        </section>
-
-        {/* Blood Work section — hidden for limited */}
-        {!isLimited && (
-          <section id="blood-work-section">
-            <BloodWorkTab user={user} />
-          </section>
-        )}
-
-        {/* Payments section — hidden for limited */}
-        {!isLimited && (
-          <section id="payments-section">
-            <PaymentsSection user={user} />
-          </section>
-        )}
-
-        {/* Referrals section — hidden for limited */}
-        {!isLimited && (
-          <section id="referrals-section">
-            <ReferralsTab user={user} />
-          </section>
-        )}
-
+        {/* Tab content */}
+        <main className="dash-content">
+          {dashTab === 'today' && !isLimited && (user.status === 'active' || user.status === 'alumni') && (
+            <TodayTab user={user} firstName={firstName} greeting={greeting} todayFormatted={todayFormatted} isAlumni={user.status === 'alumni'} />
+          )}
+          {dashTab === 'diagnosis' && <DiagnosisTab user={user} />}
+          {dashTab === 'protocol' && (
+            <ProtocolTab user={user} protocol={protocol} notionPageId={user.notionPageId} />
+          )}
+          {dashTab === 'trackers' && !isLimited && <TrackerHistoryTab user={user} />}
+          {dashTab === 'blood-work' && !isLimited && <BloodWorkTab user={user} />}
+          {dashTab === 'referrals' && !isLimited && <ReferralsTab user={user} />}
+        </main>
       </div>
 
       {showPwaBanner && (
@@ -1289,6 +1287,120 @@ function ReferralsTab({ user }: { user: StoredUser }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── TRACKER HISTORY TAB ──────────────────────────────────────────────────
+
+type TrackerEntry = {
+  id: string;
+  date: string;
+  circadian: Record<string, unknown>;
+  training: Record<string, unknown>;
+  nutrition: Record<string, unknown>;
+  vitals: Record<string, unknown>;
+  psychological: Record<string, unknown>;
+  business: Record<string, unknown>;
+};
+
+function TrackerHistoryTab({ user }: { user: StoredUser }) {
+  const [entries, setEntries] = useState<TrackerEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    import('@/lib/supabase').then(({ supabase }) => {
+      supabase
+        .from('daily_trackers')
+        .select('id, date, circadian, training, nutrition, vitals, psychological, business')
+        .eq('user_email', user.email)
+        .order('date', { ascending: false })
+        .limit(60)
+        .then(({ data }) => {
+          setEntries((data ?? []) as TrackerEntry[]);
+          setLoading(false);
+        });
+    });
+  }, [user.email]);
+
+  const formatDate = (d: string) =>
+    new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+
+  const sectionSummary = (entry: TrackerEntry) => {
+    const parts: string[] = [];
+    const e = entry as unknown as Record<string, Record<string, unknown>>;
+    if (e.vitals?.overall_feeling) parts.push(`Feeling: ${e.vitals.overall_feeling}`);
+    if (e.training?.trained !== undefined) parts.push(e.training.trained ? 'Trained' : 'No training');
+    if (e.circadian?.sleep_quality) parts.push(`Sleep ${e.circadian.sleep_quality}/10`);
+    return parts.join(' · ') || 'Entry recorded';
+  };
+
+  if (loading) return <div style={{ padding: "2rem 0", color: "var(--dim)", fontSize: "0.875rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Loading trackers…</div>;
+
+  if (entries.length === 0) return (
+    <div style={{ padding: "3rem 0", textAlign: "center" }}>
+      <p style={{ fontSize: "0.9375rem", color: "var(--muted)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>No trackers submitted yet.</p>
+      <p style={{ fontSize: "0.8125rem", color: "var(--dim)", marginTop: "0.5rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Submit your first daily check-in from the Today tab.</p>
+    </div>
+  );
+
+  const renderValue = (v: unknown): string => {
+    if (v === null || v === undefined) return '—';
+    if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+    if (Array.isArray(v)) return v.join(', ') || '—';
+    return String(v);
+  };
+
+  const SECTION_LABELS: Record<string, string> = {
+    circadian: 'Circadian', training: 'Training', nutrition: 'Nutrition',
+    vitals: 'Vitals', psychological: 'Psychological', business: 'Business',
+  };
+
+  return (
+    <div>
+      <div style={{ marginBottom: "1.5rem" }}>
+        <h2 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.5rem", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.02em", marginBottom: "0.25rem" }}>My Trackers</h2>
+        <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300 }}>{entries.length} submissions</p>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+        {entries.map(entry => (
+          <div key={entry.id} style={{ border: "1px solid var(--border)", borderRadius: "10px", overflow: "hidden" }}>
+            <button
+              onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
+              style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.875rem 1.125rem", background: expandedId === entry.id ? "var(--surface)" : "transparent", border: "none", cursor: "pointer", textAlign: "left", gap: "1rem" }}
+            >
+              <div>
+                <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", marginBottom: "0.2rem" }}>{formatDate(entry.date)}</p>
+                <p style={{ fontSize: "0.78rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300 }}>{sectionSummary(entry)}</p>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden style={{ color: "var(--dim)", flexShrink: 0, transform: expandedId === entry.id ? "rotate(180deg)" : "none", transition: "transform 150ms" }}><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            {expandedId === entry.id && (
+              <div style={{ padding: "1rem 1.125rem 1.25rem", borderTop: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                {(['circadian', 'training', 'nutrition', 'vitals', 'psychological', 'business'] as const).map(sec => {
+                  const data = entry[sec] as Record<string, unknown>;
+                  const keys = Object.keys(data ?? {}).filter(k => data[k] !== null && data[k] !== undefined && data[k] !== '');
+                  if (keys.length === 0) return null;
+                  return (
+                    <div key={sec}>
+                      <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--primary)", fontFamily: "var(--font-mono), monospace", marginBottom: "0.625rem" }}>{SECTION_LABELS[sec]}</p>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                        {keys.map(k => (
+                          <div key={k} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
+                            <span style={{ fontSize: "0.8125rem", color: "var(--muted)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, textTransform: "capitalize" }}>{k.replace(/_/g, ' ')}</span>
+                            <span style={{ fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 400, textAlign: "right", maxWidth: "60%" }}>{renderValue(data[k])}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
