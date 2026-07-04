@@ -12,7 +12,7 @@ import ProtocolDocumentComponent from "@/components/portal/ProtocolDocument";
 import DiagnosticDocumentComponent from "@/components/portal/DiagnosticDocument";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
 
-const CAL_LINK = "https://www.cal.eu/thp/call";
+const CAL_LINK = "https://cal.com/ali-filali-uks4xi/30min";
 
 export default function Dashboard() {
   const router = useRouter();

@@ -9,7 +9,7 @@ export async function GET(req: Request) {
 
   const { data, error } = await supabaseAdmin
     .from('daily_trackers')
-    .select('id, date, circadian, training, nutrition, vitals, psychological, business, submitted_at, talking_points')
+    .select('id, date, circadian, training, nutrition, vitals, psychological, business, submitted_at')
     .eq('user_email', email)
     .order('date', { ascending: false })
     .limit(limit);
