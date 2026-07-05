@@ -12,8 +12,8 @@ export function Coaching() {
       <div className="relative z-10 mx-auto max-w-6xl px-4 md:px-8">
         <div className="mb-12 text-center">
           <h2 className="display mx-auto max-w-3xl text-3xl text-white sm:text-4xl md:text-5xl">
-            Enough guessing. It&apos;s time to{" "}
-            <span className="text-red">optimize.</span>
+            Enough surviving. It&apos;s time to{" "}
+            <span className="text-red">perform.</span>
           </h2>
         </div>
 
@@ -38,7 +38,7 @@ export function Coaching() {
               1:1 With THP
             </h3>
             <p className="mt-5 font-mono text-sm font-bold uppercase leading-relaxed tracking-[0.06em] text-white">
-              The last powerful all in one coaching program that actually works.
+              The last time you settle for feeling like this.
             </p>
             <p className="mt-4 font-mono text-xs uppercase leading-relaxed tracking-[0.06em] text-white/60">
               No pills. No fake hacks. Just raw, structured transformation through
@@ -46,9 +46,9 @@ export function Coaching() {
               again.
             </p>
 
-            <p className="mt-8">
-              <span className="display text-5xl text-white sm:text-6xl">$1500</span>
-              <span className="font-mono text-lg text-white/50">/month</span>
+            <p className="mt-8 flex items-baseline gap-2 flex-wrap">
+              <span className="font-body font-extrabold text-white tracking-tight" style={{ fontSize: "clamp(2.5rem, 10vw, 4rem)" }}>$2,000</span>
+              <span className="font-mono text-base text-white/50">/month</span>
             </p>
 
             <a

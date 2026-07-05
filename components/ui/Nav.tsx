@@ -33,7 +33,7 @@ export function Nav() {
       }`}
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 md:px-8">
-        <div className="flex items-center gap-5">
+        <div className="flex items-center">
           <Link href="/" aria-label="THP home">
             <Image
               src="/images/thprebrandlogo2.png"
@@ -41,10 +41,9 @@ export function Nav() {
               width={160}
               height={64}
               priority
-              className="h-12 w-auto drop-shadow-lg md:h-14"
+              className="h-10 w-auto drop-shadow-lg md:h-12"
             />
           </Link>
-          <Socials className="hidden lg:flex" />
         </div>
 
         <nav className="hidden items-center gap-8 lg:flex">
@@ -59,20 +58,13 @@ export function Nav() {
           ))}
         </nav>
 
-        <div className="hidden items-center gap-3 sm:flex">
+        <div className="hidden items-center gap-4 sm:flex">
           <Link
             href="/login"
-            className="font-mono text-xs uppercase tracking-[0.18em] text-white/60 transition-colors hover:text-white/90"
+            className="font-mono text-xs uppercase tracking-[0.18em] text-white/45 transition-colors hover:text-white/80"
           >
             Sign In
           </Link>
-          <Button
-            onClick={() => document.getElementById("booking")?.scrollIntoView({ behavior: "smooth" })}
-            variant="outlineLight"
-            className="px-5 py-2.5 cursor-pointer"
-          >
-            Book a Call
-          </Button>
           <Button href={site.applyHref} variant="primary" className="px-5 py-2.5">
             Apply Now
           </Button>

@@ -1,9 +1,14 @@
 import { Hero } from "@/components/landing/Hero";
-import { Transformations } from "@/components/landing/Transformations";
-import { Features } from "@/components/landing/Features";
+import { WhyItFailed } from "@/components/landing/WhyItFailed";
+import { CinematicProof } from "@/components/landing/CinematicProof";
+import { DataGrid } from "@/components/landing/DataGrid";
 import { Booking } from "@/components/landing/Booking";
 import { Coaching } from "@/components/landing/Coaching";
 import { Faq } from "@/components/landing/Faq";
+
+// HIDDEN pending THP approval — do not delete yet:
+// import { Transformations } from "@/components/landing/Transformations";
+// import { Features } from "@/components/landing/Features";
 
 export default function Home() {
   return (
@@ -17,8 +22,10 @@ export default function Home() {
       {/* Everything below scrolls up over the hero, fully covering it.
           relative + z-10 + solid bg = the curtain that hides the hero. */}
       <div className="relative z-10 bg-ink shadow-[0_-40px_80px_rgba(0,0,0,0.6)]">
-        <Transformations />
-        <Features />
+        {/* Pain → Rapport → Proof → Solution → CTA */}
+        <WhyItFailed />
+        <CinematicProof />
+        <DataGrid />
         <Coaching />
         <Booking />
         <Faq />
