@@ -21,8 +21,8 @@ export const social = {
 } as const;
 
 export const navLinks = [
-  { label: "Transformations", href: "#transformations" },
-  { label: "Inside", href: "#your-look-inside" },
-  { label: "Book", href: "#booking" },
-  { label: "FAQ", href: "#faq" },
+  { label: "Proof",    href: "#proof"     },
+  { label: "Protocol", href: "#protocol"  },
+  { label: "Book",     href: "#booking"   },
+  { label: "FAQ",      href: "#faq"       },
 ] as const;

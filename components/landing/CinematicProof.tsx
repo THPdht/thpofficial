@@ -28,7 +28,7 @@ export function CinematicProof() {
   const [large, ...small] = proofSlots;
 
   return (
-    <section className="relative overflow-hidden py-20 md:py-28" style={{ background: "#0e0e0f" }}>
+    <section id="proof" className="relative overflow-hidden py-20 md:py-28" style={{ background: "#0e0e0f" }}>
 
       {/* Ambient glow — center */}
       <div

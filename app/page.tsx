@@ -4,7 +4,6 @@ import { CinematicProof } from "@/components/landing/CinematicProof";
 import { DataGrid } from "@/components/landing/DataGrid";
 import { Booking } from "@/components/landing/Booking";
 import { Coaching } from "@/components/landing/Coaching";
-import { Faq } from "@/components/landing/Faq";
 
 // HIDDEN pending THP approval — do not delete yet:
 // import { Transformations } from "@/components/landing/Transformations";
@@ -28,7 +27,6 @@ export default function Home() {
         <DataGrid />
         <Coaching />
         <Booking />
-        <Faq />
       </div>
     </>
   );
