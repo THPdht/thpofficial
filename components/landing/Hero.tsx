@@ -139,7 +139,7 @@ export function Hero() {
 
           <h1
             className="font-body font-extrabold text-white leading-[0.88] tracking-tight mb-4"
-            style={{ fontSize: "clamp(1.75rem, 9vw, 5.5rem)" }}
+            style={{ fontSize: "clamp(1.75rem, 5vw, 3.75rem)" }}
           >
             A LOW<br />
             TESTOSTERONE<br />

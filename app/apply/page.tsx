@@ -41,10 +41,9 @@ const PREVIOUS_ATTEMPTS = [
 ];
 
 const INVESTMENT_RANGES = [
-  "Under $500",
-  "$500–$1,000",
-  "$1,000–$1,500",
-  "$1500+ (psychological mentorship, 1 space left)",
+  "$3,000–$4,000",
+  "$4,000–$5,000",
+  "$5,000+",
 ];
 
 type SymptomSeverity = { symptom: string; severity: number };

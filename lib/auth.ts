@@ -198,26 +198,18 @@ export async function register(
   email: string,
   password: string
 ): Promise<{ success: boolean; error?: string }> {
-  const norm = email.toLowerCase().trim();
-  const { data: existing } = await supabase
-    .from('users')
-    .select('email')
-    .eq('email', norm)
-    .maybeSingle();
-  if (existing) return { success: false, error: 'An account with this email already exists.' };
-
-  const { error } = await supabase.from('users').insert({
-    name: name.trim(),
-    email: norm,
-    password,
-    status: 'new',
-    streak: 0,
-    longest_streak: 0,
-    joined_at: new Date().toISOString().split('T')[0],
-    referral_code: Math.random().toString(36).slice(2, 8).toUpperCase(),
-  });
-  if (error) return { success: false, error: 'Could not create account. Please try again.' };
-  return { success: true };
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password }),
+    });
+    const json = await res.json();
+    if (!res.ok || json.error) return { success: false, error: json.error || 'Could not create account. Please try again.' };
+    return { success: true };
+  } catch {
+    return { success: false, error: 'Network error. Please try again.' };
+  }
 }
 
 export async function login(
