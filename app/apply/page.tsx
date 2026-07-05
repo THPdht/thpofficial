@@ -412,7 +412,7 @@ export default function ApplyPage() {
         {/* Header */}
         <div style={{ marginBottom: "2rem" }}>
           <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "0.72rem", letterSpacing: "0.22em", color: "var(--color-gold)", textTransform: "uppercase", marginBottom: "0.5rem" }}>
-            Step {step + 1} of {STEP_TITLES.length}
+            Application
           </p>
           <h1 style={{ fontFamily: "var(--font-display), sans-serif", fontSize: "clamp(1.4rem,4vw,2rem)", fontWeight: 400, color: ink, textTransform: "uppercase", marginBottom: "1.25rem" }}>
             {STEP_TITLES[step]}
@@ -436,7 +436,7 @@ export default function ApplyPage() {
             {step === 0 && (
               <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
                 <div><Label>Full name</Label><TInput value={form.fullName} onChange={set("fullName")} placeholder="Your full name" /></div>
-                <div><Label>Gender</Label><RadioSingle options={["Male", "Female", "Other"]} value={form.gender} onChange={set("gender") as (v: string) => void} /></div>
+                <div><Label>Gender</Label><RadioSingle options={["Male", "Female"]} value={form.gender} onChange={set("gender") as (v: string) => void} /></div>
                 <div><Label>Age</Label><TInput value={form.age} onChange={set("age")} placeholder="e.g. 32" /></div>
               </div>
             )}
