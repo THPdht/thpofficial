@@ -154,7 +154,7 @@ export default function AdminPage() {
   }
 
   async function refreshClients() {
-    const order: Record<ClientStatus, number> = { pending: 0, active: 1, alumni: 2, new: 3 };
+    const order: Record<ClientStatus, number> = { pending: 0, active: 1, alumni: 2, new: 3, inactive: 5 };
     const all = await getAllUsers();
     const sorted = [...all].sort((a, b) => (order[a.status] ?? 4) - (order[b.status] ?? 4));
     setClients(sorted);

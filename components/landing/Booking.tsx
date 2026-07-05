@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Cal, { getCalApi } from "@calcom/embed-react";
 import { site } from "@/lib/site";
 
 export function Booking() {
+  const router = useRouter();
+
   useEffect(() => {
     (async () => {
       const cal = await getCalApi();
@@ -16,8 +19,15 @@ export function Booking() {
           dark: { "cal-brand": "#c8102e" },
         },
       });
+      // Redirect to pending screen after booking is confirmed
+      cal("on", {
+        action: "bookingSuccessful",
+        callback: () => {
+          router.push("/onboarding/pending");
+        },
+      });
     })();
-  }, []);
+  }, [router]);
 
   return (
     <section id="booking" className="bg-ink py-20 md:py-28">

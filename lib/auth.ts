@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-export type ClientStatus = 'new' | 'pending' | 'active' | 'alumni';
+export type ClientStatus = 'new' | 'pending' | 'active' | 'alumni' | 'inactive';
 
 export type AttachmentType = 'image' | 'video' | 'audio' | 'file';
 

@@ -17,8 +17,6 @@ export async function POST(req: Request) {
   if (existing)
     return Response.json({ error: 'An account with this email already exists.' }, { status: 409 });
 
-  const referral_code = Math.random().toString(36).slice(2, 8).toUpperCase();
-
   const { error } = await supabaseAdmin.from('users').insert({
     name: name.trim(),
     email: norm,
@@ -27,7 +25,6 @@ export async function POST(req: Request) {
     streak: 0,
     longest_streak: 0,
     joined_at: new Date().toISOString().split('T')[0],
-    referral_code,
   });
 
   if (error) {

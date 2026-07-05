@@ -39,6 +39,11 @@ function LoginForm() {
       return;
     }
     const user = result.user!;
+    if (user.status === "inactive") {
+      setError(`Your access with THP has been removed. For questions contact ${process.env.NEXT_PUBLIC_CONTACT_EMAIL || "info.shopzul@gmail.com"}`);
+      setLoading(false);
+      return;
+    }
     if (user.status === "new" || user.status === "pending") router.push("/onboarding/pending");
     else router.push("/dashboard");
   };
