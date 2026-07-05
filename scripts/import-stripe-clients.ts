@@ -15,8 +15,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const STRIPE_LIVE_KEY =
-  "REDACTED";
+const STRIPE_LIVE_KEY = process.env.STRIPE_SECRET_KEY!;
 
 const stripe = new Stripe(STRIPE_LIVE_KEY, { apiVersion: "2026-06-24.dahlia" });
 
