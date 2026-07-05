@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
 import type { TrackerQuestion, WeeklyResponseSummary } from '@/lib/auth';
 
 export async function GET(req: Request) {

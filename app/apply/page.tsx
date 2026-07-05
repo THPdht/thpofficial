@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
-import { register } from "@/lib/auth";
+import { register, login } from "@/lib/auth";
 import emailjs from "@emailjs/browser";
 
 const EMAILJS_SERVICE = "service_y2wv9j9";
@@ -355,6 +355,9 @@ export default function ApplyPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clientEmail: form.email.trim().toLowerCase(), adminPw: process.env.NEXT_PUBLIC_INTERNAL_API_KEY }),
     }).catch(() => {});
+
+    // Cache user session so they can log back in later without knowing their password
+    await login(form.email.trim().toLowerCase(), form.password).catch(() => {});
 
     setSubmitting(false);
     window.location.href = "https://cal.com/ali-filali-uks4xi/30min";

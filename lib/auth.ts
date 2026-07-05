@@ -119,6 +119,8 @@ export type DiagnosticData = {
   suspendedAt?: string;
   stripeCustomerId?: string;
   freeMonthEarned?: boolean;
+  monthlyRate?: number;
+  productName?: string;
 };
 
 export type StoredUser = {
@@ -413,7 +415,7 @@ export async function createClient(
     name: name.trim(),
     email: norm,
     password,
-    status: 'active',
+    status: 'new',
     streak: 0,
     longest_streak: 0,
     joined_at: new Date().toISOString().split('T')[0],

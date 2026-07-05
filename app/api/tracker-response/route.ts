@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
 import { requireApiKey } from '@/lib/apiAuth';
 
 export async function POST(req: Request) {

@@ -13,10 +13,18 @@ export async function POST(req: Request) {
       return Response.json({ error: 'Missing email or formData' }, { status: 400 });
     }
 
+    // Fetch current status — only downgrade 'new' → 'pending', preserve 'active'/'alumni'
+    const { data: existing } = await supabaseAdmin
+      .from('users')
+      .select('status')
+      .eq('email', email)
+      .single();
+    const newStatus = (existing?.status === 'new' || !existing?.status) ? 'pending' : existing.status;
+
     // Save intake form data to user record
     const { error: updateError } = await supabaseAdmin
       .from('users')
-      .update({ diagnostic_data: formData, status: 'pending' })
+      .update({ diagnostic_data: formData, status: newStatus })
       .eq('email', email);
     if (updateError) {
       console.error('[generate-onboarding-protocol] failed to save diagnostic_data:', updateError);

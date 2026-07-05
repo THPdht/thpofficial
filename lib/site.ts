@@ -11,7 +11,7 @@ export const site = {
   // Drop a Stripe Payment Link here to let clients check out on-site for the
   // coaching program. Until set, the coaching CTA falls back to /apply.
   checkoutUrl: "" as string,
-  email: "hello@thpofficial.com",
+  email: "info.shopzul@gmail.com",
 } as const;
 
 export const social = {

@@ -27,10 +27,20 @@ export async function POST(req: Request) {
       return Response.json({ error: 'Failed to save tracker' }, { status: 500 });
     }
 
-    // Update last_tracker_date on user row
+    // Update last_tracker_date + increment streak
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const { data: userData } = await supabaseAdmin
+      .from('users')
+      .select('streak, longest_streak, last_check_in')
+      .eq('email', userEmail)
+      .single();
+    const lastCheckIn = userData?.last_check_in?.split('T')[0];
+    const newStreak = lastCheckIn === yesterday ? (userData?.streak ?? 0) + 1 : 1;
+    const longestStreak = Math.max(newStreak, userData?.longest_streak ?? 0);
     await supabaseAdmin
       .from('users')
-      .update({ last_tracker_date: date })
+      .update({ streak: newStreak, longest_streak: longestStreak, last_check_in: today, last_tracker_date: date })
       .eq('email', userEmail);
 
     // Fire-and-forget: call analyze-tracker Edge Function

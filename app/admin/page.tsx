@@ -61,7 +61,7 @@ export default function AdminPage() {
   const [clients, setClients] = useState<StoredUser[]>([]);
   const [selected, setSelected] = useState<StoredUser | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [diagnosticOpen, setDiagnosticOpen] = useState(true);
+  const [diagnosticOpen, setDiagnosticOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [adminView, setAdminView] = useState<'overview' | 'clients' | 'tools'>('overview');
 
@@ -611,25 +611,13 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
     if (clientProtocols.length === 0) return;
     setRegeneratingQuestions(true);
     const currentStage = clientProtocols[clientProtocols.length - 1].stage;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: bankRow } = await supabase
-      .from('tracker_questions')
-      .select('protocol_text')
-      .eq('user_email', client.email)
-      .eq('stage', currentStage)
-      .maybeSingle();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((bankRow as any)?.protocol_text) {
+    const res = await fetch(`/api/tracker-questions-bank?email=${encodeURIComponent(client.email)}&stage=${currentStage}`);
+    const { bank } = await res.json();
+    if (bank?.protocol_text) {
       await fetch('/api/generate-tracker-questions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.NEXT_PUBLIC_INTERNAL_API_KEY ?? '' },
-        body: JSON.stringify({
-          clientEmail: client.email,
-          stage: currentStage,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          protocolText: (bankRow as any).protocol_text,
-          diagnosticData: client.diagnosticData ?? {},
-        }),
+        body: JSON.stringify({ clientEmail: client.email, stage: currentStage, protocolText: bank.protocol_text, diagnosticData: client.diagnosticData ?? {} }),
       }).catch(() => {});
     }
     setRegeneratingQuestions(false);
@@ -711,6 +699,11 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
         <div>
           <p style={{ fontSize: "0.9375rem", fontWeight: 500, color: "var(--ink)" }}>{client.name}</p>
           <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>{client.email}</p>
+          {(() => {
+            const ci = client.diagnosticData?.contactInfo ?? '';
+            const phone = ci.split('|').map((s: string) => s.trim()).find((s: string) => /^\+?[\d\s\-()]{7,}$/.test(s));
+            return phone ? <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300 }}>{phone}</p> : null;
+          })()}
         </div>
       </div>
 
@@ -1353,12 +1346,16 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
   const [analysisMap, setAnalysisMap] = useState<Record<string, { date: string; talking_points: string[]; flags: string[] }>>({});
   const [trackers, setTrackers] = useState<{ date: string; vitals?: Record<string,unknown>; training?: Record<string,unknown>; circadian?: Record<string,unknown>; [k: string]: unknown }[]>([]);
   const [expandedTracker, setExpandedTracker] = useState<string | null>(null);
+  const [showAllTrackers, setShowAllTrackers] = useState(false);
+  const [showStats, setShowStats] = useState(false);
   const [bloodWorkEntries, setBloodWorkEntries] = useState<{ id: string; test_date: string | null; uploaded_at: string; markers: Record<string,{ value: number | null; unit: string; flag?: string | null }> | null }[]>([]);
   const [expandedBWMarker, setExpandedBWMarker] = useState<string | null>(null);
   const [selectedMarker, setSelectedMarker] = useState("total_t");
   const [userData, setUserData] = useState<{ deposit_paid: number | null; total_owed: number | null; telegram_username: string | null; last_login: string | null; last_tracker_date: string | null; agreed_monthly: number | null; last_monthly_paid: string | null; last_monthly_amount: number | null } | null>(null);
   const [agreedMonthly, setAgreedMonthly] = useState("");
   const [referralCount, setReferralCount] = useState(0);
+  const [pendingReferrals, setPendingReferrals] = useState<{ id: string; referred_email: string; created_at: string }[]>([]);
+  const [markingReferral, setMarkingReferral] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [notesSaving, setNotesSaving] = useState(false);
   const [telegramUsername, setTelegramUsername] = useState("");
@@ -1423,14 +1420,17 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         if (data) {
           setUserData(data as typeof userData);
           setTelegramUsername(data.telegram_username ?? '');
-          setAgreedMonthly(data.agreed_monthly ? String(data.agreed_monthly) : '');
+          setAgreedMonthly(data.agreed_monthly ? String(data.agreed_monthly) : (client.diagnosticData?.monthlyRate ? String(client.diagnosticData.monthlyRate) : ''));
         }
       });
 
-    // Referral count
+    // Referral count (paid) + pending referrals list
     supabase.from('referrals').select('id', { count: 'exact', head: true })
       .eq('referrer_email', client.email).eq('status', 'paid')
       .then(({ count }) => setReferralCount(count ?? 0));
+    supabase.from('referrals').select('id, referred_email, created_at')
+      .eq('referrer_email', client.email).eq('status', 'pending')
+      .then(({ data }) => setPendingReferrals(data ?? []));
 
     // Private notes
     supabase.from('applicant_notes').select('notes').eq('user_email', client.email).maybeSingle()
@@ -1472,6 +1472,18 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
     setApplyingFreeMonth(false);
   };
 
+  const markReferralPaid = async (referralId: string) => {
+    setMarkingReferral(referralId);
+    await fetch('/api/admin/mark-referral-paid', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ referralId, adminPw: ADMIN_PASSWORD }),
+    });
+    setPendingReferrals(prev => prev.filter(r => r.id !== referralId));
+    setReferralCount(prev => prev + 1);
+    setMarkingReferral(null);
+  };
+
   async function handlePublishDiagnosis(diagId: string) {
     setPublishingDiagId(diagId);
     await publishDiagnosis(diagId);
@@ -1509,12 +1521,14 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
     if (clientProtocols.length === 0) return;
     setRegeneratingQuestions(true);
     const currentStage = clientProtocols[clientProtocols.length - 1].stage;
-    const { data: bankRow } = await supabase.from('tracker_questions').select('protocol_text').eq('user_email', client.email).eq('stage', currentStage).maybeSingle();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((bankRow as any)?.protocol_text) {
-      await fetch('/api/generate-tracker-questions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.NEXT_PUBLIC_INTERNAL_API_KEY ?? '' },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        body: JSON.stringify({ clientEmail: client.email, stage: currentStage, protocolText: (bankRow as any).protocol_text, diagnosticData: client.diagnosticData ?? {} }) }).catch(() => {});
+    const res = await fetch(`/api/tracker-questions-bank?email=${encodeURIComponent(client.email)}&stage=${currentStage}`);
+    const { bank } = await res.json();
+    if (bank?.protocol_text) {
+      await fetch('/api/generate-tracker-questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.NEXT_PUBLIC_INTERNAL_API_KEY ?? '' },
+        body: JSON.stringify({ clientEmail: client.email, stage: currentStage, protocolText: bank.protocol_text, diagnosticData: client.diagnosticData ?? {} }),
+      }).catch(() => {});
     }
     setRegeneratingQuestions(false);
   }
@@ -1552,41 +1566,75 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: "0.875rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>← Back</button>
         <div style={{ flex: 1 }}>
           <h2 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.25rem", fontWeight: 400, color: "var(--ink)", margin: 0 }}>{client.name}</h2>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginTop: "0.2rem" }}>
-            <span style={{ fontSize: "0.8125rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>@</span>
-            <input
-              value={telegramUsername}
-              onChange={e => setTelegramUsername(e.target.value)}
-              placeholder="telegram"
-              onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-              onBlur={e => { e.target.style.borderColor = 'transparent'; saveTelegram(); }}
-              style={{ width: "110px", height: "22px", background: "transparent", border: "1px solid transparent", borderRadius: "4px", padding: "0 0.25rem", fontSize: "0.8125rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", transition: "border-color 150ms" }}
-            />
-            <span style={{ fontSize: "0.8125rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>· joined {joinedDate}</span>
-            {telegramUsername && (
-              <a href={`https://t.me/${telegramUsername}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--dim)", textDecoration: "none", fontSize: "0.75rem", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: 0.6 }}>↗</a>
-            )}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.25rem", flexWrap: "wrap" }}>
+            {/* Telegram */}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+              <span style={{ fontSize: "0.75rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>TG:</span>
+              <input
+                value={telegramUsername}
+                onChange={e => setTelegramUsername(e.target.value)}
+                placeholder="username"
+                onFocus={e => e.target.style.borderColor = 'var(--primary)'}
+                onBlur={e => { e.target.style.borderColor = 'transparent'; saveTelegram(); }}
+                style={{ width: "90px", height: "20px", background: "transparent", border: "1px solid transparent", borderRadius: "4px", padding: "0 0.25rem", fontSize: "0.75rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", transition: "border-color 150ms" }}
+              />
+              {telegramUsername && (
+                <a href={`https://t.me/${telegramUsername}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--dim)", textDecoration: "none", fontSize: "0.7rem", opacity: 0.6 }}>↗</a>
+              )}
+            </div>
+            <span style={{ color: "var(--border)", fontSize: "0.7rem" }}>·</span>
+            {/* Email */}
+            <a href={`mailto:${client.email}`} style={{ fontSize: "0.75rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif", textDecoration: "none" }}>{client.email}</a>
+            {/* Phone from contactInfo if present */}
+            {(() => {
+              const ci = client.diagnosticData?.contactInfo ?? '';
+              const phone = ci.split('|').map((s: string) => s.trim()).find((s: string) => /^\+?[\d\s\-()]{7,}$/.test(s));
+              return phone ? (
+                <>
+                  <span style={{ color: "var(--border)", fontSize: "0.7rem" }}>·</span>
+                  <a href={`tel:${phone}`} style={{ fontSize: "0.75rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif", textDecoration: "none" }}>{phone}</a>
+                </>
+              ) : null;
+            })()}
+            <span style={{ color: "var(--border)", fontSize: "0.7rem" }}>·</span>
+            <span style={{ fontSize: "0.75rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>joined {joinedDate}</span>
           </div>
         </div>
         <span style={{ padding: "0.25rem 0.625rem", borderRadius: "20px", fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", background: client.status === "active" ? "oklch(0.25 0.08 145)" : "var(--surface)", color: client.status === "active" ? "oklch(0.65 0.15 145)" : "var(--dim)", border: "1px solid", borderColor: client.status === "active" ? "oklch(0.4 0.12 145)" : "var(--border)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{client.status}</span>
       </div>
 
-      {/* Quick stats strip */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.5rem" }}>
-        <div onClick={() => document.getElementById("crm-trackers")?.scrollIntoView({ behavior: "smooth" })}
-          style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", cursor: "pointer" }}>
-          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Streak</p>
-          <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{client.streak > 0 ? `${client.streak >= 7 ? "🔥" : "⚡"} ${client.streak} days` : "0 days"}</p>
-        </div>
-        <div onClick={() => document.getElementById("crm-protocol")?.scrollIntoView({ behavior: "smooth" })}
-          style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", cursor: "pointer" }}>
-          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Protocol</p>
-          <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{client.diagnosticData?.protocolStatus || "None"}</p>
-        </div>
-        <div style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px" }}>
-          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Referrals</p>
-          <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{referralCount} / 3</p>
-        </div>
+      {/* Quick stats strip — collapsible */}
+      <div>
+        <button onClick={() => setShowStats(v => !v)} style={{ display: "flex", alignItems: "center", gap: "0.5rem", background: "none", border: "none", padding: "0", cursor: "pointer", marginBottom: showStats ? "0.75rem" : "0" }}>
+          <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Quick stats</p>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: showStats ? "rotate(180deg)" : "none", transition: "transform 200ms", color: "var(--dim)" }} aria-hidden>
+            <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        {showStats && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "0.5rem" }}>
+            <div onClick={() => document.getElementById("crm-trackers")?.scrollIntoView({ behavior: "smooth" })}
+              style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", cursor: "pointer" }}>
+              <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Streak</p>
+              <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{client.streak > 0 ? `${client.streak >= 7 ? "🔥" : "⚡"} ${client.streak} days` : "0 days"}</p>
+            </div>
+            <div onClick={() => document.getElementById("crm-protocol")?.scrollIntoView({ behavior: "smooth" })}
+              style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", cursor: "pointer" }}>
+              <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Protocol</p>
+              <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{client.diagnosticData?.protocolStatus === "building" ? "Active" : client.diagnosticData?.protocolStatus || "—"}</p>
+            </div>
+            <div style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px" }}>
+              <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Monthly</p>
+              <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: client.diagnosticData?.monthlyRate ? "var(--ink)" : "var(--dim)", fontFamily: "var(--font-mono), monospace" }}>
+                {client.diagnosticData?.monthlyRate ? `$${client.diagnosticData.monthlyRate}` : "—"}
+              </p>
+            </div>
+            <div style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px" }}>
+              <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Referrals</p>
+              <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{referralCount} / 3</p>
+            </div>
+          </div>
+        )}
       </div>
 
 
@@ -1597,7 +1645,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
           <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, fontStyle: "italic" }}>No trackers submitted yet.</p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-            {trackers.map(t => (
+            {(showAllTrackers ? trackers : trackers.slice(0, 3)).map(t => (
               <div key={t.date as string}>
                 <button onClick={() => setExpandedTracker(expandedTracker === t.date as string ? null : t.date as string)}
                   style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.625rem 0.875rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", cursor: "pointer", textAlign: "left", transition: "border-color 150ms", fontFamily: "var(--font-ui), system-ui, sans-serif" }}
@@ -1657,6 +1705,16 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
                 })()}
               </div>
             ))}
+            {trackers.length > 3 && (
+              <button
+                onClick={() => setShowAllTrackers(v => !v)}
+                style={{ marginTop: "0.25rem", background: "none", border: "1px solid var(--border-subtle)", borderRadius: "7px", padding: "0.5rem 0.875rem", fontSize: "0.75rem", color: "var(--dim)", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "border-color 150ms" }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = "var(--border)"}
+                onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border-subtle)"}
+              >
+                {showAllTrackers ? "▲ Show less" : `▼ Show ${trackers.length - 3} more`}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -1856,8 +1914,13 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         {/* Protocol status */}
         <div id="crm-protocol" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
           <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Protocol</p>
-          {!client.notionPageId ? (
+          {!client.notionPageId && clientProtocols.length === 0 ? (
             <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>No protocol generated yet. Use Tools → Generate Extra Protocol.</p>
+          ) : !client.notionPageId && clientProtocols.length > 0 ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", padding: "0.625rem 0.875rem", background: "oklch(0.60 0.18 165 / 0.08)", border: "1px solid oklch(0.60 0.18 165 / 0.25)", borderRadius: "8px" }}>
+              <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: "var(--primary)", flexShrink: 0 }} />
+              <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--primary)", flex: 1 }}>Stage {clientProtocols[clientProtocols.length - 1].stage} — {clientProtocols[clientProtocols.length - 1].title ?? "Protocol active"}</p>
+            </div>
           ) : (() => {
             const ps = client.diagnosticData?.protocolStatus ?? 'active';
             const statusMeta: Record<string, { label: string; color: string; bg: string }> = {
@@ -1908,29 +1971,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
           </div>
         )}
 
-        {/* Account controls */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
-          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Account</p>
-          <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
-            {client.status !== "active" && (
-              <button onClick={() => onSetStatus("active")} style={{ height: "28px", padding: "0 0.75rem", background: "oklch(0.45 0.15 145 / 0.08)", border: "1px solid oklch(0.45 0.15 145 / 0.2)", borderRadius: "6px", color: "oklch(0.7 0.15 145)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Mark active</button>
-            )}
-            {client.status === "active" && (
-              <button onClick={() => onSetStatus("alumni")} style={{ height: "28px", padding: "0 0.75rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--dim)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Mark inactive</button>
-            )}
-            <button onClick={onRemoveClient} style={{ height: "28px", padding: "0 0.75rem", background: "oklch(0.55 0.18 25 / 0.08)", border: "1px solid oklch(0.55 0.18 25 / 0.25)", borderRadius: "6px", color: "oklch(0.68 0.18 25)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Remove client</button>
-          </div>
-        </div>
-
-        {/* Referral: apply free month */}
-        {referralCount >= 3 && (
-          <div style={{ paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
-            <button onClick={applyFreeMonth} disabled={applyingFreeMonth || !!client.diagnosticData?.freeMonthEarned}
-              style={{ height: "32px", padding: "0 0.875rem", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: client.diagnosticData?.freeMonthEarned ? 0.5 : 1 }}>
-              {client.diagnosticData?.freeMonthEarned ? 'Free Month Applied' : 'Apply Free Month'}
-            </button>
-          </div>
-        )}
       </div>
 
       {/* ── FULL INTAKE ACCORDION ── */}
@@ -2000,6 +2040,42 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
           </AnimatePresence>
         </div>
       )}
+
+      {/* ── ACCOUNT CONTROLS (always last) ── */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1.25rem", borderTop: "1px solid var(--border)" }}>
+        <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Account</p>
+        <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
+          {client.status !== "active" && (
+            <button onClick={() => onSetStatus("active")} style={{ height: "28px", padding: "0 0.75rem", background: "oklch(0.45 0.15 145 / 0.08)", border: "1px solid oklch(0.45 0.15 145 / 0.2)", borderRadius: "6px", color: "oklch(0.7 0.15 145)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Mark active</button>
+          )}
+          {client.status === "active" && (
+            <button onClick={() => onSetStatus("alumni")} style={{ height: "28px", padding: "0 0.75rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--dim)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Mark inactive</button>
+          )}
+          <button onClick={onRemoveClient} style={{ height: "28px", padding: "0 0.75rem", background: "oklch(0.55 0.18 25 / 0.08)", border: "1px solid oklch(0.55 0.18 25 / 0.25)", borderRadius: "6px", color: "oklch(0.68 0.18 25)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Remove client</button>
+        </div>
+        {referralCount >= 3 && (
+          <button onClick={applyFreeMonth} disabled={applyingFreeMonth || !!client.diagnosticData?.freeMonthEarned}
+            style={{ marginTop: "0.25rem", height: "32px", padding: "0 0.875rem", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: client.diagnosticData?.freeMonthEarned ? 0.5 : 1, width: "fit-content" }}>
+            {client.diagnosticData?.freeMonthEarned ? 'Free Month Applied' : 'Apply Free Month'}
+          </button>
+        )}
+        {pendingReferrals.length > 0 && (
+          <div style={{ marginTop: "0.75rem" }}>
+            <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif", marginBottom: "0.375rem" }}>Pending referrals</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+              {pendingReferrals.map(r => (
+                <div key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.5rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "6px" }}>
+                  <span style={{ fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{r.referred_email}</span>
+                  <button onClick={() => markReferralPaid(r.id)} disabled={markingReferral === r.id}
+                    style={{ height: "24px", padding: "0 0.625rem", background: "oklch(0.45 0.15 145 / 0.08)", border: "1px solid oklch(0.45 0.15 145 / 0.2)", borderRadius: "5px", color: "oklch(0.7 0.15 145)", fontSize: "0.7rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: markingReferral === r.id ? 0.5 : 1 }}>
+                    {markingReferral === r.id ? '...' : 'Mark paid'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
     </div>
   );
@@ -2123,7 +2199,7 @@ function ToolsPanel({ clients, onClientCreated }: { clients: StoredUser[]; onCli
   );
 
   return (
-    <div style={{ maxWidth: "540px", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+    <div style={{ maxWidth: "540px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
       <div>
         <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "1rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Tools</p>
       </div>
@@ -2322,6 +2398,7 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
   const [editText, setEditText] = useState("");
   const [sending, setSending] = useState<string | null>(null);
   const [revenue, setRevenue] = useState<{ mrr: number; totalRevenue: number } | null>(null);
+  const [showOverviewStats, setShowOverviewStats] = useState(false);
 
   useEffect(() => {
     // Alarms
@@ -2376,24 +2453,31 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "860px", margin: "0 auto" }}>
 
-      {/* Top stats */}
+      {/* Top stats — collapsible */}
       <div>
-        {sectionLabel('Overview')}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
-          {[
-            { label: "MRR", value: revenue ? `$${Math.round(revenue.mrr)}` : '—', sub: "this calendar month" },
-            { label: "Active 1:1", value: paying1on1.length, sub: "paying clients" },
-            { label: "Applicants", value: pending.length, sub: pending.length > 0 ? "need attention" : "all clear" },
-            { label: "Total Revenue", value: revenue ? `$${Math.round(revenue.totalRevenue)}` : '—', sub: "all time" },
-            { label: "Conversion", value: (paying1on1.length + pending.length) > 0 ? `${Math.round(paying1on1.length / (paying1on1.length + pending.length) * 100)}%` : '—', sub: "applicants → clients" },
-          ].map(({ label, value, sub }) => (
-            <div key={label} style={{ padding: "1rem 1.25rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px" }}>
-              <p style={{ fontSize: "0.65rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.375rem" }}>{label}</p>
-              <p style={{ fontSize: "1.5rem", fontWeight: 500, color: "var(--ink)", lineHeight: 1, fontFamily: "var(--font-display), Georgia, serif" }}>{value}</p>
-              {sub && <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.25rem" }}>{sub}</p>}
-            </div>
-          ))}
-        </div>
+        <button onClick={() => setShowOverviewStats(v => !v)} style={{ display: "flex", alignItems: "center", gap: "0.5rem", background: "none", border: "none", padding: "0", cursor: "pointer", marginBottom: showOverviewStats ? "0.75rem" : "0" }}>
+          {sectionLabel('Stats')}
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ transform: showOverviewStats ? "rotate(180deg)" : "none", transition: "transform 200ms", color: "var(--dim)", marginTop: "-0.5rem" }} aria-hidden>
+            <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        {showOverviewStats && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem" }}>
+            {[
+              { label: "MRR", value: revenue ? `$${Math.round(revenue.mrr)}` : '—', sub: "this calendar month" },
+              { label: "Active 1:1", value: paying1on1.length, sub: "paying clients" },
+              { label: "Applicants", value: pending.length, sub: pending.length > 0 ? "need attention" : "all clear" },
+              { label: "Total Revenue", value: revenue ? `$${Math.round(revenue.totalRevenue)}` : '—', sub: "all time" },
+              { label: "Conversion", value: (paying1on1.length + pending.length) > 0 ? `${Math.round(paying1on1.length / (paying1on1.length + pending.length) * 100)}%` : '—', sub: "applicants → clients" },
+            ].map(({ label, value, sub }) => (
+              <div key={label} style={{ padding: "1rem 1.25rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px" }}>
+                <p style={{ fontSize: "0.65rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.375rem" }}>{label}</p>
+                <p style={{ fontSize: "1.5rem", fontWeight: 500, color: "var(--ink)", lineHeight: 1, fontFamily: "var(--font-display), Georgia, serif" }}>{value}</p>
+                {sub && <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.25rem" }}>{sub}</p>}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Alarm feed — always visible */}

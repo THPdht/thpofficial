@@ -179,7 +179,7 @@ function OnboardingInner() {
       (new URLSearchParams(window.location.search).has("session_id") ||
        new URLSearchParams(window.location.search).has("token"));
     if (cached.status === "pending" && !hasPaymentProof) { router.replace("/onboarding/pending"); return; }
-    if (cached.status === "active" || cached.status === "alumni") { router.replace("/dashboard"); return; }
+    if ((cached.status === "active" || cached.status === "alumni") && !hasPaymentProof) { router.replace("/dashboard"); return; }
     setUser({ email: cached.email, password: cached.password, name: cached.name });
     setAuthMode("nudge");
     if (cached.diagnosticData && Object.keys(cached.diagnosticData).length > 0) {

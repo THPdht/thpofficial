@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
 import type { WeeklyResponseSummary } from '@/lib/auth';
 import { requireApiKey } from '@/lib/apiAuth';
 

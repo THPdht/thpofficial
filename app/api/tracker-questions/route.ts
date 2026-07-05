@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
 import type { TrackerQuestion } from '@/lib/auth';
 
 const TRACKER_CATEGORIES = ['sleep', 'gut', 'hormones', 'energy', 'training', 'nervous_system', 'diet', 'mood'] as const;

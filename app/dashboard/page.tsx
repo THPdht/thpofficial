@@ -20,8 +20,15 @@ export default function Dashboard() {
   const [protocol, setProtocol] = useState<Protocol | null>(null);
   const [showPwaBanner, setShowPwaBanner] = useState(false);
   const [suspended, setSuspended] = useState(false);
-  type DashTab = 'today' | 'diagnosis' | 'protocol' | 'trackers' | 'blood-work' | 'referrals';
+  type DashTab = 'today' | 'protocol' | 'trackers' | 'blood-work' | 'referrals';
   const [dashTab, setDashTab] = useState<DashTab>('today');
+  const [showPwChange, setShowPwChange] = useState(false);
+  const [pwCurrent, setPwCurrent] = useState('');
+  const [pwNew, setPwNew] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwError, setPwError] = useState('');
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwDone, setPwDone] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -43,25 +50,6 @@ export default function Dashboard() {
       }
       // Only populate user state after confirming account is active
       setUser(u);
-
-      // First-time imported client: if active but has never been welcomed,
-      // redirect to /welcome so they can upload their existing protocol PDF
-      if (u.status === 'active' && !localStorage.getItem(`thp_welcomed_${u.email}`)) {
-        // Check if they already have a protocol in the DB
-        import('@/lib/auth').then(({ getClientProtocols }) => {
-          getClientProtocols(u.email).then(protocols => {
-            if (!isMounted) return;
-            if (protocols.length === 0) {
-              // No protocol yet — show welcome/upload page
-              router.replace('/welcome');
-            } else {
-              // Already has a protocol, mark welcomed and stay
-              localStorage.setItem(`thp_welcomed_${u.email}`, '1');
-            }
-          }).catch(() => {});
-        });
-        return;
-      }
 
       // Capture timezone on first login
       try {
@@ -139,7 +127,7 @@ export default function Dashboard() {
     const params = new URLSearchParams(window.location.search);
     const target = params.get("tab") || params.get("section");
     if (!target) return;
-    const validTabs: DashTab[] = ['today', 'diagnosis', 'protocol', 'trackers', 'blood-work', 'referrals'];
+    const validTabs: DashTab[] = ['today', 'protocol', 'trackers', 'blood-work', 'referrals'];
     const mapped: Record<string, DashTab> = { 'blood-work': 'blood-work', 'bloodwork': 'blood-work', payments: 'today' };
     const tab = mapped[target] ?? (validTabs.includes(target as DashTab) ? (target as DashTab) : null);
     if (tab) setDashTab(tab);
@@ -147,6 +135,37 @@ export default function Dashboard() {
   }, []);
 
   const handleSignOut = () => { signOut(); router.push("/"); };
+
+  const handlePwChange = async () => {
+    if (!user) return;
+    setPwError('');
+    if (!pwCurrent || !pwNew || !pwConfirm) { setPwError('All fields are required.'); return; }
+    if (pwNew !== pwConfirm) { setPwError('New passwords do not match.'); return; }
+    if (pwNew.length < 6) { setPwError('New password must be at least 6 characters.'); return; }
+    setPwSaving(true);
+    try {
+      const res = await fetch('/api/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, currentPassword: pwCurrent, newPassword: pwNew }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) { setPwError(data.error || 'Failed to update password.'); setPwSaving(false); return; }
+      // Update localStorage
+      const stored = localStorage.getItem(`thp_user_${user.email}`);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          parsed.password = pwNew;
+          localStorage.setItem(`thp_user_${user.email}`, JSON.stringify(parsed));
+        } catch { /* ignore */ }
+      }
+      setPwDone(true);
+      setPwCurrent(''); setPwNew(''); setPwConfirm('');
+      setTimeout(() => { setShowPwChange(false); setPwDone(false); }, 2000);
+    } catch { setPwError('Network error. Please try again.'); }
+    setPwSaving(false);
+  };
 
   if (suspended) {
     return (
@@ -316,7 +335,6 @@ export default function Dashboard() {
         <nav className="dash-sidebar">
           {[
             { id: 'today', label: 'Today', show: !isLimited && (user.status === 'active' || user.status === 'alumni') },
-            { id: 'diagnosis', label: 'Diagnosis', show: true },
             { id: 'protocol', label: 'Protocol', show: true },
             { id: 'trackers', label: 'My Trackers', show: !isLimited },
             { id: 'blood-work', label: 'Blood Work', show: !isLimited },
@@ -331,14 +349,75 @@ export default function Dashboard() {
               {t.label}
             </button>
           ))}
+
+          {/* Change password — bottom of sidebar */}
+          <div style={{ marginTop: "auto", paddingTop: "1rem" }}>
+            <button
+              onClick={() => { setShowPwChange(p => !p); setPwError(''); setPwDone(false); }}
+              style={{ background: "none", border: "none", color: "var(--dim)", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", padding: "0.5rem 0.875rem", textAlign: "left", width: "100%", borderRadius: "8px", transition: "color 120ms" }}
+              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = "var(--muted)"}
+              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = "var(--dim)"}
+            >
+              Change password
+            </button>
+            {showPwChange && (
+              <div style={{ margin: "0.5rem 0.875rem 0", padding: "1rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+                {pwDone ? (
+                  <p style={{ fontSize: "0.8125rem", color: "var(--primary)", fontFamily: "var(--font-ui), system-ui, sans-serif", textAlign: "center" }}>Password updated.</p>
+                ) : (
+                  <>
+                    <input
+                      type="password"
+                      placeholder="Current password"
+                      value={pwCurrent}
+                      onChange={e => setPwCurrent(e.target.value)}
+                      style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "0.5rem 0.625rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", width: "100%", boxSizing: "border-box" }}
+                    />
+                    <input
+                      type="password"
+                      placeholder="New password"
+                      value={pwNew}
+                      onChange={e => setPwNew(e.target.value)}
+                      style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "0.5rem 0.625rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", width: "100%", boxSizing: "border-box" }}
+                    />
+                    <input
+                      type="password"
+                      placeholder="Confirm new password"
+                      value={pwConfirm}
+                      onChange={e => setPwConfirm(e.target.value)}
+                      style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "0.5rem 0.625rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", width: "100%", boxSizing: "border-box" }}
+                    />
+                    {pwError && (
+                      <p style={{ fontSize: "0.75rem", color: "var(--color-red)", fontFamily: "var(--font-ui), system-ui, sans-serif", margin: 0 }}>{pwError}</p>
+                    )}
+                    <button
+                      onClick={handlePwChange}
+                      disabled={pwSaving}
+                      style={{ background: "var(--primary)", border: "none", borderRadius: "6px", padding: "0.5rem", fontSize: "0.8125rem", fontWeight: 600, color: "#fff", cursor: pwSaving ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: pwSaving ? 0.6 : 1 }}
+                    >
+                      {pwSaving ? "Saving…" : "Save"}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </nav>
 
         {/* Tab content */}
         <main className="dash-content">
+          {dashTab === 'today' && (['pending', 'new'] as string[]).includes(user.status) && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "4rem 2rem", textAlign: "center", gap: "1rem" }}>
+              <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "var(--primary)", animation: "pulse 2s ease infinite" }} />
+              <p style={{ fontSize: "1.125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-display), Georgia, serif" }}>You&apos;re in.</p>
+              <p style={{ fontSize: "0.9375rem", color: "var(--dim)", fontWeight: 300, lineHeight: 1.7, maxWidth: "360px" }}>
+                Your intake has been received. THP will review it and be in touch with you shortly to get started.
+              </p>
+            </div>
+          )}
           {dashTab === 'today' && !isLimited && (user.status === 'active' || user.status === 'alumni') && (
             <TodayTab user={user} firstName={firstName} greeting={greeting} todayFormatted={todayFormatted} isAlumni={user.status === 'alumni'} />
           )}
-          {dashTab === 'diagnosis' && <DiagnosisTab user={user} />}
           {dashTab === 'protocol' && (
             <ProtocolTab user={user} protocol={protocol} notionPageId={user.notionPageId} />
           )}
@@ -791,12 +870,25 @@ function ProtocolTab({ user, protocol, notionPageId }: { user: StoredUser; proto
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getClientProtocols(user.email).then(protocols => {
-      if (protocols.length > 0) {
-        setStages(protocols);
-        setActiveStage(protocols[protocols.length - 1]);
-      }
-    }).catch(() => {}).finally(() => setLoading(false));
+    fetch(`/api/protocols?email=${encodeURIComponent(user.email)}`)
+      .then(r => r.json())
+      .then(d => {
+        const protocols: ClientProtocol[] = (d.protocols ?? []).map((row: Record<string, unknown>) => ({
+          id: row.id,
+          userEmail: row.user_email,
+          stage: row.stage,
+          notionPageId: row.notion_page_id ?? undefined,
+          title: row.title,
+          content: row.content ?? undefined,
+          createdAt: row.created_at,
+        }));
+        if (protocols.length > 0) {
+          setStages(protocols);
+          setActiveStage(protocols[protocols.length - 1]);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [user.email]);
 
   if (loading) {
@@ -1309,15 +1401,11 @@ type TrackerEntry = {
 function TrackerHistoryTab({ user }: { user: StoredUser }) {
   const [entries, setEntries] = useState<TrackerEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/tracker-history?email=${encodeURIComponent(user.email)}&limit=60`)
       .then(r => r.json())
-      .then(d => {
-        setEntries((d.trackers ?? []) as TrackerEntry[]);
-        setLoading(false);
-      })
+      .then(d => { setEntries((d.trackers ?? []) as TrackerEntry[]); setLoading(false); })
       .catch(() => setLoading(false));
   }, [user.email]);
 
@@ -1327,13 +1415,13 @@ function TrackerHistoryTab({ user }: { user: StoredUser }) {
   const sectionSummary = (entry: TrackerEntry) => {
     const parts: string[] = [];
     const e = entry as unknown as Record<string, Record<string, unknown>>;
-    if (e.vitals?.overall_feeling) parts.push(`Feeling: ${e.vitals.overall_feeling}`);
-    if (e.training?.trained !== undefined) parts.push(e.training.trained ? 'Trained' : 'No training');
+    if (e.vitals?.overall_feeling) parts.push(`Feeling ${e.vitals.overall_feeling}/10`);
+    if (e.training?.trained !== undefined) parts.push(e.training.trained ? 'Trained' : 'Rest day');
     if (e.circadian?.sleep_quality) parts.push(`Sleep ${e.circadian.sleep_quality}/10`);
-    return parts.join(' · ') || 'Entry recorded';
+    return parts.join(' · ') || 'Logged';
   };
 
-  if (loading) return <div style={{ padding: "2rem 0", color: "var(--dim)", fontSize: "0.875rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Loading trackers…</div>;
+  if (loading) return <div style={{ padding: "2rem 0", color: "var(--dim)", fontSize: "0.875rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Loading…</div>;
 
   if (entries.length === 0) return (
     <div style={{ padding: "3rem 0", textAlign: "center" }}>
@@ -1342,59 +1430,20 @@ function TrackerHistoryTab({ user }: { user: StoredUser }) {
     </div>
   );
 
-  const renderValue = (v: unknown): string => {
-    if (v === null || v === undefined) return '—';
-    if (typeof v === 'boolean') return v ? 'Yes' : 'No';
-    if (Array.isArray(v)) return v.join(', ') || '—';
-    return String(v);
-  };
-
-  const SECTION_LABELS: Record<string, string> = {
-    circadian: 'Circadian', training: 'Training', nutrition: 'Nutrition',
-    vitals: 'Vitals', psychological: 'Psychological', business: 'Business',
-  };
-
   return (
     <div>
       <div style={{ marginBottom: "1.5rem" }}>
         <h2 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.5rem", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.02em", marginBottom: "0.25rem" }}>My Trackers</h2>
-        <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300 }}>{entries.length} submissions</p>
+        <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300 }}>{entries.length} check-ins logged</p>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
         {entries.map(entry => (
-          <div key={entry.id} style={{ border: "1px solid var(--border)", borderRadius: "10px", overflow: "hidden" }}>
-            <button
-              onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
-              style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.875rem 1.125rem", background: expandedId === entry.id ? "var(--surface)" : "transparent", border: "none", cursor: "pointer", textAlign: "left", gap: "1rem" }}
-            >
-              <div>
-                <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", marginBottom: "0.2rem" }}>{formatDate(entry.date)}</p>
-                <p style={{ fontSize: "0.78rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300 }}>{sectionSummary(entry)}</p>
-              </div>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden style={{ color: "var(--dim)", flexShrink: 0, transform: expandedId === entry.id ? "rotate(180deg)" : "none", transition: "transform 150ms" }}><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </button>
-            {expandedId === entry.id && (
-              <div style={{ padding: "1rem 1.125rem 1.25rem", borderTop: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-                {(['circadian', 'training', 'nutrition', 'vitals', 'psychological', 'business'] as const).map(sec => {
-                  const data = entry[sec] as Record<string, unknown>;
-                  const keys = Object.keys(data ?? {}).filter(k => data[k] !== null && data[k] !== undefined && data[k] !== '');
-                  if (keys.length === 0) return null;
-                  return (
-                    <div key={sec}>
-                      <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--primary)", fontFamily: "var(--font-mono), monospace", marginBottom: "0.625rem" }}>{SECTION_LABELS[sec]}</p>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-                        {keys.map(k => (
-                          <div key={k} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
-                            <span style={{ fontSize: "0.8125rem", color: "var(--muted)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, textTransform: "capitalize" }}>{k.replace(/_/g, ' ')}</span>
-                            <span style={{ fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 400, textAlign: "right", maxWidth: "60%" }}>{renderValue(data[k])}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+          <div key={entry.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1rem", border: "1px solid var(--border)", borderRadius: "9px", gap: "1rem" }}>
+            <div>
+              <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", marginBottom: "0.15rem" }}>{formatDate(entry.date)}</p>
+              <p style={{ fontSize: "0.775rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300 }}>{sectionSummary(entry)}</p>
+            </div>
+            <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "var(--primary)", flexShrink: 0, opacity: 0.6 }} aria-hidden />
           </div>
         ))}
       </div>

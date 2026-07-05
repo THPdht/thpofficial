@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
 import type { TrackerQuestion } from '@/lib/auth';
 import { requireApiKey } from '@/lib/apiAuth';
 
