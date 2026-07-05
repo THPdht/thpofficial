@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { register, login } from "@/lib/auth";
@@ -215,6 +215,23 @@ export default function ApplyPage() {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+
+  // Load saved draft on mount
+  useEffect(() => {
+    try {
+      const draft = localStorage.getItem('thp_apply_draft');
+      if (draft) setForm(JSON.parse(draft));
+    } catch {}
+  }, []);
+
+  // Save draft on every form change (excludes password fields)
+  useEffect(() => {
+    try {
+      const { password, confirmPassword, ...safeDraft } = form;
+      localStorage.setItem('thp_apply_draft', JSON.stringify({ ...safeDraft, password: '', confirmPassword: '' }));
+    } catch {}
+  }, [form]);
 
   const set = (key: keyof FormState) => (v: unknown) => setForm(f => ({ ...f, [key]: v }));
 
@@ -359,11 +376,35 @@ export default function ApplyPage() {
     // Cache user session so they can log back in later without knowing their password
     await login(form.email.trim().toLowerCase(), form.password).catch(() => {});
 
+    localStorage.removeItem('thp_apply_draft');
     setSubmitting(false);
-    window.location.href = "https://cal.com/ali-filali-uks4xi/30min";
+    setDone(true);
   }
 
   const progress = ((step + 1) / STEP_TITLES.length) * 100;
+
+  if (done) {
+    return (
+      <div style={{ minHeight: "100dvh", background: bg, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem 1.5rem" }}>
+        <div style={{ maxWidth: "480px", width: "100%", textAlign: "center" }}>
+          <div style={{ width: "64px", height: "64px", borderRadius: "50%", background: "rgba(200,16,46,0.12)", border: "1px solid rgba(200,16,46,0.3)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 2rem" }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#c8102e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <h1 style={{ fontFamily: "var(--font-display), sans-serif", fontSize: "clamp(1.6rem,4vw,2.2rem)", fontWeight: 400, color: ink, textTransform: "uppercase", marginBottom: "1rem" }}>Application Received</h1>
+          <p style={{ fontSize: "1rem", color: muted, fontFamily: "var(--font-body), sans-serif", lineHeight: 1.6, marginBottom: "0.5rem" }}>
+            THP has been notified. The next step is to book your strategy call — that's where THP reviews your application and walks you through the plan.
+          </p>
+          <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-body), sans-serif", marginBottom: "2.5rem" }}>
+            Check your email for login details.
+          </p>
+          <a href="https://cal.com/ali-filali-uks4xi/30min" target="_blank" rel="noopener noreferrer"
+            style={{ display: "inline-block", padding: "0.9rem 2.5rem", background: primary, color: "#fff", borderRadius: "8px", fontFamily: "var(--font-body), sans-serif", fontSize: "1rem", fontWeight: 600, textDecoration: "none", letterSpacing: "0.02em" }}>
+            Book your call →
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100dvh", background: bg, padding: "2rem 1.5rem 4rem" }}>

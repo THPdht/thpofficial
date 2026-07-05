@@ -168,6 +168,7 @@ function OnboardingInner() {
   const [authForm, setAuthForm] = useState({ name: "", email: "", password: "" });
   const [authError, setAuthError] = useState("");
   const [accessVerified, setAccessVerified] = useState<boolean | null>(null); // null = checking
+  const [accessError, setAccessError] = useState(false);
   const accessChecked = useRef(false);
 
   useEffect(() => {
@@ -194,7 +195,7 @@ function OnboardingInner() {
 
     if (!sessionId && !tokenParam) {
       // No proof of payment — block
-      router.replace("/");
+      setAccessError(true);
       return;
     }
 
@@ -205,10 +206,10 @@ function OnboardingInner() {
     fetch(`/api/verify-onboarding-access?${params}`)
       .then(r => r.json())
       .then(({ valid }) => {
-        if (!valid) { router.replace("/"); return; }
+        if (!valid) { setAccessError(true); return; }
         setAccessVerified(true);
       })
-      .catch(() => router.replace("/"));
+      .catch(() => setAccessError(true));
   }, [user, sessionId, tokenParam, router]);
 
   const set = (key: keyof FormData) => (v: string) => setForm(prev => ({ ...prev, [key]: v }));
@@ -289,6 +290,25 @@ function OnboardingInner() {
   const err = (k: keyof FormData) => errors[k] ? (
     <p style={{ color: "#ef4444", fontSize: "0.75rem", marginTop: "0.25rem" }}>{errors[k]}</p>
   ) : null;
+
+  // Access denied / link expired
+  if (accessError) {
+    return (
+      <div style={{ minHeight: "100dvh", background: bg, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
+        <div style={{ maxWidth: "420px", textAlign: "center" }}>
+          <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "0.72rem", letterSpacing: "0.22em", color: "var(--color-gold)", textTransform: "uppercase", marginBottom: "2rem" }}>THP Client Portal</p>
+          <h2 style={{ fontFamily: "var(--font-display), sans-serif", fontSize: "1.5rem", fontWeight: 400, color: ink, marginBottom: "1rem", textTransform: "uppercase" }}>Link Expired</h2>
+          <p style={{ fontSize: "0.9rem", color: muted, fontFamily: "var(--font-body), sans-serif", lineHeight: 1.6, marginBottom: "1.5rem" }}>
+            This link has expired or is no longer valid. Please contact THP to receive a new one.
+          </p>
+          <a href="https://t.me/thp_ali" target="_blank" rel="noopener noreferrer"
+            style={{ display: "inline-block", padding: "0.75rem 2rem", background: "var(--color-red)", color: "#fff", borderRadius: "8px", fontFamily: "var(--font-body), sans-serif", fontSize: "0.9rem", fontWeight: 600, textDecoration: "none" }}>
+            Message THP →
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   // While verifying access
   if (user && accessVerified === null && (sessionId || tokenParam)) {

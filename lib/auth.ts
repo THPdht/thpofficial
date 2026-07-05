@@ -134,6 +134,7 @@ export type StoredUser = {
   lastCheckIn?: string;
   joinedAt: string;
   diagnosticData?: DiagnosticData;
+  referralCode?: string;
 };
 
 // ─── Local session cache ───────────────────────────────────────────────────
@@ -162,6 +163,7 @@ export function rowToUser(row: any): StoredUser {
     lastCheckIn: row.last_check_in ?? undefined,
     joinedAt: row.joined_at,
     diagnosticData: diagData,
+    referralCode: row.referral_code ?? undefined,
   };
 }
 
@@ -212,6 +214,7 @@ export async function register(
     streak: 0,
     longest_streak: 0,
     joined_at: new Date().toISOString().split('T')[0],
+    referral_code: Math.random().toString(36).slice(2, 8).toUpperCase(),
   });
   if (error) return { success: false, error: 'Could not create account. Please try again.' };
   return { success: true };

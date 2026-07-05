@@ -239,6 +239,7 @@ export default function AdminPage() {
   async function handleSuspendClient() {
     if (!selected) return;
     const isSuspended = selected.diagnosticData?.suspended;
+    if (!isSuspended && !confirm(`Suspend ${selected.name}? They will lose dashboard access immediately.`)) return;
     await setSuspended(selected.email, !isSuspended);
     const updatedDiag = { ...(selected.diagnosticData || {}), suspended: !isSuspended, suspendedAt: !isSuspended ? new Date().toISOString() : undefined };
     const updated = { ...selected, diagnosticData: updatedDiag };
@@ -468,6 +469,7 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
 }) {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
+  const [genSuccess, setGenSuccess] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const [linking, setLinking] = useState(false);
   const [linkError, setLinkError] = useState("");
@@ -660,6 +662,8 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
       }).catch(() => {}); // fire and forget
 
       onProtocolGenerated(data.notionPageId);
+      setGenSuccess(true);
+      setTimeout(() => setGenSuccess(false), 3000);
     } catch (err) {
       setGenError(err instanceof Error ? err.message : "Unknown error");
     }
@@ -867,15 +871,18 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
         {/* No Notion protocol yet - generate or link */}
         {!client.notionPageId && (
           <>
-            <button
-              onClick={handleGenerateProtocol}
-              disabled={generating}
-              style={{ height: "36px", background: generating ? "var(--surface-2)" : "oklch(0.60 0.18 165 / 0.12)", border: "1px solid oklch(0.60 0.18 165 / 0.3)", borderRadius: "7px", color: generating ? "var(--dim)" : "var(--primary)", fontSize: "0.8125rem", fontWeight: 500, cursor: generating ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "background 150ms", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.375rem" }}
-              onMouseEnter={e => { if (!generating) e.currentTarget.style.background = "oklch(0.60 0.18 165 / 0.2)"; }}
-              onMouseLeave={e => { if (!generating) e.currentTarget.style.background = "oklch(0.60 0.18 165 / 0.12)"; }}>
-              <SparkleIcon />
-              {generating ? "Generating…" : clientProtocols.length === 0 ? "Generate protocol with AI" : `Regenerate protocol stage ${clientProtocols[clientProtocols.length - 1].stage} with AI`}
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <button
+                onClick={handleGenerateProtocol}
+                disabled={generating}
+                style={{ height: "36px", background: generating ? "var(--surface-2)" : "oklch(0.60 0.18 165 / 0.12)", border: "1px solid oklch(0.60 0.18 165 / 0.3)", borderRadius: "7px", color: generating ? "var(--dim)" : "var(--primary)", fontSize: "0.8125rem", fontWeight: 500, cursor: generating ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "background 150ms", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.375rem" }}
+                onMouseEnter={e => { if (!generating) e.currentTarget.style.background = "oklch(0.60 0.18 165 / 0.2)"; }}
+                onMouseLeave={e => { if (!generating) e.currentTarget.style.background = "oklch(0.60 0.18 165 / 0.12)"; }}>
+                <SparkleIcon />
+                {generating ? "Generating…" : clientProtocols.length === 0 ? "Generate protocol with AI" : `Regenerate protocol stage ${clientProtocols[clientProtocols.length - 1].stage} with AI`}
+              </button>
+              {genSuccess && <span style={{ fontSize: "0.75rem", color: "oklch(0.7 0.15 145)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Protocol generated ✓</span>}
+            </div>
           </>
         )}
 
@@ -1361,6 +1368,8 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
   const [telegramUsername, setTelegramUsername] = useState("");
   const [pushMsg, setPushMsg] = useState("");
   const [pushSending, setPushSending] = useState(false);
+  const [pushResult, setPushResult] = useState<"sent" | "failed" | null>(null);
+  const [savedField, setSavedField] = useState<string | null>(null);
   const [applyingFreeMonth, setApplyingFreeMonth] = useState(false);
   const [showPayForm, setShowPayForm] = useState(false);
   const [payDeposit, setPayDeposit] = useState("");
@@ -1451,19 +1460,29 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
   };
 
   const saveTelegram = async () => {
-    await supabase.from('users').update({ telegram_username: telegramUsername }).eq('email', client.email);
+    const { error } = await supabase.from('users').update({ telegram_username: telegramUsername }).eq('email', client.email);
+    if (!error) { setSavedField('telegram'); setTimeout(() => setSavedField(null), 2000); }
   };
 
   const sendPush = async () => {
     if (!pushMsg.trim()) return;
     setPushSending(true);
-    await fetch('/api/push-send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userEmail: client.email, adminPw: ADMIN_PASSWORD, title: 'THP', body: pushMsg.trim() }),
-    }).catch(() => {});
-    setPushMsg('');
+    setPushResult(null);
+    try {
+      const res = await fetch('/api/push-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userEmail: client.email, adminPw: ADMIN_PASSWORD, title: 'THP', body: pushMsg.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error);
+      setPushMsg('');
+      setPushResult('sent');
+    } catch {
+      setPushResult('failed');
+    }
     setPushSending(false);
+    setTimeout(() => setPushResult(null), 4000);
   };
 
   const applyFreeMonth = async () => {
@@ -1581,6 +1600,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
               {telegramUsername && (
                 <a href={`https://t.me/${telegramUsername}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--dim)", textDecoration: "none", fontSize: "0.7rem", opacity: 0.6 }}>↗</a>
               )}
+              {savedField === 'telegram' && <span style={{ fontSize: "0.65rem", color: "oklch(0.7 0.15 145)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Saved ✓</span>}
             </div>
             <span style={{ color: "var(--border)", fontSize: "0.7rem" }}>·</span>
             {/* Email */}
@@ -1779,13 +1799,14 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         {/* Monthly row */}
         <div style={{ paddingTop: "0.75rem", borderTop: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", gap: "0.375rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: "0.875rem", color: "var(--muted)" }}>Agreed monthly rate</span>
+            <span style={{ fontSize: "0.875rem", color: "var(--muted)" }}>Agreed monthly rate{savedField === 'monthly' && <span style={{ fontSize: "0.7rem", color: "oklch(0.7 0.15 145)", marginLeft: "0.375rem" }}>Saved ✓</span>}</span>
             <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
               <span style={{ fontSize: "0.75rem", color: "var(--dim)" }}>$</span>
               <input value={agreedMonthly} onChange={e => setAgreedMonthly(e.target.value)}
                 onBlur={async () => {
                   const v = parseFloat(agreedMonthly) || null;
-                  await supabase.from('users').update({ agreed_monthly: v }).eq('email', client.email);
+                  const { error } = await supabase.from('users').update({ agreed_monthly: v }).eq('email', client.email);
+                  if (!error) { setSavedField('monthly'); setTimeout(() => setSavedField(null), 2000); }
                 }}
                 placeholder="—" type="number"
                 style={{ width: "70px", padding: "0.2rem 0.375rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "5px", color: "var(--ink)", fontSize: "0.875rem", fontFamily: "var(--font-mono), monospace", textAlign: "right", outline: "none" }} />
@@ -1943,6 +1964,22 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
               </>
             );
           })()}
+        </div>
+
+        {/* Push notification */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
+          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Send Push Notification</p>
+          <div style={{ display: "flex", gap: "0.375rem" }}>
+            <input value={pushMsg} onChange={e => setPushMsg(e.target.value)} placeholder="Message…"
+              style={{ flex: 1, height: "36px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }}
+              onKeyDown={e => { if (e.key === 'Enter') sendPush(); }} />
+            <button onClick={sendPush} disabled={pushSending || !pushMsg.trim()}
+              style={{ height: "36px", padding: "0 0.875rem", background: pushSending ? "var(--surface-2)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: pushSending ? "var(--dim)" : "var(--muted)", fontSize: "0.8125rem", fontWeight: 500, cursor: (pushSending || !pushMsg.trim()) ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", flexShrink: 0 }}>
+              {pushSending ? "Sending…" : "Send"}
+            </button>
+          </div>
+          {pushResult === 'sent' && <p style={{ fontSize: "0.75rem", color: "oklch(0.7 0.15 145)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Push sent ✓</p>}
+          {pushResult === 'failed' && <p style={{ fontSize: "0.75rem", color: "var(--primary)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Push failed — client may not have notifications enabled.</p>}
         </div>
 
         {/* Tracker section */}

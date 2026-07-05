@@ -1135,6 +1135,7 @@ function BloodWorkTab({ user }: { user: StoredUser }) {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [analysing, setAnalysing] = useState(false);
+  const [bwError, setBwError] = useState(false);
   const [expandedMarker, setExpandedMarker] = useState<string | null>(null);
   const [selectedMarker, setSelectedMarker] = useState("total_t");
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -1165,7 +1166,11 @@ function BloodWorkTab({ user }: { user: StoredUser }) {
         if (fresh?.markers || attempts > 20) {
           clearInterval(poll);
           setAnalysing(false);
-          if (fresh) setEntries(prev => [fresh, ...prev.filter(e => e.id !== res.uploadId)]);
+          if (fresh?.markers) {
+            setEntries(prev => [fresh, ...prev.filter(e => e.id !== res.uploadId)]);
+          } else if (attempts > 20) {
+            setBwError(true);
+          }
         }
       }, 3000);
     }
@@ -1196,6 +1201,12 @@ function BloodWorkTab({ user }: { user: StoredUser }) {
         <div style={{ padding: "1rem 1.25rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <Spinner />
           <p style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300 }}>Extracting markers from your results…</p>
+        </div>
+      )}
+      {bwError && (
+        <div style={{ padding: "1rem 1.25rem", background: "oklch(0.55 0.18 25 / 0.06)", border: "1px solid oklch(0.55 0.18 25 / 0.2)", borderRadius: "10px", marginBottom: "1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
+          <p style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300 }}>Analysis is taking longer than expected. Try refreshing in a minute.</p>
+          <button onClick={() => { setBwError(false); }} style={{ flexShrink: 0, height: "32px", padding: "0 0.75rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "0.75rem", color: "var(--ink)", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Dismiss</button>
         </div>
       )}
 
@@ -1293,6 +1304,10 @@ function ReferralsTab({ user }: { user: StoredUser }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const refCode = user.referralCode || btoa(user.email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase();
+  const referralLink = `https://thpofficial.com/referral?ref=${refCode}`;
 
   const load = () => {
     setLoading(true);
@@ -1322,6 +1337,18 @@ function ReferralsTab({ user }: { user: StoredUser }) {
       <div style={{ marginBottom: "2rem" }}>
         <h2 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "clamp(1.5rem, 4vw, 2rem)", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.02em", marginBottom: "0.25rem" }}>Referrals</h2>
         <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>3 paying referrals = a free month with THP.</p>
+      </div>
+
+      {/* Referral link */}
+      <div style={{ padding: "1.25rem 1.5rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", marginBottom: "1.25rem" }}>
+        <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 400, marginBottom: "0.625rem" }}>Your referral link — share this with anyone you want to refer:</p>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <input readOnly value={referralLink} style={{ flex: 1, height: "38px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.8125rem", color: "var(--dim)", fontFamily: "var(--font-mono), monospace", outline: "none", minWidth: 0 }} />
+          <button onClick={() => { navigator.clipboard.writeText(referralLink); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+            style={{ flexShrink: 0, height: "38px", padding: "0 1rem", background: copied ? "oklch(0.45 0.15 145 / 0.1)" : "var(--primary)", border: copied ? "1px solid oklch(0.45 0.15 145 / 0.3)" : "none", borderRadius: "7px", color: copied ? "oklch(0.7 0.15 145)" : "#fff", fontSize: "0.8125rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "all 200ms" }}>
+            {copied ? "Copied!" : "Copy"}
+          </button>
+        </div>
       </div>
 
       {/* Progress bar */}
