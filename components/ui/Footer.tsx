@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { site } from "@/lib/site";
 import { faqs } from "@/lib/content";
+
+const PORTAL_ROUTES = ["/admin", "/dashboard", "/login", "/register", "/onboarding"];
 
 const legalLinks = [
   { label: "Privacy",            href: "/privacy"    },
@@ -13,7 +16,11 @@ const legalLinks = [
 ];
 
 export function Footer() {
+  const pathname = usePathname();
   const [open, setOpen] = useState<number | null>(null);
+
+  const isPortal = PORTAL_ROUTES.some(r => pathname === r || pathname.startsWith(r + "/"));
+  if (isPortal) return null;
 
   return (
     <footer id="faq" className="relative z-10 bg-ink">

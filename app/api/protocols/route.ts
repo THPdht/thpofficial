@@ -10,6 +10,7 @@ export async function GET(req: Request) {
     .from('protocols')
     .select('*')
     .eq('user_email', email)
+    .eq('status', 'sent')
     .order('stage', { ascending: true });
 
   if (error) return Response.json({ error: error.message }, { status: 500 });

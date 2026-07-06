@@ -13,13 +13,14 @@ export async function POST(req: Request) {
       return Response.json({ error: 'Missing email or formData' }, { status: 400 });
     }
 
-    // Fetch current status — only downgrade 'new' → 'pending', preserve 'active'/'alumni'
+    // Fetch current user record for name and status
     const { data: existing } = await supabaseAdmin
       .from('users')
-      .select('status')
+      .select('status, name')
       .eq('email', email)
       .single();
     const newStatus = (existing?.status === 'new' || !existing?.status) ? 'pending' : existing.status;
+    const clientName = existing?.name ?? email.split('@')[0];
 
     // Save intake form data to user record
     const { error: updateError } = await supabaseAdmin
@@ -35,6 +36,23 @@ export async function POST(req: Request) {
     if (token) {
       await supabaseAdmin.from('invites').update({ used: true }).eq('token', token);
     }
+
+    // Insert intake_submitted alarm for admin feed
+    const { error: alarmErr } = await supabaseAdmin.from('alarms').insert({
+      user_email: email,
+      type: 'intake_submitted',
+      message: `${clientName} submitted intake — Phase 1 protocol auto-generating now`,
+      created_at: new Date().toISOString(),
+    });
+    if (alarmErr) console.error('[generate-onboarding-protocol] alarm insert failed:', alarmErr);
+
+    // Auto-generate Phase 1 protocol (fire-and-forget — don't block the response)
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://thpofficial.com';
+    fetch(`${appUrl}/api/generate-protocol`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientEmail: email, phase1Mode: true }),
+    }).catch(e => console.error('[generate-onboarding-protocol] auto protocol generation failed:', e));
 
     return Response.json({ success: true });
   } catch (err) {

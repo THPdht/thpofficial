@@ -4,21 +4,21 @@
 const pillars = [
   {
     number: "01",
-    name: "Biochemical Anchor",
-    subtitle: "Diagnosis",
-    body: "Your bloodwork interpreted, not guessed. Every hormone, every marker, mapped to your baseline before a single intervention is made.",
+    name: "Wake Up Wanting To Get Out Of Bed",
+    subtitle: "Not forcing yourself. Wanting to.",
+    body: "The energy that greets you in the morning isn't something that just comes back on its own. This is what men tell us changes first — and it changes everything that follows.",
   },
   {
     number: "02",
-    name: "Metrics Auditing",
-    subtitle: "Daily Trackers",
-    body: "Every input logged. Every output tracked. Adjustments made in real time based on what your data actually shows — not what a generic program assumes.",
+    name: "Want Sex Again — And Actually Have The Drive For It",
+    subtitle: "Not going through the motions. Wanting it.",
+    body: "Not managed. Not boosted temporarily. The drive that used to be natural, coming back because the biology behind it has been addressed at the root.",
   },
   {
     number: "03",
-    name: "Ancestral Interventions",
-    subtitle: "The Protocol",
-    body: "Nutrition, training, supplementation, sleep, and lifestyle restructured around your biology. Backed by science. Grounded in what men are built for.",
+    name: "Feel Like Yourself Again, For The First Time In Years",
+    subtitle: "Not medicated. Not managed. You, back.",
+    body: "The version of you before the fog settled in. Men who go through this tell us they forgot what it felt like to actually want their life — until they had it again.",
   },
 ];
 
@@ -109,9 +109,6 @@ export function DataGrid() {
           ))}
         </div>
 
-        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-center mt-12" style={{ color: "rgba(255,255,255,0.15)" }}>
-          ◆&nbsp;&nbsp;No guesswork.&nbsp;&nbsp;No one-size-fits-all.&nbsp;&nbsp;No excuses.&nbsp;&nbsp;◆
-        </p>
 
       </div>
     </section>

@@ -18,7 +18,7 @@ export async function POST(req: Request) {
 
     const now = new Date().toISOString();
 
-    // Mark as sent
+    // Mark as sent so client can now see it
     await supabaseAdmin
       .from('protocols')
       .update({ status: 'sent', sent_at: now })

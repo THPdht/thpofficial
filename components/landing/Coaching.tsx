@@ -12,8 +12,8 @@ export function Coaching() {
       <div className="relative z-10 mx-auto max-w-6xl px-4 md:px-8">
         <div className="mb-12 text-center">
           <h2 className="display mx-auto max-w-3xl text-3xl text-white sm:text-4xl md:text-5xl">
-            Enough surviving. It&apos;s time to{" "}
-            <span className="text-red">perform.</span>
+            ENOUGH SURVIVING. IT&apos;S TIME TO{" "}
+            <span className="text-red">PERFORM.</span>
           </h2>
         </div>
 
@@ -40,10 +40,15 @@ export function Coaching() {
             <p className="mt-5 font-mono text-sm font-bold uppercase leading-relaxed tracking-[0.06em] text-white">
               The last time you settle for feeling like this.
             </p>
-            <p className="mt-4 font-mono text-xs uppercase leading-relaxed tracking-[0.06em] text-white/60">
-              No pills. No fake hacks. Just raw, structured transformation through
-              backed studies and ancestral truth, built to make you feel powerful
-              again.
+            <p className="mt-4 font-body text-sm leading-relaxed text-white/60">
+              No pills. No gimmicks. Just your bloodwork, your body, and a real plan to make you feel like yourself again. Not medicated. Not managed. Fixed.
+            </p>
+
+            <p className="mt-6 font-body text-sm leading-relaxed text-white/45">
+              Ask yourself what it actually costs you to stay exactly where you are. Another year of low energy. Another year with no real drive left. Another year telling yourself it&apos;ll sort itself out.
+            </p>
+            <p className="mt-3 font-body text-sm leading-relaxed text-white/45">
+              It won&apos;t. This is the last thing you&apos;ll need to try.
             </p>
 
             <p className="mt-8 flex items-baseline gap-2 flex-wrap">

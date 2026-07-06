@@ -19,10 +19,27 @@ export function Booking() {
           dark: { "cal-brand": "#c8102e" },
         },
       });
-      // Redirect to pending screen after booking is confirmed
+      // Redirect to pending screen after booking is confirmed + fire booking alarm
       cal("on", {
         action: "bookingSuccessful",
         callback: () => {
+          // Try to get logged-in user email from localStorage for the alarm
+          try {
+            const currentEmail = localStorage.getItem('thp_current');
+            if (currentEmail) {
+              const userData = localStorage.getItem(`thp_user_${currentEmail}`);
+              const name = userData ? (JSON.parse(userData)?.name ?? currentEmail) : currentEmail;
+              fetch('/api/alarms', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  user_email: currentEmail,
+                  type: 'booking',
+                  message: `${name} booked a strategy call`,
+                }),
+              }).catch(() => {});
+            }
+          } catch { /* silent — alarm is non-critical */ }
           router.push("/onboarding/pending");
         },
       });
@@ -45,7 +62,7 @@ export function Booking() {
         <div className="overflow-hidden rounded-lg border border-white/10 bg-ink-soft">
           <Cal
             calLink={site.calLink}
-            style={{ width: "100%", height: "600px", overflow: "scroll" }}
+            style={{ width: "100%", height: "min(600px, 85dvh)", overflow: "scroll" }}
             config={{ layout: "month_view" }}
           />
         </div>

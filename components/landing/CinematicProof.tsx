@@ -7,19 +7,19 @@ const proofSlots = [
   {
     image: "/images/thpboxing.png",
     label: "Raw Strength",
-    caption: "The body your biology was built for.",
+    caption: "The guy you were before your hormones gave out.",
     large: true,
   },
   {
     image: "/images/thpfood.png",
     label: "Raw Nutrition",
-    caption: "Fuel that works with your hormones, not against them.",
+    caption: "Food that builds you up instead of wearing you down.",
     large: false,
   },
   {
     image: "/images/thptestresults.png",
     label: "Clinical Baseline",
-    caption: "Every intervention starts with your bloodwork.",
+    caption: "The number your doctor called 'normal.' It wasn't.",
     large: false,
   },
 ];
@@ -38,20 +38,18 @@ export function CinematicProof() {
 
       <div className="relative z-10 mx-auto max-w-7xl px-6 md:px-8">
 
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-12">
-          <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-gold mb-4">
-              Proof of Work
-            </p>
-            <h2
-              className="font-body font-extrabold text-white tracking-tight leading-[0.9]"
-              style={{ fontSize: "clamp(2rem, 4vw, 3.25rem)" }}
-            >
-              These men were done<br />accepting less.
-            </h2>
-          </div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/15 shrink-0 md:pb-1">
-            Results vary by individual baseline
+        <div className="mb-12">
+          <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-gold mb-4">
+            Proof of Work
+          </p>
+          <h2
+            className="font-body font-extrabold text-white tracking-tight leading-[0.9] mb-5"
+            style={{ fontSize: "clamp(2rem, 4vw, 3.25rem)" }}
+          >
+            These men were done<br />accepting less.
+          </h2>
+          <p className="font-body text-base text-white/40 leading-relaxed max-w-2xl">
+            This is the guy you already saw talking about this. Every one of these men used to sit exactly where you are now.
           </p>
         </div>
 
@@ -103,26 +101,16 @@ export function CinematicProof() {
           className="mt-px p-8 md:p-10 flex flex-col sm:flex-row items-center justify-between gap-6"
           style={{ background: "rgba(255,255,255,0.02)", borderTop: "1px solid rgba(255,255,255,0.05)" }}
         >
-          <p className="font-mono text-xs uppercase tracking-[0.18em] text-white/35 text-center sm:text-left">
-            The only question is how long you wait.
+          <p className="font-body text-sm text-white/40 leading-relaxed max-w-lg text-center sm:text-left">
+            Every month you wait, your energy drops a little more, the people around you notice a little more, and running on empty starts to feel normal. It&apos;s not.
           </p>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <a
-              href={site.bookingUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center border border-white/25 px-7 py-3 font-mono text-xs font-bold uppercase tracking-[0.18em] text-white transition-all duration-300 hover:border-white/60 hover:bg-white/5"
-            >
-              Book a Call
-            </a>
-            <a
-              href={site.applyHref}
-              className="flex items-center justify-center bg-red px-7 py-3 font-mono text-xs font-bold uppercase tracking-[0.18em] text-white transition-all duration-300 hover:bg-red-dark"
-              style={{ boxShadow: "0 0 24px rgba(200,16,46,0.35)" }}
-            >
-              Apply Now
-            </a>
-          </div>
+          <a
+            href={site.applyHref}
+            className="flex items-center justify-center gap-2 bg-red px-8 py-3.5 font-mono text-xs font-bold uppercase tracking-[0.18em] text-white transition-all duration-300 hover:bg-red-dark shrink-0"
+            style={{ boxShadow: "0 0 24px rgba(200,16,46,0.35)" }}
+          >
+            Apply Now →
+          </a>
         </div>
 
       </div>

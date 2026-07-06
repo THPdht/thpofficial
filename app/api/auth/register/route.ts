@@ -32,5 +32,14 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Could not create account. Please try again.' }, { status: 500 });
   }
 
+  // Insert new_application alarm for admin feed
+  const { error: alarmErr } = await supabaseAdmin.from('alarms').insert({
+    user_email: norm,
+    type: 'new_application',
+    message: `New application from ${name.trim()}`,
+    created_at: new Date().toISOString(),
+  });
+  if (alarmErr) console.error('[register] alarm insert failed:', alarmErr);
+
   return Response.json({ success: true });
 }

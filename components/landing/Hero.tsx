@@ -138,21 +138,21 @@ export function Hero() {
           </p>
 
           <h1
-            className="font-body font-extrabold text-white leading-[0.88] tracking-tight mb-4"
-            style={{ fontSize: "clamp(1.75rem, 5vw, 3.75rem)" }}
+            className="font-body font-extrabold text-white leading-[0.9] tracking-tight mb-5"
+            style={{ fontSize: "clamp(1.6rem, 4.5vw, 3.25rem)" }}
           >
-            A LOW<br />
-            TESTOSTERONE<br />
-            LIFE IS<br />
-            A BAD LIFE.
+            YOU ALREADY KNOW<br />
+            YOUR LIFE ISN&apos;T<br />
+            WHAT IT USED<br />
+            TO BE.
           </h1>
 
-          <p className="font-mono uppercase tracking-[0.2em] mb-8" style={{ fontSize: "10px", color: "rgba(255,255,255,0.3)" }}>
-            They are inseparable concepts.
+          <p className="font-body mb-8 leading-relaxed" style={{ fontSize: "clamp(0.875rem, 2vw, 1rem)", color: "rgba(255,255,255,0.55)", maxWidth: "38ch" }}>
+            Tired all day even after coffee. A gut that won&apos;t go away no matter what you do. Barely any drive left in the bedroom, and you keep telling yourself it&apos;s just a phase. That&apos;s not a phase. That&apos;s low testosterone. And you already know it.
           </p>
 
           <a
-            href="#protocol"
+            href="/apply"
             className="inline-flex items-center gap-2.5 font-mono text-xs font-bold uppercase tracking-[0.2em] text-white group"
             style={{
               border: "1px solid rgba(255,255,255,0.18)",
@@ -173,7 +173,7 @@ export function Hero() {
             }}
           >
             <span style={{ color: "#c8102e", fontSize: "9px" }}>▶</span>
-            Start Now
+            Apply Now
             <ArrowRight className="size-3 opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all duration-300" />
           </a>
 

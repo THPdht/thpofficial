@@ -1,6 +1,7 @@
 import { Hero } from "@/components/landing/Hero";
 import { WhyItFailed } from "@/components/landing/WhyItFailed";
 import { CinematicProof } from "@/components/landing/CinematicProof";
+import { Qualifying } from "@/components/landing/Qualifying";
 import { DataGrid } from "@/components/landing/DataGrid";
 import { Booking } from "@/components/landing/Booking";
 import { Coaching } from "@/components/landing/Coaching";
@@ -24,6 +25,7 @@ export default function Home() {
         {/* Pain → Rapport → Proof → Solution → CTA */}
         <WhyItFailed />
         <CinematicProof />
+        <Qualifying />
         <DataGrid />
         <Coaching />
         <Booking />

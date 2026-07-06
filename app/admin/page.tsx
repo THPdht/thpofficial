@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   getAllUsers, updateUser, linkNotionPage, setProtocolStatus,
   setAccountStatus, setClientType, addPayment, removePayment, removeClient, createClient,
-  setSuspended, updatePresence, getClientProtocols, getAdminDiagnostics, publishDiagnosis,
+  setSuspended, updatePresence, getAdminProtocols, getAdminDiagnostics, publishDiagnosis,
 } from "@/lib/auth";
 import type { StoredUser, ClientStatus, ProtocolStatus, AccountStatus, Payment, ClientProtocol, ClientDiagnostic } from "@/lib/auth";
 import type { ProtocolId } from "@/lib/protocols";
@@ -500,7 +500,7 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
   const [diagGenError, setDiagGenError] = useState("");
 
   useEffect(() => {
-    getClientProtocols(client.email).then(setClientProtocols).catch(() => {});
+    getAdminProtocols(client.email).then(setClientProtocols).catch(() => {});
     getAdminDiagnostics(client.email).then(setAdminDiagnostics).catch(() => {});
     setTrackerSummary(null);
     setInviteUrl(null);
@@ -642,7 +642,7 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
       if (!res.ok || data.error) throw new Error(data.error || "Generation failed");
 
       // Refresh protocols list so THP sees the result immediately
-      const updated = await getClientProtocols(client.email);
+      const updated = await getAdminProtocols(client.email);
       setClientProtocols(updated);
 
       // Reload admin diagnostics too (protocol generation also creates a diagnosis draft)
@@ -774,13 +774,19 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
                   <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, lineHeight: 1.6, marginTop: "0.375rem", whiteSpace: "pre-wrap" }}>{s.text}</p>
                 </details>
               ))}
-              {!diag.published && (
-                <button
-                  onClick={() => handlePublishDiagnosis(diag.id)}
-                  disabled={publishingDiagId === diag.id}
-                  style={{ marginTop: "0.625rem", width: "100%", height: "36px", background: publishingDiagId === diag.id ? "var(--surface-2)" : "var(--primary)", border: "none", borderRadius: "7px", color: publishingDiagId === diag.id ? "var(--dim)" : "#fff", fontSize: "0.8125rem", fontWeight: 600, cursor: publishingDiagId === diag.id ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "background 150ms" }}>
-                  {publishingDiagId === diag.id ? "Sending…" : "Send diagnosis to client →"}
-                </button>
+              {/* Speaking notes — THP only, never shown to client */}
+              {diag.content?.speaking_notes && (
+                <details style={{ marginTop: "0.5rem", borderTop: "1px solid oklch(0.65 0.14 65 / 0.2)", paddingTop: "0.5rem" }}>
+                  <summary style={{ fontSize: "0.7rem", color: "oklch(0.75 0.14 65)", cursor: "pointer", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif", userSelect: "none" }}>Speaking Notes (THP only)</summary>
+                  <div style={{ marginTop: "0.375rem", fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, lineHeight: 1.6 }}>
+                    {!!diag.content.speaking_notes.phase1_summary && <p style={{ marginBottom: "0.5rem" }}><strong style={{ color: "var(--muted)" }}>Phase 1:</strong> {String(diag.content.speaking_notes.phase1_summary)}</p>}
+                    {Array.isArray(diag.content.speaking_notes.held_back) && diag.content.speaking_notes.held_back.length > 0 && (
+                      <div style={{ marginBottom: "0.5rem" }}><strong style={{ color: "var(--muted)" }}>Held back:</strong>{(diag.content.speaking_notes.held_back as unknown[]).map((item, i) => <p key={i} style={{ marginLeft: "0.75rem", marginTop: "0.125rem" }}>· {String(item)}</p>)}</div>
+                    )}
+                    {!!diag.content.speaking_notes.next_session_hooks && <p style={{ marginBottom: "0.5rem" }}><strong style={{ color: "var(--muted)" }}>First call hooks:</strong> {String(diag.content.speaking_notes.next_session_hooks)}</p>}
+                    {!!diag.content.speaking_notes.red_flags && <p><strong style={{ color: "var(--primary)" }}>Red flags:</strong> {String(diag.content.speaking_notes.red_flags)}</p>}
+                  </div>
+                </details>
               )}
             </div>
           ))
@@ -1131,7 +1137,7 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
               const data = await res.json();
               if (!res.ok || data.error) throw new Error(data.error || "Generation failed");
               onProtocolGenerated(data.notionPageId);
-              getClientProtocols(client.email).then(setClientProtocols).catch(() => {});
+              getAdminProtocols(client.email).then(setClientProtocols).catch(() => {});
             } catch (err) {
               setGenError(err instanceof Error ? err.message : "Unknown error");
             }
@@ -1393,6 +1399,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
   const [publishingDiagId, setPublishingDiagId] = useState<string | null>(null);
   const [diagGenerating, setDiagGenerating] = useState(false);
   const [diagGenError, setDiagGenError] = useState("");
+  const [sendingProtocolId, setSendingProtocolId] = useState<string | null>(null);
 
   useEffect(() => {
     // Reset profile-panel state on client change
@@ -1446,7 +1453,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
       .then(({ data }) => setNotes(data?.notes ?? ''));
 
     // Client protocols + admin diagnostics
-    getClientProtocols(client.email).then(setClientProtocols).catch(() => {});
+    getAdminProtocols(client.email).then(setClientProtocols).catch(() => {});
     getAdminDiagnostics(client.email).then(setAdminDiagnostics).catch(() => {});
   }, [client.email]);
 
@@ -1555,14 +1562,13 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
   async function handleGenerateProtocol() {
     setGenerating(true); setGenError("");
     try {
-      const res = await fetch("/api/generate-protocol", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientEmail: client.email, clientName: client.name, diagnosticData: client.diagnosticData ?? null }) });
+      const res = await fetch("/api/generate-protocol", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientEmail: client.email, clientName: client.name, diagnosticData: client.diagnosticData ?? null, phase1Mode: true }) });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || "Generation failed");
-      const updated = await getClientProtocols(client.email);
+      const updated = await getAdminProtocols(client.email);
       setClientProtocols(updated);
       const updatedDiags = await getAdminDiagnostics(client.email);
       setAdminDiagnostics(updatedDiags);
-      fetch('/api/push-send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userEmail: client.email, adminPw: ADMIN_PASSWORD, title: 'Your THP Protocol is Ready', body: 'Your protocol is live. Open your dashboard to read it.' }) }).catch(() => {});
       onProtocolGenerated(data.notionPageId);
     } catch (err) { setGenError(err instanceof Error ? err.message : "Unknown error"); }
     setGenerating(false);
@@ -1922,48 +1928,68 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
                   <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, lineHeight: 1.6, marginTop: "0.375rem", whiteSpace: "pre-wrap" }}>{s.text}</p>
                 </details>
               ))}
-              {!diag.published && (
-                <button onClick={() => handlePublishDiagnosis(diag.id)} disabled={publishingDiagId === diag.id}
-                  style={{ marginTop: "0.625rem", width: "100%", height: "36px", background: publishingDiagId === diag.id ? "var(--surface-2)" : "var(--primary)", border: "none", borderRadius: "7px", color: publishingDiagId === diag.id ? "var(--dim)" : "#fff", fontSize: "0.8125rem", fontWeight: 600, cursor: publishingDiagId === diag.id ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-                  {publishingDiagId === diag.id ? "Sending…" : "Send diagnosis to client →"}
-                </button>
+              {/* Speaking notes — THP only, never shown to client */}
+              {diag.content?.speaking_notes && (
+                <details style={{ marginTop: "0.5rem", borderTop: "1px solid oklch(0.65 0.14 65 / 0.2)", paddingTop: "0.5rem" }}>
+                  <summary style={{ fontSize: "0.7rem", color: "oklch(0.75 0.14 65)", cursor: "pointer", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif", userSelect: "none" }}>Speaking Notes (THP only)</summary>
+                  <div style={{ marginTop: "0.375rem", fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, lineHeight: 1.6 }}>
+                    {!!diag.content.speaking_notes.phase1_summary && <p style={{ marginBottom: "0.5rem" }}><strong style={{ color: "var(--muted)" }}>Phase 1:</strong> {String(diag.content.speaking_notes.phase1_summary)}</p>}
+                    {Array.isArray(diag.content.speaking_notes.held_back) && diag.content.speaking_notes.held_back.length > 0 && (
+                      <div style={{ marginBottom: "0.5rem" }}><strong style={{ color: "var(--muted)" }}>Held back:</strong>{(diag.content.speaking_notes.held_back as unknown[]).map((item, i) => <p key={i} style={{ marginLeft: "0.75rem", marginTop: "0.125rem" }}>· {String(item)}</p>)}</div>
+                    )}
+                    {!!diag.content.speaking_notes.next_session_hooks && <p style={{ marginBottom: "0.5rem" }}><strong style={{ color: "var(--muted)" }}>First call hooks:</strong> {String(diag.content.speaking_notes.next_session_hooks)}</p>}
+                    {!!diag.content.speaking_notes.red_flags && <p><strong style={{ color: "var(--primary)" }}>Red flags:</strong> {String(diag.content.speaking_notes.red_flags)}</p>}
+                  </div>
+                </details>
               )}
             </div>
           ))}
         </div>
 
-        {/* Protocol status */}
-        <div id="crm-protocol" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
-          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.125rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Protocol</p>
-          {!client.notionPageId && clientProtocols.length === 0 ? (
-            <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>No protocol generated yet. Use Tools → Generate Extra Protocol.</p>
-          ) : !client.notionPageId && clientProtocols.length > 0 ? (
-            <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", padding: "0.625rem 0.875rem", background: "oklch(0.60 0.18 165 / 0.08)", border: "1px solid oklch(0.60 0.18 165 / 0.25)", borderRadius: "8px" }}>
-              <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: "var(--primary)", flexShrink: 0 }} />
-              <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--primary)", flex: 1 }}>Stage {clientProtocols[clientProtocols.length - 1].stage} — {clientProtocols[clientProtocols.length - 1].title ?? "Protocol active"}</p>
+        {/* Protocol — view draft + send to client */}
+        <div id="crm-protocol" style={{ display: "flex", flexDirection: "column", gap: "0.625rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
+          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Protocol</p>
+          {clientProtocols.length === 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>No protocol yet — auto-generates on intake. Generate manually below.</p>
+              <button
+                onClick={handleGenerateProtocol}
+                disabled={generating}
+                style={{ height: "36px", background: generating ? "var(--surface-2)" : "oklch(0.60 0.18 165 / 0.12)", border: "1px solid oklch(0.60 0.18 165 / 0.3)", borderRadius: "7px", color: generating ? "var(--dim)" : "var(--primary)", fontSize: "0.8125rem", fontWeight: 500, cursor: generating ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.375rem" }}>
+                <SparkleIcon />
+                {generating ? "Generating…" : "Generate Phase 1 protocol with AI"}
+              </button>
+              {genError && <p style={{ fontSize: "0.75rem", color: "var(--primary)" }}>{genError}</p>}
             </div>
-          ) : (() => {
-            const ps = client.diagnosticData?.protocolStatus ?? 'active';
-            const statusMeta: Record<string, { label: string; color: string; bg: string }> = {
-              active:   { label: "Live",     color: "oklch(0.72 0.14 145)", bg: "oklch(0.45 0.15 145 / 0.1)" },
-              updating: { label: "Updating", color: "oklch(0.84 0.12 65)", bg: "oklch(0.65 0.14 65 / 0.1)" },
-              building: { label: "Building", color: "var(--primary)",       bg: "oklch(0.60 0.18 165 / 0.1)" },
-            };
-            const sm = statusMeta[ps] ?? statusMeta['active'];
-            return (
-              <>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", padding: "0.625rem 0.875rem", background: sm.bg, border: `1px solid ${sm.color}40`, borderRadius: "8px" }}>
-                  <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: sm.color, animation: ps !== 'active' ? "pulse 2s ease infinite" : "none", flexShrink: 0 }} />
-                  <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: sm.color, flex: 1 }}>Protocol {sm.label}</p>
-                </div>
-                <div style={{ display: "flex", gap: "0.375rem" }}>
-                  {ps !== 'active' && <button onClick={() => onProtocolStatusChange('active')} style={{ flex: 1, height: "32px", background: "oklch(0.45 0.15 145 / 0.1)", border: "1px solid oklch(0.45 0.15 145 / 0.2)", borderRadius: "6px", color: "oklch(0.72 0.14 145)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Mark as live</button>}
-                  {ps !== 'updating' && <button onClick={() => onProtocolStatusChange('updating')} style={{ flex: 1, height: "32px", background: "oklch(0.65 0.14 65 / 0.08)", border: "1px solid oklch(0.65 0.14 65 / 0.2)", borderRadius: "6px", color: "oklch(0.84 0.12 65)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Mark as updating</button>}
-                  {ps !== 'building' && <button onClick={() => onProtocolStatusChange('building')} style={{ flex: 1, height: "32px", background: "oklch(0.60 0.18 165 / 0.08)", border: "1px solid oklch(0.60 0.18 165 / 0.2)", borderRadius: "6px", color: "var(--primary)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Mark as building</button>}
-                </div>
-              </>
-            );
-          })()}
+          ) : clientProtocols.map(proto => (
+            <div key={proto.id} style={{ background: "var(--surface)", border: `1px solid ${proto.published ? "oklch(0.7 0.15 145 / 0.3)" : "oklch(0.60 0.18 165 / 0.3)"}`, borderRadius: "8px", padding: "0.75rem" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.375rem" }}>
+                <p style={{ fontSize: "0.8rem", fontWeight: 500, color: "var(--ink)" }}>Stage {proto.stage}</p>
+                <span style={{ fontSize: "0.65rem", fontWeight: 600, padding: "2px 7px", borderRadius: "4px", background: proto.published ? "oklch(0.7 0.15 145 / 0.12)" : "oklch(0.60 0.18 165 / 0.12)", color: proto.published ? "oklch(0.7 0.15 145)" : "var(--primary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  {proto.published ? "Sent to client" : "Draft — not sent"}
+                </span>
+              </div>
+              {proto.content?.sections?.map(s => (
+                <details key={s.heading} style={{ marginBottom: "0.25rem" }}>
+                  <summary style={{ fontSize: "0.75rem", color: "var(--muted)", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", userSelect: "none" }}>{s.heading}</summary>
+                  <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, lineHeight: 1.6, marginTop: "0.375rem", whiteSpace: "pre-wrap" }}>{s.text}</p>
+                </details>
+              ))}
+              {!proto.published && (
+                <button
+                  onClick={async () => {
+                    setSendingProtocolId(proto.id);
+                    await fetch('/api/protocol-send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ protocolId: proto.id }) });
+                    setClientProtocols(prev => prev.map(p => p.id === proto.id ? { ...p, published: true } : p));
+                    setSendingProtocolId(null);
+                  }}
+                  disabled={sendingProtocolId === proto.id}
+                  style={{ marginTop: "0.625rem", width: "100%", height: "36px", background: sendingProtocolId === proto.id ? "var(--surface-2)" : "var(--primary)", border: "none", borderRadius: "7px", color: sendingProtocolId === proto.id ? "var(--dim)" : "#fff", fontSize: "0.8125rem", fontWeight: 600, cursor: sendingProtocolId === proto.id ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "background 150ms" }}>
+                  {sendingProtocolId === proto.id ? "Sending…" : "Send protocol to client →"}
+                </button>
+              )}
+            </div>
+          ))}
         </div>
 
         {/* Push notification */}
@@ -2000,7 +2026,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
                   const data = await res.json();
                   if (!res.ok || data.error) throw new Error(data.error || "Generation failed");
                   onProtocolGenerated(data.notionPageId);
-                  getClientProtocols(client.email).then(setClientProtocols).catch(() => {});
+                  getAdminProtocols(client.email).then(setClientProtocols).catch(() => {});
                 } catch (err) { setGenError(err instanceof Error ? err.message : "Unknown error"); }
                 setGenerating(false);
               }}
@@ -2527,22 +2553,36 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
               <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>All clear · no active alarms</p>
             </div>
           ) : alarms.map(a => {
-            const clientName = clients.find(c => c.email === a.user_email)?.name ?? a.user_email.split('@')[0];
+            const alarmClient = clients.find(c => c.email === a.user_email);
+            const typeColors: Record<string, string> = {
+              new_application: 'oklch(0.72 0.18 260)',
+              booking: 'oklch(0.75 0.16 200)',
+              intake_submitted: 'oklch(0.78 0.15 145)',
+              payment: 'oklch(0.72 0.18 145)',
+              referral_milestone: 'oklch(0.75 0.14 300)',
+            };
+            const dotColor = typeColors[a.type] ?? 'oklch(0.75 0.12 65)';
             return (
-              <div key={a.id} style={{ display: "flex", alignItems: "center", gap: "0.875rem", padding: "0.75rem 0.875rem", background: "var(--surface)", border: "1px solid oklch(0.65 0.14 65 / 0.2)", borderRadius: "9px" }}>
-                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "oklch(0.75 0.12 65)", flexShrink: 0 }} />
+              <div key={a.id} style={{ display: "flex", alignItems: "center", gap: "0.875rem", padding: "0.75rem 0.875rem", background: "var(--surface)", border: `1px solid ${dotColor}33`, borderRadius: "9px" }}>
+                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: dotColor, flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: "0.8125rem", color: "var(--ink)", fontWeight: 400 }}>{a.message}</p>
+                  <p style={{ fontSize: "0.8125rem", color: "var(--ink)", fontWeight: 500 }}>{a.message}</p>
                   <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.125rem" }}>
-                    {clientName} · {new Date(a.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    {new Date(a.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
-                <button onClick={() => dismissAlarm(a.id)}
-                  style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: "0.75rem", fontFamily: "var(--font-ui), system-ui, sans-serif", padding: "0.25rem 0.5rem", borderRadius: "5px", transition: "color 150ms" }}
-                  onMouseEnter={e => e.currentTarget.style.color = 'var(--muted)'}
-                  onMouseLeave={e => e.currentTarget.style.color = 'var(--dim)'}>
-                  Dismiss
-                </button>
+                <div style={{ display: "flex", gap: "0.375rem", flexShrink: 0 }}>
+                  {alarmClient && (
+                    <button onClick={() => onSelect(alarmClient)}
+                      style={{ height: "28px", padding: "0 0.625rem", background: `${dotColor}18`, border: `1px solid ${dotColor}44`, borderRadius: "6px", color: dotColor, fontSize: "0.7rem", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap" }}>
+                      View →
+                    </button>
+                  )}
+                  <button onClick={() => dismissAlarm(a.id)}
+                    style={{ height: "28px", padding: "0 0.625rem", background: "none", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--dim)", cursor: "pointer", fontSize: "0.7rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                    Dismiss
+                  </button>
+                </div>
               </div>
             );
           })}

@@ -1,11 +1,11 @@
 // Rapport layer — asymmetric 2-column layout.
-// Left: sticky headline. Right: vertical failure items with mono labels.
+// Left: sticky headline + body. Right: vertical failure items with mono labels.
 // Ambient red glow on the left bleeds into the background.
 const failures = [
-  { label: "01", text: "Generic supplements. No protocol behind them." },
-  { label: "02", text: "Influencers who said eat more protein and called it a day." },
-  { label: "03", text: "Doctors who told you your levels were 'normal' and sent you home." },
-  { label: "04", text: "Programs built for everyone — meaning built for no one." },
+  { label: "01", text: "Random supplements you took for a few months, then quietly stopped." },
+  { label: "02", text: "Guys online telling you to 'just eat more protein' while nothing changed." },
+  { label: "03", text: "A doctor who looked at one number, said 'you're fine,' and sent you home still exhausted." },
+  { label: "04", text: "A plan built for a 22-year-old, not for your body." },
 ];
 
 export function WhyItFailed() {
@@ -32,11 +32,14 @@ export function WhyItFailed() {
             >
               You&apos;ve tried<br />before.
             </h2>
-            <p className="font-body text-base text-white/40 leading-relaxed max-w-xs mb-10">
-              The reason nothing stuck wasn&apos;t discipline. It was biology being ignored.
+            <p className="font-body text-base text-white/55 leading-relaxed max-w-sm mb-5">
+              You&apos;ve forced yourself through mornings you didn&apos;t want to get up for. Pushed through the gym running on 4 hours of sleep. Told the people close to you &quot;I&apos;m just tired&quot; so many times it doesn&apos;t mean anything anymore, even to you.
+            </p>
+            <p className="font-body text-base text-white/40 leading-relaxed max-w-sm mb-10">
+              None of it worked. Not because you&apos;re weak. Because you were trying to fix a hormone problem with effort. That never works.
             </p>
             <p className="font-body text-base text-white/70 leading-relaxed max-w-sm italic border-l border-red pl-5 py-1">
-              THP starts where all of that failed — with your blood, your hormones, your baseline.
+              THP starts with your bloodwork — the thing that actually explains why nothing has worked.
             </p>
           </div>
 

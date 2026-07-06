@@ -45,6 +45,7 @@ export type ClientProtocol = {
   title: string;
   content?: { sections: { heading: string; text: string }[]; todos: string[] };
   createdAt: string;
+  published?: boolean;
 };
 
 export type ClientDiagnostic = {
@@ -52,7 +53,7 @@ export type ClientDiagnostic = {
   userEmail: string;
   stage: number;
   title: string;
-  content?: { sections: { heading: string; text: string }[] };
+  content?: { sections: { heading: string; text: string }[]; speaking_notes?: Record<string, unknown> };
   pdfUrl?: string;
   published?: boolean;
   createdAt: string;
@@ -121,6 +122,7 @@ export type DiagnosticData = {
   freeMonthEarned?: boolean;
   monthlyRate?: number;
   productName?: string;
+  pdfImported?: boolean;
 };
 
 export type StoredUser = {
@@ -324,7 +326,29 @@ export async function removeClient(email: string): Promise<void> {
   await supabase.from('users').delete().eq('email', email);
 }
 
+// Used by client dashboard — only shows sent protocols
 export async function getClientProtocols(email: string): Promise<ClientProtocol[]> {
+  const { data, error } = await supabase
+    .from('protocols')
+    .select('*')
+    .eq('user_email', email)
+    .eq('status', 'sent')
+    .order('stage', { ascending: true });
+  if (error || !data) return [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return data.map((row: any) => ({
+    id: row.id,
+    userEmail: row.user_email,
+    stage: row.stage,
+    notionPageId: row.notion_page_id ?? undefined,
+    title: row.title,
+    content: row.content ?? undefined,
+    createdAt: row.created_at,
+  }));
+}
+
+// Used by admin — returns ALL protocols including unpublished drafts
+export async function getAdminProtocols(email: string): Promise<ClientProtocol[]> {
   const { data, error } = await supabase
     .from('protocols')
     .select('*')
@@ -340,6 +364,7 @@ export async function getClientProtocols(email: string): Promise<ClientProtocol[
     title: row.title,
     content: row.content ?? undefined,
     createdAt: row.created_at,
+    published: row.status === 'sent',
   }));
 }
 

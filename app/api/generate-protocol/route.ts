@@ -61,7 +61,14 @@ You must output valid JSON in this exact format:
 
 Write each section as one or more flowing paragraphs. Use contractions throughout. Use mild profanity a handful of times where it genuinely lands. Never use bullet points or numbered lists inside section text. Output only valid JSON, no markdown code fences, no preamble.`;
 
-function buildClientContext(name: string, d: Record<string, unknown>): string {
+function buildClientContext(name: string, d: Record<string, unknown>, previousProtocol?: { stage: number; sections: { heading: string; text: string }[] } | null): string {
+  const previousProtocolBlock = previousProtocol
+    ? `\n\nPREVIOUS PROTOCOL (Stage ${previousProtocol.stage} — already delivered to this client):
+${previousProtocol.sections.map(s => `### ${s.heading}\n${s.text}`).join('\n\n')}
+
+IMPORTANT: You are building the next protocol stage. Do not repeat what was already covered in Stage ${previousProtocol.stage}. Progress from it. Reference it where relevant to show continuity, but go deeper and add interventions not yet introduced.`
+    : '';
+
   return `Client name: ${name}
 
 FULL NAME: ${d.fullName || name}
@@ -103,7 +110,7 @@ HOW THEY DECOMPRESS: ${d.howDecompress || 'not provided'}
 LIBIDO (MENTAL SEX DRIVE): ${d.libido || 'not provided'}
 TRAVEL FREQUENCY: ${d.travelFrequency || 'not provided'}
 WAKE UP RECOVERED: ${d.wakeUpRecovered || 'not provided'}
-RECENT HORMONE PANEL: ${d.recentHormonePanel || 'not provided'}`;
+RECENT HORMONE PANEL: ${d.recentHormonePanel || 'not provided'}${previousProtocolBlock}`;
 }
 
 function splitText(text: string, maxLen = 1900): string[] {
@@ -151,9 +158,31 @@ function buildNotionBlocks(sections: { heading: string; text: string }[], todos:
   return blocks;
 }
 
+const PHASE1_ADDENDUM = `
+
+PHASE 1 PROTOCOL — HOLDBACK RULES:
+This is the client's very first protocol. You are building Phase 1 only. Deliberately hold back 30 to 40 percent of the total intervention depth. Your goal is to give him a strong, meaningful foundation that creates real early results while preserving clear reasons for Phase 2 and Phase 3. A client who gets everything upfront has no reason to keep showing up.
+
+What to hold back for later phases:
+- Advanced psychological rewiring techniques. In Phase 1, give him the surface identity framing and the core awareness of his patterns. Hold back the deep subconscious anchoring, the advanced nervous system regulation work, and the identity restructuring methods for later phases.
+- Specific bloodwork intervention responses. Tell him exactly which markers to test and why. Do not tell him what to do with those results yet. That is Phase 2 after bloodwork comes back.
+- Advanced metabolic and dietary strategies. Build the foundation with pro-metabolic eating, animal-based food quality, and seed oil elimination. Hold back advanced nutrient timing, metabolic cycling, and targeted refeeding protocols.
+- Advanced recovery stacks and mitochondrial optimisation layers. Give him the basics: sunlight, grounding, sleep hygiene. Hold back the advanced protocols.
+- Any TRT, peptide, or stack guidance. This is never in a written protocol. Always coaching-call only.
+
+At the end of your JSON output, after the closing brace of the main JSON, output exactly this separator on its own line:
+---SPEAKING_NOTES---
+Then output a second valid JSON object in this exact format:
+{
+  "phase1_summary": "One paragraph for THP: what this Phase 1 covers and the specific biological and psychological levers it is designed to pull",
+  "held_back": ["specific item 1 held for Phase 2", "specific item 2 held for Phase 2", "specific item 3", "specific item 4"],
+  "next_session_hooks": "What THP should raise on the first call to naturally set up Phase 2. Specific questions and angles based on this client's answers.",
+  "red_flags": "Any biological or psychological red flags from this client's intake that THP should probe directly on the first call."
+}`;
+
 export async function POST(req: Request) {
   try {
-    const { clientEmail, clientName, createNotion } = await req.json();
+    const { clientEmail, clientName, createNotion, phase1Mode } = await req.json();
     if (!clientEmail) return Response.json({ error: 'Missing clientEmail' }, { status: 400 });
 
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
@@ -168,15 +197,29 @@ export async function POST(req: Request) {
 
     const name: string = clientName ?? client.name ?? clientEmail;
     const d: Record<string, unknown> = client.diagnostic_data || {};
-    const clientContext = buildClientContext(name, d);
+
+    // Fetch the most recent sent/active protocol to provide continuity context
+    const { data: prevProtocols } = await supabase
+      .from('protocols')
+      .select('stage, content')
+      .eq('user_email', clientEmail)
+      .in('status', ['sent', 'active'])
+      .order('stage', { ascending: false })
+      .limit(1);
+    const prevProtocol = prevProtocols?.[0]
+      ? { stage: prevProtocols[0].stage, sections: (prevProtocols[0].content as { sections?: { heading: string; text: string }[] })?.sections ?? [] }
+      : null;
+
+    const clientContext = buildClientContext(name, d, prevProtocol);
 
     const anthropic = new Anthropic({ apiKey: anthropicKey });
+    const systemPrompt = phase1Mode ? SYSTEM_PROMPT + PHASE1_ADDENDUM : SYSTEM_PROMPT;
 
     let fullText = '';
     const stream = await anthropic.messages.stream({
       model: 'claude-sonnet-4-6',
-      max_tokens: 8000,
-      system: SYSTEM_PROMPT,
+      max_tokens: phase1Mode ? 20000 : 16000,
+      system: systemPrompt,
       messages: [{ role: 'user', content: clientContext }],
     });
     for await (const chunk of stream) {
@@ -185,7 +228,22 @@ export async function POST(req: Request) {
       }
     }
 
-    const cleaned = fullText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+    // Split speaking notes from protocol JSON if present (phase1Mode)
+    let speakingNotes: Record<string, unknown> | null = null;
+    let protocolRaw = fullText;
+    const separatorIdx = fullText.indexOf('---SPEAKING_NOTES---');
+    if (separatorIdx !== -1) {
+      protocolRaw = fullText.slice(0, separatorIdx).trim();
+      const notesRaw = fullText.slice(separatorIdx + '---SPEAKING_NOTES---'.length).trim();
+      try {
+        const notesCleaned = notesRaw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+        speakingNotes = JSON.parse(notesCleaned);
+      } catch {
+        console.error('[generate-protocol] failed to parse speaking notes JSON');
+      }
+    }
+
+    const cleaned = protocolRaw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
     const parsed = JSON.parse(cleaned);
     const sections: { heading: string; text: string }[] = parsed.sections ?? [];
     const todos: string[] = parsed.todos ?? [];
@@ -211,27 +269,34 @@ export async function POST(req: Request) {
     const title = protTitle;
 
     // Save diagnostic as unpublished draft — THP must review and send manually from admin
+    // Include speaking notes (Phase 1 holdback intel) when present
+    const diagnosticContent: Record<string, unknown> = { sections: diagnosticSections };
+    if (speakingNotes) diagnosticContent.speaking_notes = speakingNotes;
+
     await supabase.from('diagnostics').insert({
       user_email: clientEmail,
       stage,
       title: diagTitle,
-      content: { sections: diagnosticSections },
+      content: diagnosticContent,
       published: false,
     });
 
-    // Save protocol to protocols table
+    // Save protocol as draft (status='draft') — THP must send it manually from admin
     const { data: protocol, error: insertError } = await supabase
       .from('protocols')
-      .insert({ user_email: clientEmail, stage, title, content: { sections: protocolSections, todos } })
+      .insert({ user_email: clientEmail, stage, title, content: { sections: protocolSections, todos }, status: 'draft' })
       .select()
       .single();
-    if (insertError) return Response.json({ error: 'Failed to save protocol' }, { status: 500 });
+    if (insertError) {
+      console.error('[generate-protocol] insert error:', insertError);
+      return Response.json({ error: 'Failed to save protocol' }, { status: 500 });
+    }
 
-    // Update user status and protocol status
+    // Update user status but keep protocolStatus as 'building' until THP sends it
     const existingDiag = d;
     await supabase.from('users').update({
       status: 'active',
-      diagnostic_data: { ...existingDiag, protocolStatus: 'active' },
+      diagnostic_data: { ...existingDiag, protocolStatus: 'building' },
     }).eq('email', clientEmail);
 
     // Optional Notion creation

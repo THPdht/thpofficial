@@ -262,7 +262,7 @@ export default function Dashboard() {
         <img src="/images/thprebrandlogo2.png" alt="THP" style={{ height: "28px", width: "auto", filter: "brightness(0) invert(1)", flexShrink: 0 }} />
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           {user.streak > 0 && (
-            <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.25rem 0.625rem", background: "var(--surface)", border: "1px solid oklch(0.60 0.18 165 / 0.35)", borderRadius: "100px" }}>
+            <div className="dash-streak" style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.25rem 0.625rem", background: "var(--surface)", border: "1px solid oklch(0.60 0.18 165 / 0.35)", borderRadius: "100px" }}>
               <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--primary)", flexShrink: 0 }} aria-hidden />
               <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--ink)", fontFamily: "var(--font-mono), monospace" }}>{user.streak}</span>
               <span style={{ fontSize: "0.7rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>day streak</span>
@@ -320,13 +320,18 @@ export default function Dashboard() {
           .dash-sidebar {
             width: 100%; height: auto; position: static;
             border-right: none; border-bottom: 1px solid var(--border-subtle);
-            padding: 0.5rem 1rem; flex-direction: row; overflow-x: auto; overflow-y: hidden;
+            padding: 0.5rem 0.75rem; flex-direction: row; overflow-x: auto; overflow-y: hidden;
             gap: 0.25rem; scrollbar-width: none;
           }
           .dash-sidebar::-webkit-scrollbar { display: none; }
-          .dash-nav-item { padding: 0.5rem 0.875rem; font-size: 0.8125rem; white-space: nowrap; flex-shrink: 0; }
+          .dash-nav-item { padding: 0.5rem 0.75rem; font-size: 0.8125rem; white-space: nowrap; flex-shrink: 0; }
           .dash-nav-dot { display: none; }
-          .dash-content { padding: 1.5rem 1.25rem; }
+          .dash-content { padding: 1.25rem 1rem; }
+          .dash-pw-section { display: none; }
+        }
+        @media (max-width: 480px) {
+          .dash-streak { display: none; }
+          .scale-btn { height: 28px !important; font-size: 0.6875rem !important; }
         }
       `}</style>
       <div className="dash-layout">
@@ -350,8 +355,8 @@ export default function Dashboard() {
             </button>
           ))}
 
-          {/* Change password — bottom of sidebar */}
-          <div style={{ marginTop: "auto", paddingTop: "1rem" }}>
+          {/* Change password — bottom of sidebar (hidden on mobile tab bar) */}
+          <div className="dash-pw-section" style={{ marginTop: "auto", paddingTop: "1rem" }}>
             <button
               onClick={() => { setShowPwChange(p => !p); setPwError(''); setPwDone(false); }}
               style={{ background: "none", border: "none", color: "var(--dim)", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", padding: "0.5rem 0.875rem", textAlign: "left", width: "100%", borderRadius: "8px", transition: "color 120ms" }}
@@ -462,6 +467,7 @@ function ScaleRow({ label, fieldKey, data, onChange }: { label: string; fieldKey
       <div style={{ display: "flex", gap: "0.25rem" }}>
         {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
           <button key={n} type="button" onClick={() => onChange(fieldKey, n)}
+            className="scale-btn"
             style={{ flex: 1, height: "36px", borderRadius: "5px", border: `1px solid ${val === n ? "var(--primary)" : "var(--border)"}`, background: val === n ? "var(--primary)" : "var(--surface)", color: val === n ? "#fff" : "var(--dim)", fontSize: "0.75rem", fontWeight: val === n ? 600 : 400, cursor: "pointer", transition: "all 120ms", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
             {n}
           </button>
@@ -1282,6 +1288,87 @@ function BloodWorkTab({ user }: { user: StoredUser }) {
       <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, lineHeight: 1.6, marginTop: "1rem" }}>
         For reference only. This is not medical advice.
       </p>
+
+      {/* Protocol Upload Section */}
+      <ProtocolUploadSection user={user} />
+    </div>
+  );
+}
+
+// ─── PROTOCOL UPLOAD SECTION ─────────────────────────────────────────────
+
+function ProtocolUploadSection({ user }: { user: StoredUser }) {
+  const [uploading, setUploading] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  // Check if user already uploaded a protocol (pdfImported flag)
+  const alreadyImported = user.diagnosticData?.pdfImported === true;
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    const form = new FormData();
+    form.append('pdf', file);
+    form.append('email', user.email);
+    try {
+      const res = await fetch('/api/parse-protocol-pdf', { method: 'POST', body: form }).then(r => r.json());
+      if (res.error) { setError(res.error); } else { setDone(true); }
+    } catch { setError('Upload failed. Please try again.'); }
+    setUploading(false);
+    if (e.target) e.target.value = '';
+  };
+
+  return (
+    <div style={{ marginTop: "2.5rem", paddingTop: "2rem", borderTop: "1px solid var(--border-subtle)" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem", marginBottom: "1.25rem" }}>
+        <div>
+          <h3 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.25rem", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.01em", marginBottom: "0.25rem" }}>Your Protocol</h3>
+          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>
+            {alreadyImported ? "Your protocol has been uploaded and is on file." : "Already have a THP protocol? Upload it so THP can build your next stage from it."}
+          </p>
+        </div>
+        {!done && !alreadyImported && (
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            style={{ height: "40px", padding: "0 1.25rem", background: "var(--surface)", color: "var(--ink)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "0.875rem", fontWeight: 500, cursor: uploading ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", display: "inline-flex", alignItems: "center", gap: "0.375rem", opacity: uploading ? 0.7 : 1 }}
+          >
+            {uploading ? <><Spinner /> Uploading…</> : "Upload protocol PDF"}
+          </button>
+        )}
+        <input ref={fileRef} type="file" accept=".pdf" style={{ display: "none" }} onChange={handleUpload} />
+      </div>
+
+      {uploading && (
+        <div style={{ padding: "1rem 1.25rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <Spinner />
+          <p style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300 }}>Reading your protocol… this may take a minute.</p>
+        </div>
+      )}
+      {done && (
+        <div style={{ padding: "1rem 1.25rem", background: "oklch(0.60 0.18 165 / 0.06)", border: "1px solid oklch(0.60 0.18 165 / 0.2)", borderRadius: "10px" }}>
+          <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 400 }}>Protocol uploaded. THP will use it to build your next stage.</p>
+        </div>
+      )}
+      {alreadyImported && !done && (
+        <div style={{ padding: "1rem 1.25rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
+          <p style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300 }}>Protocol on file. THP has full context for your next stage.</p>
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            style={{ height: "34px", padding: "0 1rem", background: "none", color: "var(--dim)", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}
+          >
+            Replace
+          </button>
+        </div>
+      )}
+      {error && (
+        <p style={{ fontSize: "0.8125rem", color: "var(--color-red)", fontWeight: 300, marginTop: "0.75rem" }}>{error}</p>
+      )}
     </div>
   );
 }
