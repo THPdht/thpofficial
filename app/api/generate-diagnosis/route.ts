@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { after } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
 
 const DIAGNOSIS_SYSTEM_PROMPT = `You are Ali, founder of The Hormone Prophet and The Order. You are a hormone optimization and masculine performance coach. You do not reference any other coaches, researchers, or public figures by name under any circumstances. All methodology is your own. You are the authority.
@@ -168,13 +169,20 @@ export async function POST(req: Request) {
       }).eq('email', clientEmail);
     }
 
-    // Auto-trigger protocol generation — fire and forget, don't block response
+    // Auto-trigger protocol generation after response is sent — use after() so Vercel keeps function alive
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://thpofficial.com';
-    fetch(`${appUrl}/api/generate-protocol`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientEmail, clientName: name, phase1Mode: stage === 1 }),
-    }).catch(e => console.error('[generate-diagnosis] protocol auto-gen failed:', e));
+    after(async () => {
+      try {
+        const res = await fetch(`${appUrl}/api/generate-protocol`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientEmail, clientName: name, phase1Mode: stage === 1 }),
+        });
+        if (!res.ok) console.error('[generate-diagnosis] protocol auto-gen returned', res.status, await res.text());
+      } catch (e) {
+        console.error('[generate-diagnosis] protocol auto-gen failed:', e);
+      }
+    });
 
     return Response.json({ diagnosisId: diag.id, stage, title: diagTitle });
   } catch (err) {

@@ -4,6 +4,7 @@
  * Protocol generation is NOT triggered here — THP does that manually from admin when ready.
  */
 
+import { after } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export async function POST(req: Request) {
@@ -41,18 +42,25 @@ export async function POST(req: Request) {
     const { error: alarmErr } = await supabaseAdmin.from('alarms').insert({
       user_email: email,
       type: 'intake_submitted',
-      message: `${clientName} submitted intake — Phase 1 protocol auto-generating now`,
+      message: `${clientName} submitted their intake — building diagnosis now`,
       created_at: new Date().toISOString(),
     });
     if (alarmErr) console.error('[generate-onboarding-protocol] alarm insert failed:', alarmErr);
 
-    // Auto-generate Phase 1 protocol (fire-and-forget — don't block the response)
+    // Auto-generate DIAGNOSIS after response is sent — use after() so Vercel keeps function alive
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://thpofficial.com';
-    fetch(`${appUrl}/api/generate-protocol`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientEmail: email, phase1Mode: true }),
-    }).catch(e => console.error('[generate-onboarding-protocol] auto protocol generation failed:', e));
+    after(async () => {
+      try {
+        const res = await fetch(`${appUrl}/api/generate-diagnosis`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientEmail: email, adminPw: process.env.ADMIN_PASSWORD }),
+        });
+        if (!res.ok) console.error('[generate-onboarding-protocol] auto diagnosis generation returned', res.status, await res.text());
+      } catch (e) {
+        console.error('[generate-onboarding-protocol] auto diagnosis generation failed:', e);
+      }
+    });
 
     return Response.json({ success: true });
   } catch (err) {
