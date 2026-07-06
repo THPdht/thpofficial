@@ -1480,9 +1480,11 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
     supabase.from('applicant_notes').select('notes').eq('user_email', client.email).maybeSingle()
       .then(({ data }) => setNotes(data?.notes ?? ''));
 
-    // Application form answers
-    supabase.from('application_forms').select('*').eq('email', client.email).maybeSingle()
-      .then(({ data }) => { if (data) setApplicationData(data as Record<string, unknown>); });
+    // Application form answers — use admin API to bypass RLS
+    fetch(`/api/admin/application-form?email=${encodeURIComponent(client.email)}&pw=${encodeURIComponent(ADMIN_PASSWORD)}`)
+      .then(r => r.json())
+      .then(d => { if (d.data) setApplicationData(d.data as Record<string, unknown>); })
+      .catch(() => {});
 
     // Client protocols + admin diagnostics
     getAdminProtocols(client.email).then(setClientProtocols).catch(() => {});
@@ -1988,6 +1990,39 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
                       <Line type="monotone" dataKey="val" stroke="#c8102e" strokeWidth={2} dot={{ fill: "#c8102e", r: 4, strokeWidth: 0 }} activeDot={{ r: 6 }} isAnimationActive={false} />
                     </LineChart>
                   </ResponsiveContainer>
+                );
+              })()}
+              {/* Marker snapshot cards */}
+              {bloodWorkEntries.length > 0 && (() => {
+                const latest = bloodWorkEntries[0];
+                const cards = Object.entries(MARKER_DEFAULTS).map(([key, def]) => {
+                  const m = latest?.markers?.[key];
+                  const hasVal = (m?.value ?? null) !== null;
+                  const flag = m?.flag ?? null;
+                  const flagColor = flag === 'high' ? 'oklch(0.72 0.18 25)' : flag === 'low' ? 'oklch(0.65 0.18 260)' : flag === 'normal' ? 'oklch(0.65 0.15 145)' : null;
+                  return { key, def, m, hasVal, flagColor };
+                });
+                return (
+                  <div style={{ marginTop: "1rem", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: "0.375rem" }}>
+                    {cards.map(({ key, def, m, hasVal, flagColor }) => (
+                      <button key={key} onClick={() => setSelectedMarker(key)}
+                        style={{
+                          padding: "0.5rem 0.375rem", textAlign: "left", cursor: "pointer",
+                          background: hasVal ? 'oklch(0.55 0.18 145 / 0.08)' : 'var(--bg)',
+                          border: `1px solid ${selectedMarker === key ? (hasVal ? 'oklch(0.55 0.18 145)' : 'var(--primary)') : hasVal ? 'oklch(0.55 0.18 145 / 0.4)' : 'var(--border-subtle)'}`,
+                          borderRadius: "7px", transition: "all 0.15s",
+                        }}>
+                        <p style={{ fontSize: "0.6rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.04em", fontFamily: "var(--font-mono), monospace", marginBottom: "0.2rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{def.label}</p>
+                        {hasVal ? (
+                          <p style={{ fontSize: "0.8rem", fontWeight: 600, color: flagColor ?? 'oklch(0.72 0.18 145)', fontFamily: "var(--font-mono), monospace" }}>
+                            {m!.value} <span style={{ fontSize: "0.6rem", fontWeight: 400, color: "var(--dim)" }}>{def.unit}</span>
+                          </p>
+                        ) : (
+                          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300 }}>—</p>
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 );
               })()}
             </div>
