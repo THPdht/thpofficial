@@ -110,6 +110,8 @@ export type DiagnosticData = {
   travelFrequency?: string;
   wakeUpRecovered?: string;
   recentHormonePanel?: string;
+  telegramUsername?: string;
+  instagramHandle?: string;
   // Admin-managed fields
   protocolStatus?: ProtocolStatus;
   accountStatus?: AccountStatus;

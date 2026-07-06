@@ -1394,6 +1394,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
   const [payLinkLoading, setPayLinkLoading] = useState(false);
   const [payLinkUrl, setPayLinkUrl] = useState<string | null>(null);
   const [payLinkError, setPayLinkError] = useState("");
+  const [payLinkCopied, setPayLinkCopied] = useState(false);
   const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Protocol generation state
@@ -1907,9 +1908,9 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
             <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
               <input readOnly value={payLinkUrl}
                 style={{ flex: 1, height: "34px", padding: "0 0.625rem", background: "var(--surface)", border: "1px solid oklch(0.65 0.15 145 / 0.4)", borderRadius: "7px", color: "var(--dim)", fontSize: "0.7rem", fontFamily: "var(--font-mono), monospace", outline: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} />
-              <button onClick={() => { navigator.clipboard.writeText(payLinkUrl); }}
-                style={{ height: "34px", padding: "0 0.75rem", background: "oklch(0.65 0.15 145 / 0.12)", border: "1px solid oklch(0.65 0.15 145 / 0.3)", borderRadius: "7px", color: "oklch(0.7 0.15 145)", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", flexShrink: 0 }}>
-                Copy
+              <button onClick={() => { navigator.clipboard.writeText(payLinkUrl!).then(() => { setPayLinkCopied(true); setTimeout(() => setPayLinkCopied(false), 2000); }); }}
+                style={{ height: "34px", padding: "0 0.75rem", background: payLinkCopied ? "oklch(0.65 0.15 145 / 0.25)" : "oklch(0.65 0.15 145 / 0.12)", border: `1px solid ${payLinkCopied ? "oklch(0.65 0.15 145 / 0.6)" : "oklch(0.65 0.15 145 / 0.3)"}`, borderRadius: "7px", color: "oklch(0.7 0.15 145)", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", flexShrink: 0, transition: "all 150ms" }}>
+                {payLinkCopied ? "Copied ✓" : "Copy"}
               </button>
             </div>
           )}

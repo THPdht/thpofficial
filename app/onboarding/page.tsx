@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useRef, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { getCurrentUser, signOut, register, login } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 
 type FormData = {
   fullName: string;
@@ -46,6 +47,8 @@ type FormData = {
   travelFrequency: string;
   wakeUpRecovered: string;
   recentHormonePanel: string;
+  telegramUsername: string;
+  instagramHandle: string;
 };
 
 const EMPTY: FormData = {
@@ -60,6 +63,7 @@ const EMPTY: FormData = {
   morningErections: "", eyeContact: "", sexualDynamic: "", physiqueFeeling: "",
   trainingApproach: "", howDecompress: "", libido: "", travelFrequency: "",
   wakeUpRecovered: "", recentHormonePanel: "",
+  telegramUsername: "", instagramHandle: "",
 };
 
 const bg = "var(--color-ink)";
@@ -69,11 +73,11 @@ const border = "rgba(255,255,255,0.1)";
 const primary = "var(--color-red)";
 const soft = "var(--color-ink-soft)";
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({ label, hint, optional, children }: { label: string; hint?: string; optional?: boolean; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: "1.75rem" }}>
       <label style={{ display: "block", fontSize: "0.9rem", fontWeight: 500, color: ink, marginBottom: hint ? "0.25rem" : "0.5rem", fontFamily: "var(--font-body), sans-serif" }}>
-        {label}<span style={{ color: primary, marginLeft: "3px" }}>*</span>
+        {label}{!optional && <span style={{ color: primary, marginLeft: "3px" }}>*</span>}
       </label>
       {hint && (
         <p style={{ fontSize: "0.78rem", color: muted, marginBottom: "0.5rem", fontFamily: "var(--font-body), sans-serif", lineHeight: 1.4 }}>
@@ -154,7 +158,6 @@ const SECTIONS = [
 function OnboardingInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const sessionId = searchParams.get("session_id") ?? "";
   const tokenParam = searchParams.get("token") ?? "";
 
   const [user, setUser] = useState<{ email: string; password: string; name: string } | null>(null);
@@ -167,50 +170,31 @@ function OnboardingInner() {
   const [authMode, setAuthMode] = useState<"check" | "register" | "login" | "nudge">("check");
   const [authForm, setAuthForm] = useState({ name: "", email: "", password: "" });
   const [authError, setAuthError] = useState("");
-  const [accessVerified, setAccessVerified] = useState<boolean | null>(null); // null = checking
-  const [accessError, setAccessError] = useState(false);
-  const accessChecked = useRef(false);
+  const [inlineAuthMode, setInlineAuthMode] = useState<"register" | "login">("register");
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const cached = getCurrentUser();
-    if (!cached) { setAuthMode("register"); return; }
-    // If payment proof is in the URL (session_id = Stripe checkout, token = invite),
-    // let pending users through — they just paid and need to fill intake.
-    const hasPaymentProof = typeof window !== "undefined" &&
-      (new URLSearchParams(window.location.search).has("session_id") ||
-       new URLSearchParams(window.location.search).has("token"));
-    if (cached.status === "pending" && !hasPaymentProof) { router.replace("/onboarding/pending"); return; }
-    if ((cached.status === "active" || cached.status === "alumni") && !hasPaymentProof) { router.replace("/dashboard"); return; }
-    setUser({ email: cached.email, password: cached.password, name: cached.name });
-    setAuthMode("nudge");
-    if (cached.diagnosticData && Object.keys(cached.diagnosticData).length > 0) {
-      setForm(prev => ({ ...prev, ...cached.diagnosticData }));
+    if (cached) {
+      setUser({ email: cached.email, password: cached.password, name: cached.name });
+      // Prefill with whatever we have — at minimum the name
+      const prefill: Partial<FormData> = { fullName: cached.name || "" };
+      if (cached.diagnosticData && Object.keys(cached.diagnosticData).length > 0) {
+        Object.assign(prefill, cached.diagnosticData);
+      }
+      setForm(prev => ({ ...prev, ...prefill }));
+      // Also pull telegram + instagram from DB records
+      supabase.from('users').select('telegram_username').eq('email', cached.email).maybeSingle()
+        .then(({ data }) => {
+          if (data?.telegram_username) setForm(prev => ({ ...prev, telegramUsername: prev.telegramUsername || data.telegram_username || "" }));
+        });
+      supabase.from('application_forms').select('instagram').eq('email', cached.email).maybeSingle()
+        .then(({ data }) => {
+          if ((data as { instagram?: string } | null)?.instagram) setForm(prev => ({ ...prev, instagramHandle: prev.instagramHandle || (data as { instagram: string }).instagram.replace(/^@/, '') }));
+        });
     }
-  }, [router]);
-
-  // Verify payment / invite access once user is confirmed
-  useEffect(() => {
-    if (!user || accessChecked.current) return;
-    accessChecked.current = true;
-
-    if (!sessionId && !tokenParam) {
-      // No proof of payment — block
-      setAccessError(true);
-      return;
-    }
-
-    const params = new URLSearchParams();
-    if (sessionId) params.set("session_id", sessionId);
-    if (tokenParam) params.set("token", tokenParam);
-
-    fetch(`/api/verify-onboarding-access?${params}`)
-      .then(r => r.json())
-      .then(({ valid }) => {
-        if (!valid) { setAccessError(true); return; }
-        setAccessVerified(true);
-      })
-      .catch(() => setAccessError(true));
-  }, [user, sessionId, tokenParam, router]);
+    // If not logged in, show form immediately (account created at end)
+  }, []);
 
   const set = (key: keyof FormData) => (v: string) => setForm(prev => ({ ...prev, [key]: v }));
 
@@ -241,6 +225,7 @@ function OnboardingInner() {
       ["alcoholUse", "currentMedications", "relationshipToFood", "baselineInternalState", "onTrt", "whatStaysSolidTraveling", "caffeineIntake", "nicotineSubstances", "sleepQuality", "trainingFrequency"],
       ["morningErections", "eyeContact", "sexualDynamic", "physiqueFeeling", "trainingApproach", "howDecompress", "libido", "travelFrequency", "wakeUpRecovered", "recentHormonePanel"],
     ];
+    if (section >= sectionFields.length) return true;
     for (const key of sectionFields[section]) {
       if (!form[key]?.trim()) e[key] = "Required";
     }
@@ -287,37 +272,56 @@ function OnboardingInner() {
     }
   }
 
+  async function handleSubmitWithAuth() {
+    setAuthError("");
+    const name = authForm.name.trim();
+    const email = authForm.email.trim();
+    const password = authForm.password;
+    if (inlineAuthMode === "register") {
+      if (!name || !email || !password) { setAuthError("Please fill all fields."); return; }
+      if (password.length < 8) { setAuthError("Password must be at least 8 characters."); return; }
+    } else {
+      if (!email || !password) { setAuthError("Please enter your email and password."); return; }
+    }
+    setSubmitting(true);
+    setSubmitStatus("saving");
+    setSubmitError("");
+    try {
+      let finalUser: { email: string; password: string; name: string };
+      if (inlineAuthMode === "register") {
+        const regResult = await register(name, email, password);
+        if (!regResult.success) { setAuthError(regResult.error ?? "Registration failed."); setSubmitting(false); setSubmitStatus("idle"); return; }
+        const loginResult = await login(email, password);
+        if (!loginResult.success || !loginResult.user) { setAuthError("Login after register failed."); setSubmitting(false); setSubmitStatus("idle"); return; }
+        finalUser = { email, password, name: loginResult.user.name };
+      } else {
+        const loginResult = await login(email, password);
+        if (!loginResult.success || !loginResult.user) { setAuthError(loginResult.error ?? "Login failed."); setSubmitting(false); setSubmitStatus("idle"); return; }
+        finalUser = { email, password, name: loginResult.user.name };
+      }
+      setUser(finalUser);
+      // Now submit the intake
+      const res = await fetch("/api/generate-onboarding-protocol", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: finalUser.email, formData: form, token: tokenParam || undefined }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Failed to save intake");
+      }
+      setSubmitStatus("done");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+      setSubmitError(msg);
+      setSubmitStatus("error");
+      setSubmitting(false);
+    }
+  }
+
   const err = (k: keyof FormData) => errors[k] ? (
     <p style={{ color: "#ef4444", fontSize: "0.75rem", marginTop: "0.25rem" }}>{errors[k]}</p>
   ) : null;
-
-  // Access denied / link expired
-  if (accessError) {
-    return (
-      <div style={{ minHeight: "100dvh", background: bg, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
-        <div style={{ maxWidth: "420px", textAlign: "center" }}>
-          <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "0.72rem", letterSpacing: "0.22em", color: "var(--color-gold)", textTransform: "uppercase", marginBottom: "2rem" }}>THP Client Portal</p>
-          <h2 style={{ fontFamily: "var(--font-display), sans-serif", fontSize: "1.5rem", fontWeight: 400, color: ink, marginBottom: "1rem", textTransform: "uppercase" }}>Link Expired</h2>
-          <p style={{ fontSize: "0.9rem", color: muted, fontFamily: "var(--font-body), sans-serif", lineHeight: 1.6, marginBottom: "1.5rem" }}>
-            This link has expired or is no longer valid. Please contact THP to receive a new one.
-          </p>
-          <a href="https://t.me/thp_ali" target="_blank" rel="noopener noreferrer"
-            style={{ display: "inline-block", padding: "0.75rem 2rem", background: "var(--color-red)", color: "#fff", borderRadius: "8px", fontFamily: "var(--font-body), sans-serif", fontSize: "0.9rem", fontWeight: 600, textDecoration: "none" }}>
-            Message THP →
-          </a>
-        </div>
-      </div>
-    );
-  }
-
-  // While verifying access
-  if (user && accessVerified === null && (sessionId || tokenParam)) {
-    return (
-      <div style={{ minHeight: "100dvh", background: bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p style={{ color: muted, fontFamily: "var(--font-body), sans-serif", fontSize: "0.9rem" }}>Verifying access...</p>
-      </div>
-    );
-  }
 
   // Intake submitted — done screen
   if (submitStatus === "done") {
@@ -360,71 +364,8 @@ function OnboardingInner() {
     );
   }
 
-  if (authMode === "nudge" && user) {
-    return (
-      <div style={{ minHeight: "100dvh", background: bg, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
-        <div style={{ width: "100%", maxWidth: "420px" }}>
-          <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "0.72rem", letterSpacing: "0.22em", color: "var(--color-gold)", textTransform: "uppercase", marginBottom: "1.5rem" }}>THP Client Portal</p>
-          <h1 style={{ fontFamily: "var(--font-display), sans-serif", fontSize: "1.75rem", fontWeight: 400, color: ink, marginBottom: "0.5rem", textTransform: "uppercase" }}>
-            Welcome back, {user.name.split(" ")[0]}.
-          </h1>
-          <p style={{ color: muted, fontSize: "0.9rem", marginBottom: "2rem", fontFamily: "var(--font-body), sans-serif", lineHeight: 1.6 }}>
-            Your application is in. The faster you complete your intake profile, the sooner THP can review and reach out.
-          </p>
-          <button
-            onClick={() => setAuthMode("check")}
-            style={{ width: "100%", padding: "0.875rem", background: primary, color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body), sans-serif" }}
-          >
-            Complete My Intake →
-          </button>
-          <button
-            onClick={() => { signOut(); router.replace("/"); }}
-            style={{ display: "block", margin: "1rem auto 0", background: "none", border: "none", color: muted, fontSize: "0.8rem", cursor: "pointer", fontFamily: "var(--font-body), sans-serif" }}
-          >
-            Sign out
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (authMode === "register" || authMode === "login") {
-    return (
-      <div style={{ minHeight: "100dvh", background: bg, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
-        <div style={{ width: "100%", maxWidth: "420px" }}>
-          <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "0.72rem", letterSpacing: "0.22em", color: "var(--color-gold)", textTransform: "uppercase", marginBottom: "1.5rem" }}>THP Client Portal</p>
-          <h1 style={{ fontFamily: "var(--font-display), sans-serif", fontSize: "1.75rem", fontWeight: 400, color: ink, marginBottom: "0.5rem", textTransform: "uppercase" }}>
-            {authMode === "register" ? "Create Account" : "Sign In"}
-          </h1>
-          <p style={{ color: muted, fontSize: "0.85rem", marginBottom: "2rem", fontFamily: "var(--font-body), sans-serif" }}>
-            {authMode === "register" ? "Set up your account to complete your intake." : "Sign in to continue your intake."}
-          </p>
-          <form onSubmit={handleAuth} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-            {authMode === "register" && (
-              <input placeholder="Full name" value={authForm.name} onChange={e => setAuthForm(f => ({ ...f, name: e.target.value }))} required style={inputStyle} />
-            )}
-            <input placeholder="Email" type="email" value={authForm.email} onChange={e => setAuthForm(f => ({ ...f, email: e.target.value }))} required style={inputStyle} />
-            <input placeholder="Password" type="password" value={authForm.password} onChange={e => setAuthForm(f => ({ ...f, password: e.target.value }))} required style={inputStyle} />
-            {authError && <p style={{ color: "#ef4444", fontSize: "0.8rem" }}>{authError}</p>}
-            <button type="submit" style={{ padding: "0.875rem", background: primary, color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body), sans-serif" }}>
-              {authMode === "register" ? "Create Account" : "Sign In"}
-            </button>
-          </form>
-          <button onClick={() => setAuthMode(authMode === "register" ? "login" : "register")}
-            style={{ marginTop: "1rem", background: "none", border: "none", color: muted, fontSize: "0.82rem", cursor: "pointer", fontFamily: "var(--font-body), sans-serif" }}>
-            {authMode === "register" ? "Already have an account? Sign in" : "New? Create an account"}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (authMode === "check" && !user) {
-    return <div style={{ minHeight: "100dvh", background: bg }} />;
-  }
-
-  const sectionTitles = SECTIONS;
-  const progress = ((section) / SECTIONS.length) * 100;
+  const totalSections = user ? SECTIONS.length : SECTIONS.length + 1;
+  const progress = (section / totalSections) * 100;
 
   return (
     <div style={{ minHeight: "100dvh", background: bg, padding: "2rem 1.5rem 4rem" }}>
@@ -435,15 +376,15 @@ function OnboardingInner() {
             THP Client Intake
           </p>
           <h1 style={{ fontFamily: "var(--font-display), sans-serif", fontSize: "clamp(1.5rem,4vw,2rem)", fontWeight: 400, color: ink, textTransform: "uppercase", marginBottom: "1.25rem" }}>
-            {sectionTitles[section]}
+            {section < SECTIONS.length ? SECTIONS[section] : "Your Account"}
           </h1>
           {/* Progress bar */}
           <div style={{ height: "3px", background: border, borderRadius: "2px", overflow: "hidden" }}>
-            <motion.div animate={{ width: `${progress + (100 / SECTIONS.length)}%` }} transition={{ duration: 0.4 }}
+            <motion.div animate={{ width: `${progress + (100 / totalSections)}%` }} transition={{ duration: 0.4 }}
               style={{ height: "100%", background: primary, borderRadius: "2px" }} />
           </div>
           <p style={{ fontSize: "0.75rem", color: muted, marginTop: "0.5rem", fontFamily: "var(--font-body), sans-serif" }}>
-            Section {section + 1} of {SECTIONS.length}
+            Section {section + 1} of {totalSections}
           </p>
         </div>
 
@@ -455,7 +396,9 @@ function OnboardingInner() {
               <>
                 <Field label="Full Name"><TextInput value={form.fullName} onChange={set("fullName")} />{err("fullName")}</Field>
                 <Field label="Age" hint="where you from"><TextInput value={form.ageLocation} onChange={set("ageLocation")} />{err("ageLocation")}</Field>
-                <Field label="Email" hint={"instagram:\nPhone number:"}><TextArea value={form.contactInfo} onChange={set("contactInfo")} rows={3} />{err("contactInfo")}</Field>
+                <Field label="Phone number" hint="Include country code e.g. +1 555 000 0000"><TextInput value={form.contactInfo} onChange={set("contactInfo")} />{err("contactInfo")}</Field>
+                <Field label="Telegram username" hint="Optional — THP will use this to message you" optional><TextInput value={form.telegramUsername} onChange={set("telegramUsername")} placeholder="@username" /></Field>
+                <Field label="Instagram handle" hint="Optional" optional><TextInput value={form.instagramHandle} onChange={set("instagramHandle")} placeholder="@handle" /></Field>
                 <Field label="Location & Travel Pattern" hint="How often do you travel? Where are you based when stationary"><TextInput value={form.travelPattern} onChange={set("travelPattern")} />{err("travelPattern")}</Field>
                 <Field label="What You're Trying To Fix" hint="What's actually broken right now?"><TextInput value={form.whatTryingToFix} onChange={set("whatTryingToFix")} />{err("whatTryingToFix")}</Field>
                 <Field label="How Do You Ask For What You Want" hint="When you want something from someone, how do you ask for it? Direct? Indirect? Do you ask at all?"><TextInput value={form.howAskForWhatYouWant} onChange={set("howAskForWhatYouWant")} />{err("howAskForWhatYouWant")}</Field>
@@ -544,6 +487,39 @@ function OnboardingInner() {
               </>
             )}
 
+            {/* ── SECTION 5: Your Account (non-logged-in users only) ── */}
+            {section === 5 && !user && (
+              <>
+                <p style={{ fontSize: "0.9rem", color: muted, fontFamily: "var(--font-body), sans-serif", lineHeight: 1.6, marginBottom: "2rem" }}>
+                  Almost done. Create your account to save your intake and access your dashboard after THP activates you.
+                </p>
+                <div style={{ display: "flex", gap: "0.5rem", background: soft, borderRadius: "8px", padding: "3px", marginBottom: "1.5rem" }}>
+                  {(["register", "login"] as const).map(m => (
+                    <button key={m} onClick={() => setInlineAuthMode(m)} type="button"
+                      style={{ flex: 1, height: "36px", borderRadius: "6px", border: "none", fontSize: "0.875rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-body), sans-serif", transition: "all 150ms",
+                        background: inlineAuthMode === m ? primary : "transparent",
+                        color: inlineAuthMode === m ? "#fff" : muted }}>
+                      {m === "register" ? "Create Account" : "Sign In"}
+                    </button>
+                  ))}
+                </div>
+                {inlineAuthMode === "register" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                    <input placeholder="Full name" value={authForm.name} onChange={e => setAuthForm(f => ({ ...f, name: e.target.value }))} style={inputStyle} />
+                    <input placeholder="Email" type="email" value={authForm.email} onChange={e => setAuthForm(f => ({ ...f, email: e.target.value }))} style={inputStyle} />
+                    <input placeholder="Password (min 8 chars)" type="password" value={authForm.password} onChange={e => setAuthForm(f => ({ ...f, password: e.target.value }))} style={inputStyle} />
+                  </div>
+                )}
+                {inlineAuthMode === "login" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                    <input placeholder="Email" type="email" value={authForm.email} onChange={e => setAuthForm(f => ({ ...f, email: e.target.value }))} style={inputStyle} />
+                    <input placeholder="Password" type="password" value={authForm.password} onChange={e => setAuthForm(f => ({ ...f, password: e.target.value }))} style={inputStyle} />
+                  </div>
+                )}
+                {authError && <p style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.75rem" }}>{authError}</p>}
+              </>
+            )}
+
           </motion.div>
         </AnimatePresence>
 
@@ -554,20 +530,31 @@ function OnboardingInner() {
               Back
             </button>
           )}
+          {/* On section 4 (Final Details): if logged in → submit; if not → go to account section */}
           {section < SECTIONS.length - 1 ? (
             <button onClick={next} style={{ flex: 2, padding: "0.875rem", background: primary, color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body), sans-serif" }}>
               Continue
             </button>
+          ) : section === SECTIONS.length - 1 && !user ? (
+            // Final form section, not logged in → go to account creation
+            <button onClick={() => { if (validateSection()) { setSection(SECTIONS.length); window.scrollTo({ top: 0, behavior: "smooth" }); } }} style={{ flex: 2, padding: "0.875rem", background: primary, color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body), sans-serif" }}>
+              Continue
+            </button>
+          ) : section === SECTIONS.length && !user ? (
+            // Account creation section → submit after auth
+            <>
+              <button onClick={handleSubmitWithAuth} disabled={submitting} style={{ flex: 2, padding: "0.875rem", background: primary, color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1, fontFamily: "var(--font-body), sans-serif" }}>
+                {submitting ? "Submitting..." : "Send It"}
+              </button>
+              {submitError && <p style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.5rem", width: "100%", textAlign: "center", fontFamily: "var(--font-body), sans-serif" }}>{submitError}</p>}
+            </>
           ) : (
+            // Final section, already logged in → submit directly
             <>
               <button onClick={handleSubmit} disabled={submitting} style={{ flex: 2, padding: "0.875rem", background: primary, color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1, fontFamily: "var(--font-body), sans-serif" }}>
-                Send It
+                {submitting ? "Submitting..." : "Send It"}
               </button>
-              {submitError && (
-                <p style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.5rem", width: "100%", textAlign: "center", fontFamily: "var(--font-body), sans-serif" }}>
-                  {submitError}
-                </p>
-              )}
+              {submitError && <p style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.5rem", width: "100%", textAlign: "center", fontFamily: "var(--font-body), sans-serif" }}>{submitError}</p>}
             </>
           )}
         </div>
