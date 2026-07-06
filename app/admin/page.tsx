@@ -2015,22 +2015,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
           ))}
         </div>
 
-        {/* Push notification */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
-          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Send Push Notification</p>
-          <div style={{ display: "flex", gap: "0.375rem" }}>
-            <input value={pushMsg} onChange={e => setPushMsg(e.target.value)} placeholder="Message…"
-              style={{ flex: 1, height: "36px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }}
-              onKeyDown={e => { if (e.key === 'Enter') sendPush(); }} />
-            <button onClick={sendPush} disabled={pushSending || !pushMsg.trim()}
-              style={{ height: "36px", padding: "0 0.875rem", background: pushSending ? "var(--surface-2)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: pushSending ? "var(--dim)" : "var(--muted)", fontSize: "0.8125rem", fontWeight: 500, cursor: (pushSending || !pushMsg.trim()) ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", flexShrink: 0 }}>
-              {pushSending ? "Sending…" : "Send"}
-            </button>
-          </div>
-          {pushResult === 'sent' && <p style={{ fontSize: "0.75rem", color: "oklch(0.7 0.15 145)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Push sent ✓</p>}
-          {pushResult === 'failed' && <p style={{ fontSize: "0.75rem", color: "var(--primary)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Push failed — client may not have notifications enabled.</p>}
-        </div>
-
         {/* Tracker section */}
         {clientProtocols.length > 0 && (
           <div style={{ paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
