@@ -1272,16 +1272,6 @@ function TrackerSection({ protocols, summary, loading, regenerating, onLoadSumma
         </button>
       </div>
 
-      {!summary && !loading && (
-        <button
-          onClick={onLoadSummary}
-          style={{ height: "32px", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "6px", color: "var(--dim)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "border-color 150ms, color 150ms" }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--muted)"; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border-subtle)"; e.currentTarget.style.color = "var(--dim)"; }}>
-          Load tracker summary
-        </button>
-      )}
-
       {loading && (
         <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>Loading...</p>
       )}
@@ -1992,39 +1982,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
                   </ResponsiveContainer>
                 );
               })()}
-              {/* Marker snapshot cards */}
-              {bloodWorkEntries.length > 0 && (() => {
-                const latest = bloodWorkEntries[0];
-                const cards = Object.entries(MARKER_DEFAULTS).map(([key, def]) => {
-                  const m = latest?.markers?.[key];
-                  const hasVal = (m?.value ?? null) !== null;
-                  const flag = m?.flag ?? null;
-                  const flagColor = flag === 'high' ? 'oklch(0.72 0.18 25)' : flag === 'low' ? 'oklch(0.65 0.18 260)' : flag === 'normal' ? 'oklch(0.65 0.15 145)' : null;
-                  return { key, def, m, hasVal, flagColor };
-                });
-                return (
-                  <div style={{ marginTop: "1rem", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: "0.375rem" }}>
-                    {cards.map(({ key, def, m, hasVal, flagColor }) => (
-                      <button key={key} onClick={() => setSelectedMarker(key)}
-                        style={{
-                          padding: "0.5rem 0.375rem", textAlign: "left", cursor: "pointer",
-                          background: hasVal ? 'oklch(0.55 0.18 145 / 0.08)' : 'var(--bg)',
-                          border: `1px solid ${selectedMarker === key ? (hasVal ? 'oklch(0.55 0.18 145)' : 'var(--primary)') : hasVal ? 'oklch(0.55 0.18 145 / 0.4)' : 'var(--border-subtle)'}`,
-                          borderRadius: "7px", transition: "all 0.15s",
-                        }}>
-                        <p style={{ fontSize: "0.6rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.04em", fontFamily: "var(--font-mono), monospace", marginBottom: "0.2rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{def.label}</p>
-                        {hasVal ? (
-                          <p style={{ fontSize: "0.8rem", fontWeight: 600, color: flagColor ?? 'oklch(0.72 0.18 145)', fontFamily: "var(--font-mono), monospace" }}>
-                            {m!.value} <span style={{ fontSize: "0.6rem", fontWeight: 400, color: "var(--dim)" }}>{def.unit}</span>
-                          </p>
-                        ) : (
-                          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300 }}>—</p>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })()}
             </div>
           </div>
         );
@@ -2179,73 +2136,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
 
       </div>
 
-      {/* ── FULL INTAKE ACCORDION ── */}
-      {client.diagnosticData && (
-        <div style={{ paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
-          <button onClick={onToggleDiagnostic}
-            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: "0.125rem 0 0.5rem", cursor: "pointer" }}>
-            <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>View Full Intake</p>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: diagnosticOpen ? "rotate(180deg)" : "none", transition: "transform 200ms", color: "var(--dim)" }} aria-hidden>
-              <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          <AnimatePresence initial={false}>
-            {diagnosticOpen && (
-              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} style={{ overflow: "hidden" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", paddingTop: "0.5rem" }}>
-                  {[
-                    { label: "Full Name", value: client.diagnosticData.fullName },
-                    { label: "Age / Location", value: client.diagnosticData.ageLocation },
-                    { label: "Contact Info", value: client.diagnosticData.contactInfo },
-                    { label: "Travel Pattern", value: client.diagnosticData.travelPattern },
-                    { label: "What They're Trying To Fix", value: client.diagnosticData.whatTryingToFix },
-                    { label: "How They Ask For What They Want", value: client.diagnosticData.howAskForWhatYouWant },
-                    { label: "Avoiding Disappointing Others", value: client.diagnosticData.avoidDisappointing },
-                    { label: "Validation Source", value: client.diagnosticData.validationSource },
-                    { label: "Energy State", value: client.diagnosticData.energyState },
-                    { label: "Self-Perception", value: client.diagnosticData.selfPerception },
-                    { label: "Avoids Conflict", value: client.diagnosticData.avoidConflict },
-                    { label: "Response To Criticism", value: client.diagnosticData.responseToCriticism },
-                    { label: "Internal State Entering Room", value: client.diagnosticData.internalStateEnteringRoom },
-                    { label: "Past Relationship Patterns", value: client.diagnosticData.pastRelationshipPatterns },
-                    { label: "Training Recovery", value: client.diagnosticData.trainingRecovery },
-                    { label: "Height / Weight / BF%", value: client.diagnosticData.heightWeightBf },
-                    { label: "Sleep Duration", value: client.diagnosticData.sleepDuration },
-                    { label: "Relationship Status", value: client.diagnosticData.relationshipStatus },
-                    { label: "Relationship To Risk", value: client.diagnosticData.relationshipToRisk },
-                    { label: "Sexual Confidence", value: client.diagnosticData.sexualConfidence },
-                    { label: "Alcohol Use", value: client.diagnosticData.alcoholUse },
-                    { label: "Current Medications", value: client.diagnosticData.currentMedications },
-                    { label: "Relationship To Food", value: client.diagnosticData.relationshipToFood },
-                    { label: "Baseline Internal State", value: client.diagnosticData.baselineInternalState },
-                    { label: "On TRT / Peptides", value: client.diagnosticData.onTrt },
-                    { label: "What Stays Solid Traveling", value: client.diagnosticData.whatStaysSolidTraveling },
-                    { label: "Caffeine Intake", value: client.diagnosticData.caffeineIntake },
-                    { label: "Nicotine / Other Substances", value: client.diagnosticData.nicotineSubstances },
-                    { label: "Sleep Quality", value: client.diagnosticData.sleepQuality },
-                    { label: "Training Frequency", value: client.diagnosticData.trainingFrequency },
-                    { label: "Morning Erections", value: client.diagnosticData.morningErections },
-                    { label: "Eye Contact", value: client.diagnosticData.eyeContact },
-                    { label: "Sexual Dynamic", value: client.diagnosticData.sexualDynamic },
-                    { label: "Physique Feeling", value: client.diagnosticData.physiqueFeeling },
-                    { label: "Training Approach", value: client.diagnosticData.trainingApproach },
-                    { label: "How They Decompress", value: client.diagnosticData.howDecompress },
-                    { label: "Libido", value: client.diagnosticData.libido },
-                    { label: "Travel Frequency", value: client.diagnosticData.travelFrequency },
-                    { label: "Wake Up Recovered", value: client.diagnosticData.wakeUpRecovered },
-                    { label: "Recent Hormone Panel", value: client.diagnosticData.recentHormonePanel },
-                  ].filter(f => f.value).map(f => (
-                    <div key={f.label} style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px" }}>
-                      <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.2rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>{f.label}</p>
-                      <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.55 }}>{f.value}</p>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      )}
 
       {/* ── ACCOUNT CONTROLS (always last) ── */}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1.25rem", borderTop: "1px solid var(--border)" }}>

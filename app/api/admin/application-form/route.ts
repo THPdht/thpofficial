@@ -12,11 +12,14 @@ export async function GET(req: Request) {
     return Response.json({ error: 'Missing email' }, { status: 400 });
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data: rows, error } = await supabaseAdmin
     .from('application_forms')
     .select('*')
     .eq('email', email.toLowerCase().trim())
-    .maybeSingle();
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  const data = rows?.[0] ?? null;
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
   return Response.json({ data: data ?? null });

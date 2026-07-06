@@ -1328,45 +1328,6 @@ function BloodWorkTab({ user }: { user: StoredUser }) {
       </div>
 
 
-      {/* Marker snapshot cards */}
-      {entries.length > 0 && (() => {
-        const latest = entries[0];
-        const cards = Object.entries(MARKER_DEFAULTS).map(([key, def]) => {
-          const m = latest?.markers?.[key];
-          const hasVal = (m?.value ?? null) !== null;
-          const flag = m?.flag ?? null;
-          const flagColor = flag === 'high' ? 'oklch(0.72 0.18 25)' : flag === 'low' ? 'oklch(0.65 0.18 260)' : flag === 'normal' ? 'oklch(0.65 0.15 145)' : null;
-          return { key, def, m, hasVal, flagColor };
-        });
-        const anyData = cards.some(c => c.hasVal);
-        if (!anyData) return null;
-        return (
-          <div style={{ marginBottom: "2rem" }}>
-            <p style={{ fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--dim)", textTransform: "uppercase", fontFamily: "var(--font-mono), monospace", marginBottom: "0.625rem" }}>Your markers</p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: "0.375rem" }}>
-              {cards.map(({ key, def, m, hasVal, flagColor }) => (
-                <button key={key} onClick={() => setSelectedMarker(key)}
-                  style={{
-                    padding: "0.625rem 0.5rem", textAlign: "left", cursor: "pointer",
-                    background: hasVal ? 'oklch(0.55 0.18 145 / 0.08)' : 'var(--surface)',
-                    border: `1px solid ${selectedMarker === key ? (hasVal ? 'oklch(0.55 0.18 145)' : 'var(--primary)') : hasVal ? 'oklch(0.55 0.18 145 / 0.4)' : 'var(--border-subtle)'}`,
-                    borderRadius: "9px", transition: "all 0.15s",
-                  }}>
-                  <p style={{ fontSize: "0.65rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.04em", fontFamily: "var(--font-mono), monospace", marginBottom: "0.25rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{def.label}</p>
-                  {hasVal ? (
-                    <p style={{ fontSize: "0.875rem", fontWeight: 600, color: flagColor ?? 'oklch(0.72 0.18 145)', fontFamily: "var(--font-mono), monospace" }}>
-                      {m!.value} <span style={{ fontSize: "0.65rem", fontWeight: 400, color: "var(--dim)" }}>{def.unit}</span>
-                    </p>
-                  ) : (
-                    <p style={{ fontSize: "0.8rem", color: "var(--dim)", fontWeight: 300 }}>—</p>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
-
       {entries.length > 1 && (
         <details style={{ marginBottom: "1.5rem" }}>
           <summary style={{ fontSize: "0.8125rem", color: "var(--muted)", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 400, marginBottom: "0.75rem" }}>Previous uploads ({entries.length - 1})</summary>
