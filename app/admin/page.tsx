@@ -1693,66 +1693,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
       </div>
 
 
-      {/* Application answers */}
-      <div id="crm-application">
-        {sectionLabel('Application')}
-        {!applicationData ? (
-          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, fontStyle: "italic" }}>No application on file.</p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-            {[
-              { label: "Full name", value: applicationData.full_name },
-              { label: "Gender", value: applicationData.gender },
-              { label: "Age", value: applicationData.age },
-              { label: "Goals", value: Array.isArray(applicationData.current_state_goals) ? (applicationData.current_state_goals as string[]).join(", ") : applicationData.current_state_goals },
-              { label: "Other goal", value: applicationData.other_goal },
-              { label: "Most important goal", value: applicationData.most_important_goal },
-              { label: "Current weight", value: applicationData.current_weight },
-              { label: "Height", value: applicationData.height },
-              { label: "Body fat %", value: applicationData.body_fat_current },
-              { label: "Body fat goal", value: applicationData.body_fat_goal },
-              { label: "How long at current BF%", value: applicationData.body_fat_duration },
-              { label: "Symptom duration", value: applicationData.symptom_duration },
-              { label: "Bloodwork status", value: applicationData.bloodwork_status },
-              { label: "Testosterone level", value: applicationData.testosterone_level },
-              { label: "Last labs date", value: applicationData.last_labs_date },
-              { label: "Previous attempts", value: Array.isArray(applicationData.previous_attempts) ? (applicationData.previous_attempts as string[]).join(", ") : applicationData.previous_attempts },
-              { label: "Supplements used", value: applicationData.supplements_used },
-              { label: "What they've tried", value: applicationData.what_tried },
-              { label: "How long stuck", value: applicationData.how_long_stuck },
-              { label: "Why it stopped working", value: applicationData.why_stopped_working },
-              { label: "Why still looking", value: applicationData.why_still_looking },
-              { label: "Hours per week available", value: applicationData.hours_per_week },
-              { label: "Current training program", value: applicationData.current_training_program },
-              { label: "Medical conditions", value: applicationData.medical_conditions },
-              { label: "Stress & sleep situation", value: applicationData.stress_sleep_situation },
-              { label: "Consequences of not fixing this", value: applicationData.consequences },
-              { label: "Life if solved", value: applicationData.life_solved },
-              { label: "How found THP", value: applicationData.how_found_us },
-              { label: "Commitment level", value: applicationData.commitment_level ? `${applicationData.commitment_level}/10` : null },
-              { label: "Investment range", value: applicationData.investment_range },
-              { label: "Was referred", value: applicationData.was_referred },
-              { label: "Referred by", value: applicationData.referred_by },
-              { label: "Phone", value: applicationData.phone },
-              { label: "Instagram", value: applicationData.instagram },
-            ].filter(f => f.value && f.value !== "" && f.value !== "0").map(f => (
-              <div key={f.label} style={{ display: "flex", flexDirection: "column", gap: "0.2rem", padding: "0.5rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px" }}>
-                <p style={{ fontSize: "0.65rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{f.label}</p>
-                <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.5 }}>{String(f.value)}</p>
-              </div>
-            ))}
-            {Array.isArray(applicationData.symptom_severities) && (applicationData.symptom_severities as { symptom: string; severity: number }[]).length > 0 && (
-              <div style={{ padding: "0.5rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px" }}>
-                <p style={{ fontSize: "0.65rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Symptom severities</p>
-                {(applicationData.symptom_severities as { symptom: string; severity: number }[]).map(s => (
-                  <p key={s.symptom} style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.6 }}>{s.symptom}: <span style={{ color: s.severity >= 8 ? "var(--danger)" : s.severity >= 5 ? "oklch(0.75 0.14 65)" : "var(--dim)", fontWeight: 500 }}>{s.severity}/10</span></p>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
       {/* Tracker history — always visible */}
       <div id="crm-trackers">
         {sectionLabel('Recent trackers')}
@@ -2136,6 +2076,133 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
 
       </div>
 
+
+      {/* ── APPLICATION ANSWERS ── */}
+      <div style={{ paddingTop: "1.25rem", borderTop: "1px solid var(--border)" }}>
+        <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.75rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Application answers</p>
+        {!applicationData ? (
+          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, fontStyle: "italic" }}>No application on file.</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            {[
+              { label: "Full name", value: applicationData.full_name },
+              { label: "Gender", value: applicationData.gender },
+              { label: "Age", value: applicationData.age },
+              { label: "Goals", value: Array.isArray(applicationData.current_state_goals) ? (applicationData.current_state_goals as string[]).join(", ") : applicationData.current_state_goals },
+              { label: "Most important goal", value: applicationData.most_important_goal },
+              { label: "Current weight", value: applicationData.current_weight },
+              { label: "Height", value: applicationData.height },
+              { label: "Body fat %", value: applicationData.body_fat_current },
+              { label: "Body fat goal", value: applicationData.body_fat_goal },
+              { label: "How long at current BF%", value: applicationData.body_fat_duration },
+              { label: "Symptom duration", value: applicationData.symptom_duration },
+              { label: "Bloodwork status", value: applicationData.bloodwork_status },
+              { label: "Testosterone level", value: applicationData.testosterone_level },
+              { label: "Last labs date", value: applicationData.last_labs_date },
+              { label: "Previous attempts", value: Array.isArray(applicationData.previous_attempts) ? (applicationData.previous_attempts as string[]).join(", ") : applicationData.previous_attempts },
+              { label: "Supplements used", value: applicationData.supplements_used },
+              { label: "What they've tried", value: applicationData.what_tried },
+              { label: "How long stuck", value: applicationData.how_long_stuck },
+              { label: "Why it stopped working", value: applicationData.why_stopped_working },
+              { label: "Why still looking", value: applicationData.why_still_looking },
+              { label: "Hours per week", value: applicationData.hours_per_week },
+              { label: "Current training", value: applicationData.current_training_program },
+              { label: "Medical conditions", value: applicationData.medical_conditions },
+              { label: "Stress & sleep", value: applicationData.stress_sleep_situation },
+              { label: "Consequences", value: applicationData.consequences },
+              { label: "Life if solved", value: applicationData.life_solved },
+              { label: "How found THP", value: applicationData.how_found_us },
+              { label: "Commitment level", value: applicationData.commitment_level ? `${applicationData.commitment_level}/10` : null },
+              { label: "Investment range", value: applicationData.investment_range },
+              { label: "Was referred", value: applicationData.was_referred },
+              { label: "Referred by", value: applicationData.referred_by },
+              { label: "Phone", value: applicationData.phone },
+              { label: "Instagram", value: applicationData.instagram },
+            ].filter(f => f.value && f.value !== "" && f.value !== "0").map(f => (
+              <div key={f.label} style={{ display: "flex", gap: "0.5rem", padding: "0.4rem 0.625rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "7px" }}>
+                <p style={{ fontSize: "0.65rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif", minWidth: "100px", flexShrink: 0, paddingTop: "2px" }}>{f.label}</p>
+                <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.5 }}>{String(f.value)}</p>
+              </div>
+            ))}
+            {Array.isArray(applicationData.symptom_severities) && (applicationData.symptom_severities as { symptom: string; severity: number }[]).length > 0 && (
+              <div style={{ padding: "0.5rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "7px" }}>
+                <p style={{ fontSize: "0.65rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Symptom severities</p>
+                {(applicationData.symptom_severities as { symptom: string; severity: number }[]).map(s => (
+                  <p key={s.symptom} style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.6 }}>{s.symptom}: <span style={{ color: s.severity >= 8 ? "var(--danger)" : s.severity >= 5 ? "oklch(0.75 0.14 65)" : "var(--dim)", fontWeight: 500 }}>{s.severity}/10</span></p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── INTAKE FORM ANSWERS ── */}
+      {client.diagnosticData && (
+        <div style={{ paddingTop: "1.25rem", borderTop: "1px solid var(--border)" }}>
+          <button onClick={onToggleDiagnostic}
+            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: "0.125rem 0 0.5rem", cursor: "pointer" }}>
+            <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Intake answers</p>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: diagnosticOpen ? "rotate(180deg)" : "none", transition: "transform 200ms", color: "var(--dim)" }} aria-hidden>
+              <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <AnimatePresence initial={false}>
+            {diagnosticOpen && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} style={{ overflow: "hidden" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "0.5rem" }}>
+                  {[
+                    { label: "Full Name", value: client.diagnosticData.fullName },
+                    { label: "Age / Location", value: client.diagnosticData.ageLocation },
+                    { label: "Contact Info", value: client.diagnosticData.contactInfo },
+                    { label: "Travel Pattern", value: client.diagnosticData.travelPattern },
+                    { label: "What They're Trying To Fix", value: client.diagnosticData.whatTryingToFix },
+                    { label: "How They Ask For What They Want", value: client.diagnosticData.howAskForWhatYouWant },
+                    { label: "Avoiding Disappointing Others", value: client.diagnosticData.avoidDisappointing },
+                    { label: "Validation Source", value: client.diagnosticData.validationSource },
+                    { label: "Energy State", value: client.diagnosticData.energyState },
+                    { label: "Self-Perception", value: client.diagnosticData.selfPerception },
+                    { label: "Avoids Conflict", value: client.diagnosticData.avoidConflict },
+                    { label: "Response To Criticism", value: client.diagnosticData.responseToCriticism },
+                    { label: "Internal State Entering Room", value: client.diagnosticData.internalStateEnteringRoom },
+                    { label: "Past Relationship Patterns", value: client.diagnosticData.pastRelationshipPatterns },
+                    { label: "Training Recovery", value: client.diagnosticData.trainingRecovery },
+                    { label: "Height / Weight / BF%", value: client.diagnosticData.heightWeightBf },
+                    { label: "Sleep Duration", value: client.diagnosticData.sleepDuration },
+                    { label: "Relationship Status", value: client.diagnosticData.relationshipStatus },
+                    { label: "Relationship To Risk", value: client.diagnosticData.relationshipToRisk },
+                    { label: "Sexual Confidence", value: client.diagnosticData.sexualConfidence },
+                    { label: "Alcohol Use", value: client.diagnosticData.alcoholUse },
+                    { label: "Current Medications", value: client.diagnosticData.currentMedications },
+                    { label: "Relationship To Food", value: client.diagnosticData.relationshipToFood },
+                    { label: "Baseline Internal State", value: client.diagnosticData.baselineInternalState },
+                    { label: "On TRT / Peptides", value: client.diagnosticData.onTrt },
+                    { label: "What Stays Solid Traveling", value: client.diagnosticData.whatStaysSolidTraveling },
+                    { label: "Caffeine Intake", value: client.diagnosticData.caffeineIntake },
+                    { label: "Nicotine / Other Substances", value: client.diagnosticData.nicotineSubstances },
+                    { label: "Sleep Quality", value: client.diagnosticData.sleepQuality },
+                    { label: "Training Frequency", value: client.diagnosticData.trainingFrequency },
+                    { label: "Morning Erections", value: client.diagnosticData.morningErections },
+                    { label: "Eye Contact", value: client.diagnosticData.eyeContact },
+                    { label: "Sexual Dynamic", value: client.diagnosticData.sexualDynamic },
+                    { label: "Physique Feeling", value: client.diagnosticData.physiqueFeeling },
+                    { label: "Training Approach", value: client.diagnosticData.trainingApproach },
+                    { label: "How They Decompress", value: client.diagnosticData.howDecompress },
+                    { label: "Libido", value: client.diagnosticData.libido },
+                    { label: "Travel Frequency", value: client.diagnosticData.travelFrequency },
+                    { label: "Wake Up Recovered", value: client.diagnosticData.wakeUpRecovered },
+                    { label: "Recent Hormone Panel", value: client.diagnosticData.recentHormonePanel },
+                  ].filter(f => f.value).map(f => (
+                    <div key={f.label} style={{ display: "flex", gap: "0.5rem", padding: "0.4rem 0.625rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "7px" }}>
+                      <p style={{ fontSize: "0.65rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif", minWidth: "100px", flexShrink: 0, paddingTop: "2px" }}>{f.label}</p>
+                      <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.5 }}>{f.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
 
       {/* ── ACCOUNT CONTROLS (always last) ── */}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1.25rem", borderTop: "1px solid var(--border)" }}>
