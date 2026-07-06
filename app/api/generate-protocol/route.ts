@@ -278,6 +278,16 @@ export async function POST(req: Request) {
       return Response.json({ error: 'Failed to save protocol' }, { status: 500 });
     }
 
+    // Insert protocol_ready alarm for admin feed
+    await supabase.from('alarms').insert({
+      user_email: clientEmail,
+      type: 'protocol_ready',
+      message: `${name}'s Phase ${stage} protocol is ready — review and send`,
+      created_at: new Date().toISOString(),
+    }).then(({ error: alarmErr }) => {
+      if (alarmErr) console.error('[generate-protocol] alarm insert failed:', alarmErr);
+    });
+
     // Update user status but keep protocolStatus as 'building' until THP sends it
     const existingDiag = d;
     await supabase.from('users').update({

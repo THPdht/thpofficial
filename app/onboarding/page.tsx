@@ -327,22 +327,48 @@ function OnboardingInner() {
   if (submitStatus === "done") {
     return (
       <div style={{ minHeight: "100dvh", background: bg, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
-        <div style={{ width: "100%", maxWidth: "420px", textAlign: "center" }}>
-          <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "0.72rem", letterSpacing: "0.22em", color: "var(--color-gold)", textTransform: "uppercase", marginBottom: "2rem" }}>THP Client Portal</p>
-          <div style={{ width: "52px", height: "52px", borderRadius: "50%", background: `color-mix(in srgb, var(--color-red) 15%, transparent)`, border: `1px solid var(--color-red)`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1.75rem" }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-red)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          </div>
-          <h1 style={{ fontFamily: "var(--font-display), sans-serif", fontSize: "1.75rem", fontWeight: 400, color: ink, marginBottom: "0.75rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-            You&apos;re In.
+        <div style={{ width: "100%", maxWidth: "460px" }}>
+          <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "0.72rem", letterSpacing: "0.22em", color: "var(--color-gold)", textTransform: "uppercase", marginBottom: "2.5rem", textAlign: "center" }}>THP Client Portal</p>
+
+          <h1 style={{ fontFamily: "var(--font-display), sans-serif", fontSize: "clamp(1.6rem,5vw,2.1rem)", fontWeight: 400, color: ink, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "1.25rem", lineHeight: 1.2 }}>
+            I&apos;ve got you from here.
           </h1>
-          <p style={{ color: muted, fontSize: "0.9rem", fontFamily: "var(--font-body), sans-serif", lineHeight: 1.65, marginBottom: "2.5rem" }}>
-            Your intake has been received. THP will review everything and reach out with next steps.
+          <p style={{ color: muted, fontSize: "0.9rem", fontFamily: "var(--font-body), sans-serif", lineHeight: 1.7, marginBottom: "2.5rem" }}>
+            Your intake is in. I&apos;ve got everything I need to start building your diagnosis. I&apos;ll be in touch when it&apos;s ready. In the meantime, get the app on your phone — that&apos;s how I&apos;ll reach you with updates, your protocol, and everything else going forward.
           </p>
+
+          {/* PWA install instructions */}
+          <div style={{ background: "var(--surface)", border: `1px solid ${border}`, borderRadius: "12px", padding: "1.5rem", marginBottom: "2rem" }}>
+            <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "0.68rem", letterSpacing: "0.18em", color: primary, textTransform: "uppercase", marginBottom: "1.1rem" }}>Add THP to your home screen</p>
+
+            <div style={{ marginBottom: "1.25rem" }}>
+              <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "0.72rem", letterSpacing: "0.1em", color: "var(--color-gold)", textTransform: "uppercase", marginBottom: "0.6rem" }}>On iPhone (Safari)</p>
+              <ol style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.45rem" }}>
+                {["Open thpofficial.com in Safari", "Tap the Share button at the bottom of the screen", "Scroll down and tap \"Add to Home Screen\"", "Tap Add — done"].map((step, i) => (
+                  <li key={i} style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+                    <span style={{ fontFamily: "var(--font-mono), monospace", fontSize: "0.7rem", color: primary, minWidth: "1.2rem", paddingTop: "0.05rem" }}>{i + 1}.</span>
+                    <span style={{ color: muted, fontSize: "0.85rem", fontFamily: "var(--font-body), sans-serif", lineHeight: 1.5 }}>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            <div>
+              <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "0.72rem", letterSpacing: "0.1em", color: "var(--color-gold)", textTransform: "uppercase", marginBottom: "0.6rem" }}>On Android (Chrome)</p>
+              <ol style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.45rem" }}>
+                {["Open thpofficial.com in Chrome", "Tap the three-dot menu in the top right", "Tap \"Add to Home screen\"", "Tap Add — done"].map((step, i) => (
+                  <li key={i} style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
+                    <span style={{ fontFamily: "var(--font-mono), monospace", fontSize: "0.7rem", color: primary, minWidth: "1.2rem", paddingTop: "0.05rem" }}>{i + 1}.</span>
+                    <span style={{ color: muted, fontSize: "0.85rem", fontFamily: "var(--font-body), sans-serif", lineHeight: 1.5 }}>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </div>
+
           <button
             onClick={() => router.replace("/dashboard")}
-            style={{ padding: "0.875rem 2rem", background: primary, color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body), sans-serif" }}
+            style={{ width: "100%", padding: "0.9rem 2rem", background: primary, color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body), sans-serif" }}
           >
             Go to my dashboard →
           </button>

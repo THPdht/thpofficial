@@ -2637,6 +2637,8 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
               new_application: 'oklch(0.72 0.18 260)',
               booking: 'oklch(0.75 0.16 200)',
               intake_submitted: 'oklch(0.78 0.15 145)',
+              diagnosis_ready: 'oklch(0.78 0.18 55)',
+              protocol_ready: 'oklch(0.72 0.22 25)',
               payment: 'oklch(0.72 0.18 145)',
               referral_milestone: 'oklch(0.75 0.14 300)',
             };

@@ -149,6 +149,16 @@ export async function POST(req: Request) {
 
     if (insertError) return Response.json({ error: 'Failed to save diagnosis' }, { status: 500 });
 
+    // Insert diagnosis_ready alarm for admin feed
+    await supabase.from('alarms').insert({
+      user_email: clientEmail,
+      type: 'diagnosis_ready',
+      message: `${name}'s diagnosis is ready — protocol building now`,
+      created_at: new Date().toISOString(),
+    }).then(({ error: alarmErr }) => {
+      if (alarmErr) console.error('[generate-diagnosis] alarm insert failed:', alarmErr);
+    });
+
     // Mark user active if not already
     const existingDiag = d;
     if (client.status !== 'active') {
