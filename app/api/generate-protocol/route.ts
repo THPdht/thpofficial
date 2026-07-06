@@ -210,15 +210,18 @@ export async function POST(req: Request) {
       ? { stage: prevProtocols[0].stage, sections: (prevProtocols[0].content as { sections?: { heading: string; text: string }[] })?.sections ?? [] }
       : null;
 
+    // Auto-detect phase1Mode if not passed (e.g. when triggered from DB trigger)
+    const isPhase1 = phase1Mode ?? (prevProtocol === null);
+
     const clientContext = buildClientContext(name, d, prevProtocol);
 
     const anthropic = new Anthropic({ apiKey: anthropicKey });
-    const systemPrompt = phase1Mode ? SYSTEM_PROMPT + PHASE1_ADDENDUM : SYSTEM_PROMPT;
+    const systemPrompt = isPhase1 ? SYSTEM_PROMPT + PHASE1_ADDENDUM : SYSTEM_PROMPT;
 
     let fullText = '';
     const stream = await anthropic.messages.stream({
       model: 'claude-sonnet-4-6',
-      max_tokens: phase1Mode ? 20000 : 16000,
+      max_tokens: isPhase1 ? 20000 : 16000,
       system: systemPrompt,
       messages: [{ role: 'user', content: clientContext }],
     });
