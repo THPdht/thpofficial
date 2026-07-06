@@ -50,6 +50,15 @@ export async function POST(req: Request) {
       return Response.json({ error: 'Failed to record upload' }, { status: 500 });
     }
 
+    // Alarm for admin feed
+    const clientName = userEmail.split('@')[0];
+    supabaseAdmin.from('alarms').insert({
+      user_email: userEmail,
+      type: 'blood_work_uploaded',
+      message: `${clientName} uploaded blood work`,
+      created_at: new Date().toISOString(),
+    }).then(({ error: ae }) => { if (ae) console.error('[blood-work-upload] alarm:', ae); });
+
     // Fire-and-forget: call analyze-blood-work Edge Function
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;

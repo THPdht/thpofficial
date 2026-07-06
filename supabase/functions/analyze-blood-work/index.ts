@@ -1,53 +1,53 @@
 /**
  * analyze-blood-work — Supabase Edge Function
  *
- * Called after a client uploads a blood work image.
- * Downloads the image from Supabase Storage, sends to Gemini 2.5 Flash vision,
+ * Called after a client uploads a blood work image or PDF.
+ * Downloads the file from Supabase Storage, sends to Claude vision,
  * extracts hormone/health markers as structured JSON, updates the blood_work row.
- *
- * Invoke: supabase.functions.invoke('analyze-blood-work', { body: { bloodWorkId, imageUrl, userEmail } })
  */
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import Anthropic from "npm:@anthropic-ai/sdk";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
 
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? Deno.env.get("GOOGLE_API_KEY") ?? "";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
 
-// Target hormone/health markers to extract
-const TARGET_MARKERS = [
-  "total_t",        // Total Testosterone (ng/dL or nmol/L)
-  "free_t",         // Free Testosterone (pg/mL or pmol/L)
-  "shbg",           // Sex Hormone Binding Globulin (nmol/L)
-  "estradiol",      // Estradiol / E2 (pg/mL or pmol/L)
-  "lh",             // Luteinizing Hormone (IU/L or mIU/mL)
-  "fsh",            // Follicle Stimulating Hormone (IU/L or mIU/mL)
-  "cortisol",       // Cortisol (mcg/dL or nmol/L)
-  "hematocrit",     // Hematocrit (%)
-  "hemoglobin",     // Hemoglobin (g/dL)
-  "rbc",            // Red Blood Cell count
-  "psa",            // PSA (ng/mL)
-  "dhea_s",         // DHEA-S (mcg/dL or umol/L)
-  "igf1",           // IGF-1 (ng/mL)
-  "tsh",            // TSH - Thyroid Stimulating Hormone (mIU/L)
-  "t3_free",        // Free T3 (pg/mL)
-  "t4_free",        // Free T4 (ng/dL)
-  "vitamin_d",      // Vitamin D 25-OH (ng/mL)
-  "ferritin",       // Ferritin (ng/mL)
-  "cholesterol",    // Total Cholesterol (mg/dL)
-  "hdl",            // HDL (mg/dL)
-  "ldl",            // LDL (mg/dL)
-  "triglycerides",  // Triglycerides (mg/dL)
-  "glucose",        // Fasting Glucose (mg/dL)
-  "hba1c",          // HbA1c (%)
-  "creatinine",     // Creatinine (mg/dL)
-  "alt",            // ALT liver enzyme (U/L)
-  "ast",            // AST liver enzyme (U/L)
-];
+const EXTRACT_PROMPT = `You are reading a blood test / lab results panel. Extract ALL health markers you can see.
+
+Return ONLY a JSON object with this structure:
+{
+  "markers": {
+    "marker_key": {
+      "value": number_or_null,
+      "unit": "string",
+      "reference_range": "string or null",
+      "flag": "high" | "low" | "normal" | null
+    }
+  },
+  "test_date": "YYYY-MM-DD or null if not visible",
+  "lab_name": "string or null",
+  "notes": "anything unclear, unreadable, or that couldn't be extracted"
+}
+
+Use snake_case keys (e.g. total_t, free_t, shbg, estradiol, lh, fsh, cortisol, hematocrit, hemoglobin, rbc, psa, dhea_s, igf1, tsh, t3_free, t4_free, vitamin_d, ferritin, cholesterol, hdl, ldl, triglycerides, glucose, hba1c, creatinine, alt, ast).
+For any additional markers not listed, include them with their actual name as key.
+If a value is not present, omit it entirely.
+JSON only, no markdown.`;
+
+// Chunked base64 encoding to avoid call stack overflow on large files
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 4096;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -65,70 +65,51 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Missing bloodWorkId or imageUrl" }), { status: 400 });
     }
 
-    // Download image from Supabase Storage
-    const imageResp = await fetch(imageUrl);
-    if (!imageResp.ok) {
-      return new Response(JSON.stringify({ error: "Failed to fetch image" }), { status: 400 });
+    // Download file from Supabase Storage
+    const fileResp = await fetch(imageUrl);
+    if (!fileResp.ok) {
+      console.error("[analyze-blood-work] failed to fetch file:", fileResp.status, imageUrl);
+      return new Response(JSON.stringify({ error: "Failed to fetch uploaded file" }), { status: 400 });
     }
-    const imageBuffer = await imageResp.arrayBuffer();
-    const base64Image = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)));
-    const mimeType = imageResp.headers.get("content-type") ?? "image/jpeg";
+    const fileBuffer = await fileResp.arrayBuffer();
+    const base64Data = arrayBufferToBase64(fileBuffer);
+    const rawMimeType = fileResp.headers.get("content-type") ?? "image/jpeg";
+    const isPdf = rawMimeType.includes("pdf");
+    const imageMime = rawMimeType.split(";")[0] as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
-    const prompt = `You are reading a blood test / lab results panel image.
+    // PDFs use type:"document" + beta header; images use type:"image"
+    type ContentBlock =
+      | { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } }
+      | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } }
+      | { type: "text"; text: string };
 
-Extract ALL health markers you can see. Focus on these if present: ${TARGET_MARKERS.join(", ")}.
+    const fileBlock: ContentBlock = isPdf
+      ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64Data } }
+      : { type: "image", source: { type: "base64", media_type: imageMime, data: base64Data } };
 
-Return ONLY a JSON object with this structure:
-{
-  "markers": {
-    "marker_key": {
-      "value": number_or_null,
-      "unit": "string",
-      "reference_range": "string or null",
-      "flag": "high" | "low" | "normal" | null
-    }
-  },
-  "test_date": "YYYY-MM-DD or null if not visible",
-  "lab_name": "string or null",
-  "notes": "anything unclear, unreadable, or that couldn't be extracted"
-}
-
-Use snake_case keys matching: ${TARGET_MARKERS.join(", ")}
-For any additional markers not in the list, include them with their actual name as key.
-If a value is not present in the image, omit it entirely.
-JSON only, no markdown.`;
-
-    const geminiBody = {
-      contents: [
-        {
-          parts: [
-            { text: prompt },
-            { inline_data: { mime_type: mimeType, data: base64Image } },
-          ],
-        },
-      ],
-      generationConfig: { maxOutputTokens: 1500, temperature: 0.1 },
+    // Send to Claude vision (PDFs need the pdfs beta)
+    const createParams = {
+      model: "claude-sonnet-4-6",
+      max_tokens: 1500,
+      messages: [{ role: "user" as const, content: [fileBlock, { type: "text" as const, text: EXTRACT_PROMPT }] }],
+      ...(isPdf ? { betas: ["pdfs-2024-09-25"] } : {}),
     };
+    const response = await (isPdf
+      ? anthropic.beta.messages.create(createParams as Parameters<typeof anthropic.beta.messages.create>[0])
+      : anthropic.messages.create(createParams));
 
-    const geminiResp = await fetch(GEMINI_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(geminiBody),
-    });
-
-    const geminiData = await geminiResp.json();
-    const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-
-    let parsed: { markers?: Record<string, unknown>; test_date?: string; notes?: string };
+    const rawText = response.content[0].type === "text" ? response.content[0].text : "{}";
+    let parsed: { markers?: Record<string, unknown>; test_date?: string; lab_name?: string; notes?: string };
     try {
       const cleaned = rawText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       parsed = JSON.parse(cleaned);
     } catch {
+      console.error("[analyze-blood-work] JSON parse failed:", rawText.slice(0, 200));
       parsed = { notes: "Could not parse extraction result" };
     }
 
     // Update blood_work row with extracted data
-    await supabase
+    const { error: updateErr } = await supabase
       .from("blood_work")
       .update({
         markers: parsed.markers ?? {},
@@ -137,12 +118,15 @@ JSON only, no markdown.`;
       })
       .eq("id", bloodWorkId);
 
+    if (updateErr) console.error("[analyze-blood-work] DB update error:", updateErr);
+
     return new Response(
       JSON.stringify({ success: true, markers: parsed.markers, test_date: parsed.test_date }),
       { headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } }
     );
   } catch (err) {
-    console.error("[analyze-blood-work]", err);
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[analyze-blood-work] FATAL:", msg);
+    return new Response(JSON.stringify({ error: msg }), { status: 500 });
   }
 });

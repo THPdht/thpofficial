@@ -2483,18 +2483,16 @@ function ClientRow({ u, selected, unreadCounts, onSelect }: { u: StoredUser; sel
     <button key={u.email} onClick={() => onSelect(u)}
       style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.75rem 0.625rem", borderRadius: "9px", border: "none", borderLeft: isSelected ? "3px solid var(--primary)" : "3px solid transparent", background: isSelected ? "var(--surface-hover)" : "none", cursor: "pointer", textAlign: "left", transition: "background 150ms, border-color 150ms" }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{u.name}</p>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", minWidth: 0 }}>
+            <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: statusColor(u.status), flexShrink: 0 }} />
+            <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {u.name && !u.name.includes('undefined') ? u.name : u.email.split('@')[0]}
+            </p>
+          </div>
           {unread > 0 && (
             <span style={{ width: "17px", height: "17px", borderRadius: "50%", background: "var(--primary)", color: "#ffffff", fontSize: "0.625rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{unread}</span>
           )}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", marginTop: "0.1rem" }}>
-          <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: statusColor(u.status), flexShrink: 0 }} />
-          <span style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {u.diagnosticData?.protocolStatus || u.status}
-            {u.streak > 0 ? ` · ${u.streak >= 7 ? "🔥" : "⚡"}${u.streak}` : ""}
-          </span>
         </div>
       </div>
     </button>
@@ -2543,10 +2541,11 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
   const [showOverviewStats, setShowOverviewStats] = useState(false);
 
   useEffect(() => {
-    // Alarms
-    supabase.from('alarms').select('id, user_email, type, message, created_at')
-      .is('dismissed_at', null).order('created_at', { ascending: false }).limit(20)
-      .then(({ data }) => setAlarms((data as typeof alarms) ?? []));
+    // Alarms — use API route (supabaseAdmin bypasses RLS)
+    fetch(`/api/alarms?pw=${encodeURIComponent(ADMIN_PASSWORD)}`)
+      .then(r => r.json())
+      .then(d => setAlarms((d.alarms ?? []) as typeof alarms))
+      .catch(() => {});
 
     // Pending protocols
     supabase.from('protocols').select('id, user_email, title, tracker_count, month_start, content')
@@ -2563,8 +2562,12 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
   }, []);
 
   const dismissAlarm = async (id: string) => {
-    await supabase.from('alarms').update({ dismissed_at: new Date().toISOString() }).eq('id', id);
     setAlarms(prev => prev.filter(a => a.id !== id));
+    await fetch('/api/alarms', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, pw: ADMIN_PASSWORD }),
+    });
   };
 
   const sendProtocol = async (id: string) => {
@@ -2639,6 +2642,7 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
               intake_submitted: 'oklch(0.78 0.15 145)',
               diagnosis_ready: 'oklch(0.78 0.18 55)',
               protocol_ready: 'oklch(0.72 0.22 25)',
+              blood_work_uploaded: 'oklch(0.72 0.16 320)',
               payment: 'oklch(0.72 0.18 145)',
               referral_milestone: 'oklch(0.75 0.14 300)',
             };

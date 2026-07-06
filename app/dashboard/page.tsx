@@ -873,7 +873,8 @@ function DiagnosisTab({ user }: { user: StoredUser }) {
 function ProtocolTab({ user, protocol, notionPageId }: { user: StoredUser; protocol: Protocol | null; notionPageId?: string }) {
   const [stages, setStages] = useState<ClientProtocol[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showPrevious, setShowPrevious] = useState(false);
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const [showUpload, setShowUpload] = useState(false);
 
   useEffect(() => {
     fetch(`/api/protocols?email=${encodeURIComponent(user.email)}`)
@@ -888,7 +889,6 @@ function ProtocolTab({ user, protocol, notionPageId }: { user: StoredUser; proto
           content: row.content ?? undefined,
           createdAt: row.created_at,
         }));
-        // Sort descending so most recent is first
         protocols.sort((a, b) => (b.stage ?? 0) - (a.stage ?? 0));
         setStages(protocols);
       })
@@ -908,66 +908,69 @@ function ProtocolTab({ user, protocol, notionPageId }: { user: StoredUser; proto
     const protocolStatus = user.diagnosticData?.protocolStatus;
     return (
       <div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
-          <p style={{ fontSize: "0.9375rem", color: "var(--dim)", fontWeight: 300, textAlign: "center", lineHeight: 1.6 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
+          <p style={{ fontSize: "0.9375rem", color: "var(--dim)", fontWeight: 300, lineHeight: 1.6 }}>
             {protocolStatus === "building" ? "Your protocol is being built." : protocolStatus === "updating" ? "Your protocol is being updated." : "Your protocol is being prepared. Check back soon."}
           </p>
+          <button onClick={() => setShowUpload(true)}
+            style={{ flexShrink: 0, height: "32px", padding: "0 0.875rem", background: "var(--surface)", color: "var(--muted)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+            Import protocol
+          </button>
         </div>
-        <ProtocolUploadSection user={user} />
+        {showUpload && <ProtocolUploadModal user={user} onClose={() => setShowUpload(false)} />}
       </div>
     );
   }
 
-  const latest = stages[0];
-  const previous = stages.slice(1);
+  const current = stages[selectedIdx] ?? stages[0];
 
   return (
     <div>
-      {/* Most recent protocol — always visible */}
-      {latest?.content?.sections && (
+      {/* Header row */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem", gap: "1rem" }}>
+        {/* Stage pills */}
+        <div style={{ display: "flex", gap: "0.375rem", overflowX: "auto", flexWrap: "nowrap", paddingBottom: "2px" }}>
+          {stages.map((s, i) => (
+            <button key={s.id} onClick={() => setSelectedIdx(i)}
+              style={{
+                flexShrink: 0,
+                height: "32px",
+                padding: "0 0.875rem",
+                background: selectedIdx === i ? "var(--primary)" : "var(--surface)",
+                color: selectedIdx === i ? "#fff" : "var(--muted)",
+                border: `1px solid ${selectedIdx === i ? "var(--primary)" : "var(--border)"}`,
+                borderRadius: "99px",
+                fontSize: "0.8125rem",
+                fontWeight: selectedIdx === i ? 500 : 400,
+                cursor: "pointer",
+                fontFamily: "var(--font-ui), system-ui, sans-serif",
+                transition: "background 150ms, color 150ms",
+              }}>
+              Stage {s.stage}
+            </button>
+          ))}
+        </div>
+        {/* Upload button */}
+        <button onClick={() => setShowUpload(true)}
+          style={{ flexShrink: 0, height: "32px", padding: "0 0.875rem", background: "var(--surface)", color: "var(--muted)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+          Import protocol
+        </button>
+      </div>
+
+      {/* Selected protocol */}
+      {current?.content?.sections && (
         <ProtocolDocumentComponent
-          title={latest.title}
-          stage={latest.stage}
-          sections={latest.content.sections}
-          todos={latest.content.todos ?? []}
-          createdAt={latest.createdAt}
+          title={current.title}
+          stage={current.stage}
+          sections={current.content.sections}
+          todos={current.content.todos ?? []}
+          createdAt={current.createdAt}
           clientName={user.name}
         />
       )}
 
-      {/* Previous protocols — behind expand button */}
-      {previous.length > 0 && (
-        <div style={{ marginTop: "2rem" }}>
-          <button
-            onClick={() => setShowPrevious(v => !v)}
-            style={{ display: "flex", alignItems: "center", gap: "0.5rem", background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--dim)", fontSize: "0.8125rem", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 400 }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-              style={{ transform: showPrevious ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 200ms" }}>
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-            {showPrevious ? "Hide previous protocols" : `Show previous protocols (${previous.length})`}
-          </button>
-
-          {showPrevious && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "2rem", marginTop: "1.5rem" }}>
-              {previous.map(s => s.content?.sections && (
-                <ProtocolDocumentComponent
-                  key={s.id}
-                  title={s.title}
-                  stage={s.stage}
-                  sections={s.content.sections}
-                  todos={s.content.todos ?? []}
-                  createdAt={s.createdAt}
-                  clientName={user.name}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      <ProtocolUploadSection user={user} />
+      {/* Upload modal */}
+      {showUpload && <ProtocolUploadModal user={user} onClose={() => setShowUpload(false)} />}
     </div>
   );
 }
@@ -1179,6 +1182,17 @@ function BloodWorkTab({ user }: { user: StoredUser }) {
       .catch(() => setLoading(false));
   }, [user.email]);
 
+  useEffect(() => {
+    if (entries.length === 0) return;
+    const hasData = entries.some(e => (e.markers?.[selectedMarker]?.value ?? null) !== null);
+    if (!hasData) {
+      const first = Object.keys(MARKER_DEFAULTS).find(k =>
+        entries.some(e => (e.markers?.[k]?.value ?? null) !== null)
+      );
+      if (first) setSelectedMarker(first);
+    }
+  }, [entries]);
+
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1318,15 +1332,17 @@ function BloodWorkTab({ user }: { user: StoredUser }) {
   );
 }
 
-// ─── PROTOCOL UPLOAD SECTION ─────────────────────────────────────────────
+// ─── PROTOCOL UPLOAD MODAL ─────────────────────────────────────────────────
 
-function ProtocolUploadSection({ user }: { user: StoredUser }) {
+function ProtocolUploadModal({ user, onClose }: { user: StoredUser; onClose: () => void }) {
   const [uploading, setUploading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notionUrl, setNotionUrl] = useState('');
   const [notionLoading, setNotionLoading] = useState(false);
+  const [screenshotLoading, setScreenshotLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const screenshotRef = useRef<HTMLInputElement | null>(null);
 
   const alreadyImported = user.diagnosticData?.pdfImported === true;
 
@@ -1361,80 +1377,113 @@ function ProtocolUploadSection({ user }: { user: StoredUser }) {
     setNotionLoading(false);
   };
 
+  const handleScreenshots = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    setScreenshotLoading(true);
+    setError(null);
+    const form = new FormData();
+    form.append('email', user.email);
+    files.forEach(f => form.append('files', f));
+    try {
+      const res = await fetch('/api/parse-protocol-screenshots', { method: 'POST', body: form }).then(r => r.json());
+      if (res.error) { setError(res.error); } else { setDone(true); }
+    } catch { setError('Upload failed. Please try again.'); }
+    setScreenshotLoading(false);
+    if (e.target) e.target.value = '';
+  };
+
   return (
-    <div style={{ marginTop: "2.5rem", paddingTop: "2rem", borderTop: "1px solid var(--border-subtle)" }}>
-      <h3 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.25rem", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.01em", marginBottom: "0.375rem" }}>Upload Your Protocol</h3>
-      <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, marginBottom: "1.25rem" }}>
-        {alreadyImported ? "Protocol on file. THP has full context for your next stage." : "Already have a THP protocol? Upload it so THP can build your next stage from it."}
-      </p>
-
-      {done && (
-        <div style={{ padding: "1rem 1.25rem", background: "oklch(0.60 0.18 165 / 0.06)", border: "1px solid oklch(0.60 0.18 165 / 0.2)", borderRadius: "10px", marginBottom: "1rem" }}>
-          <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 400 }}>Protocol uploaded. THP will use it to build your next stage.</p>
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+      <div style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "16px", padding: "1.5rem", width: "100%", maxWidth: "480px", maxHeight: "90vh", overflowY: "auto" }}>
+        {/* Close button + title */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem" }}>
+          <h3 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.125rem", fontWeight: 400, color: "var(--ink)", margin: 0 }}>Import Protocol</h3>
+          <button onClick={onClose}
+            style={{ width: "28px", height: "28px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "6px", cursor: "pointer", color: "var(--dim)", fontSize: "1rem", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+            ×
+          </button>
         </div>
-      )}
 
-      {!done && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
-          {/* PDF upload */}
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-            <button
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading || notionLoading}
-              style={{ height: "40px", padding: "0 1.25rem", background: "var(--surface)", color: "var(--ink)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "0.875rem", fontWeight: 500, cursor: (uploading || notionLoading) ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", display: "inline-flex", alignItems: "center", gap: "0.375rem", opacity: (uploading || notionLoading) ? 0.7 : 1 }}
-            >
-              {uploading ? <><Spinner /> Uploading…</> : "Upload PDF"}
-            </button>
-            <span style={{ fontSize: "0.75rem", color: "var(--dim)" }}>or paste a Notion link</span>
+        <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, marginBottom: "1.25rem" }}>
+          {alreadyImported ? "Protocol on file. THP has full context for your next stage." : "Already have a THP protocol? Upload it so THP can build your next stage from it."}
+        </p>
+
+        {done && (
+          <div style={{ padding: "1rem 1.25rem", background: "oklch(0.60 0.18 165 / 0.06)", border: "1px solid oklch(0.60 0.18 165 / 0.2)", borderRadius: "10px", marginBottom: "1rem" }}>
+            <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 400 }}>Protocol uploaded. THP will use it to build your next stage.</p>
           </div>
+        )}
 
-          {/* Notion URL input */}
-          <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, marginTop: "-0.25rem" }}>
-            Before importing: open the Notion page, click <strong style={{ fontWeight: 500, color: "var(--muted)" }}>Share</strong>, and add <strong style={{ fontWeight: 500, color: "var(--muted)" }}>THP Intake Automation</strong> as a connection.
-          </p>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <input
-              type="url"
-              placeholder="https://www.notion.so/your-protocol-page…"
-              value={notionUrl}
-              onChange={e => setNotionUrl(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleNotionImport(); }}
-              disabled={notionLoading || uploading}
-              style={{ flex: 1, height: "40px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", padding: "0 0.875rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", opacity: (notionLoading || uploading) ? 0.7 : 1 }}
-            />
-            <button
-              onClick={handleNotionImport}
-              disabled={notionLoading || uploading || !notionUrl.trim()}
-              style={{ height: "40px", padding: "0 1.125rem", background: notionUrl.trim() ? "var(--primary)" : "var(--surface)", color: notionUrl.trim() ? "#fff" : "var(--dim)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "0.875rem", fontWeight: 500, cursor: (notionLoading || uploading || !notionUrl.trim()) ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", display: "inline-flex", alignItems: "center", gap: "0.375rem", flexShrink: 0, opacity: (notionLoading || uploading) ? 0.7 : 1 }}
-            >
-              {notionLoading ? <><Spinner /> Importing…</> : "Import"}
-            </button>
-          </div>
-
-          {(uploading || notionLoading) && (
-            <div style={{ padding: "0.875rem 1.125rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", display: "flex", alignItems: "center", gap: "0.75rem" }}>
-              <Spinner />
-              <p style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300 }}>Reading your protocol… this may take a minute.</p>
+        {!done && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
+            {/* Upload buttons row */}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading || notionLoading || screenshotLoading}
+                style={{ height: "40px", padding: "0 1.25rem", background: "var(--surface)", color: "var(--ink)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "0.875rem", fontWeight: 500, cursor: (uploading || notionLoading || screenshotLoading) ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", display: "inline-flex", alignItems: "center", gap: "0.375rem", opacity: (uploading || notionLoading || screenshotLoading) ? 0.7 : 1 }}
+              >
+                {uploading ? <><Spinner /> Uploading…</> : "Upload PDF"}
+              </button>
+              <button
+                onClick={() => screenshotRef.current?.click()}
+                disabled={uploading || notionLoading || screenshotLoading}
+                style={{ height: "40px", padding: "0 1.25rem", background: "var(--surface)", color: "var(--ink)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "0.875rem", fontWeight: 500, cursor: (uploading || notionLoading || screenshotLoading) ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", display: "inline-flex", alignItems: "center", gap: "0.375rem", opacity: (uploading || notionLoading || screenshotLoading) ? 0.7 : 1 }}
+              >
+                {screenshotLoading ? <><Spinner /> Reading…</> : "Upload Screenshots"}
+              </button>
+              <span style={{ fontSize: "0.75rem", color: "var(--dim)" }}>or paste a Notion link</span>
             </div>
-          )}
-        </div>
-      )}
 
-      {alreadyImported && !done && (
-        <button
-          onClick={() => fileRef.current?.click()}
-          disabled={uploading}
-          style={{ marginTop: "0.75rem", height: "34px", padding: "0 1rem", background: "none", color: "var(--dim)", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}
-        >
-          Replace
-        </button>
-      )}
+            {/* Notion URL input */}
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <input
+                type="url"
+                placeholder="https://www.notion.so/your-protocol-page…"
+                value={notionUrl}
+                onChange={e => setNotionUrl(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleNotionImport(); }}
+                disabled={notionLoading || uploading || screenshotLoading}
+                style={{ flex: 1, height: "40px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", padding: "0 0.875rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", opacity: (notionLoading || uploading || screenshotLoading) ? 0.7 : 1 }}
+              />
+              <button
+                onClick={handleNotionImport}
+                disabled={notionLoading || uploading || screenshotLoading || !notionUrl.trim()}
+                style={{ height: "40px", padding: "0 1.125rem", background: notionUrl.trim() ? "var(--primary)" : "var(--surface)", color: notionUrl.trim() ? "#fff" : "var(--dim)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "0.875rem", fontWeight: 500, cursor: (notionLoading || uploading || screenshotLoading || !notionUrl.trim()) ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", display: "inline-flex", alignItems: "center", gap: "0.375rem", flexShrink: 0, opacity: (notionLoading || uploading || screenshotLoading) ? 0.7 : 1 }}
+              >
+                {notionLoading ? <><Spinner /> Importing…</> : "Import"}
+              </button>
+            </div>
 
-      <input ref={fileRef} type="file" accept=".pdf" style={{ display: "none" }} onChange={handleUpload} />
+            {(uploading || notionLoading || screenshotLoading) && (
+              <div style={{ padding: "0.875rem 1.125rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <Spinner />
+                <p style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300 }}>Reading your protocol… this may take a minute.</p>
+              </div>
+            )}
+          </div>
+        )}
 
-      {error && (
-        <p style={{ fontSize: "0.8125rem", color: "var(--color-red)", fontWeight: 300, marginTop: "0.75rem" }}>{error}</p>
-      )}
+        {alreadyImported && !done && (
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            style={{ marginTop: "0.75rem", height: "34px", padding: "0 1rem", background: "none", color: "var(--dim)", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}
+          >
+            Replace
+          </button>
+        )}
+
+        <input ref={fileRef} type="file" accept=".pdf" style={{ display: "none" }} onChange={handleUpload} />
+        <input ref={screenshotRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={handleScreenshots} />
+
+        {error && (
+          <p style={{ fontSize: "0.8125rem", color: "var(--color-red)", fontWeight: 300, marginTop: "0.75rem" }}>{error}</p>
+        )}
+      </div>
     </div>
   );
 }
