@@ -347,25 +347,26 @@ export async function getClientProtocols(email: string): Promise<ClientProtocol[
   }));
 }
 
-// Used by admin — returns ALL protocols including unpublished drafts
+// Used by admin — returns ALL protocols including unpublished drafts (uses server API to bypass RLS)
 export async function getAdminProtocols(email: string): Promise<ClientProtocol[]> {
-  const { data, error } = await supabase
-    .from('protocols')
-    .select('*')
-    .eq('user_email', email)
-    .order('stage', { ascending: true });
-  if (error || !data) return [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return data.map((row: any) => ({
-    id: row.id,
-    userEmail: row.user_email,
-    stage: row.stage,
-    notionPageId: row.notion_page_id ?? undefined,
-    title: row.title,
-    content: row.content ?? undefined,
-    createdAt: row.created_at,
-    published: row.status === 'sent',
-  }));
+  try {
+    const res = await fetch(`/api/protocols?email=${encodeURIComponent(email)}&all=1`);
+    if (!res.ok) return [];
+    const { protocols } = await res.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (protocols ?? []).map((row: any) => ({
+      id: row.id,
+      userEmail: row.user_email,
+      stage: row.stage,
+      notionPageId: row.notion_page_id ?? undefined,
+      title: row.title,
+      content: row.content ?? undefined,
+      createdAt: row.created_at,
+      published: row.status === 'sent',
+    }));
+  } catch {
+    return [];
+  }
 }
 
 // Used by client dashboard — only shows published diagnoses

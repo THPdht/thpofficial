@@ -1916,11 +1916,18 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
           {diagGenError && <p style={{ fontSize: "0.75rem", color: "var(--primary)" }}>{diagGenError}</p>}
           {adminDiagnostics.length === 0 ? (
             <p style={{ fontSize: "0.8rem", color: "var(--dim)", fontWeight: 300 }}>No diagnosis yet.</p>
-          ) : adminDiagnostics.map(diag => (
+          ) : adminDiagnostics.map(diag => {
+            const isPdfImport = diag.title?.includes('PDF Import');
+            const isAiAnalysis = !isPdfImport;
+            const diagLabel = isPdfImport ? `Diagnosis Stage ${diag.stage} — PDF Import` : `AI Analysis Stage ${diag.stage}`;
+            return (
             <div key={diag.id} style={{ background: "var(--surface)", border: `1px solid ${diag.published ? "oklch(0.7 0.15 145 / 0.3)" : "oklch(0.75 0.15 80 / 0.3)"}`, borderRadius: "8px", padding: "0.75rem" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.375rem" }}>
-                <p style={{ fontSize: "0.8rem", fontWeight: 500, color: "var(--ink)" }}>Stage {diag.stage}</p>
-                <span style={{ fontSize: "0.65rem", fontWeight: 600, padding: "2px 7px", borderRadius: "4px", background: diag.published ? "oklch(0.7 0.15 145 / 0.12)" : "oklch(0.75 0.15 80 / 0.12)", color: diag.published ? "oklch(0.7 0.15 145)" : "oklch(0.75 0.15 80)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{diag.published ? "Sent" : "Draft"}</span>
+                <p style={{ fontSize: "0.8rem", fontWeight: 500, color: "var(--ink)" }}>{diagLabel}</p>
+                <div style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}>
+                  {isAiAnalysis && <span style={{ fontSize: "0.6rem", padding: "1px 6px", borderRadius: "4px", background: "oklch(0.65 0.14 65 / 0.1)", color: "oklch(0.75 0.14 65)", border: "1px solid oklch(0.65 0.14 65 / 0.25)", fontFamily: "var(--font-mono), monospace", letterSpacing: "0.04em" }}>AI</span>}
+                  <span style={{ fontSize: "0.65rem", fontWeight: 600, padding: "2px 7px", borderRadius: "4px", background: diag.published ? "oklch(0.7 0.15 145 / 0.12)" : "oklch(0.75 0.15 80 / 0.12)", color: diag.published ? "oklch(0.7 0.15 145)" : "oklch(0.75 0.15 80)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{diag.published ? "Sent" : "Draft"}</span>
+                </div>
               </div>
               {diag.content?.sections.map(s => (
                 <details key={s.heading} style={{ marginBottom: "0.25rem" }}>
@@ -1943,7 +1950,8 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
                 </details>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Protocol — view draft + send to client */}
@@ -1964,7 +1972,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
           ) : clientProtocols.map(proto => (
             <div key={proto.id} style={{ background: "var(--surface)", border: `1px solid ${proto.published ? "oklch(0.7 0.15 145 / 0.3)" : "oklch(0.60 0.18 165 / 0.3)"}`, borderRadius: "8px", padding: "0.75rem" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.375rem" }}>
-                <p style={{ fontSize: "0.8rem", fontWeight: 500, color: "var(--ink)" }}>Stage {proto.stage}</p>
+                <p style={{ fontSize: "0.8rem", fontWeight: 500, color: "var(--ink)" }}>Protocol Stage {proto.stage}{proto.title?.includes('PDF Import') ? ' — PDF Import' : ''}</p>
                 <span style={{ fontSize: "0.65rem", fontWeight: 600, padding: "2px 7px", borderRadius: "4px", background: proto.published ? "oklch(0.7 0.15 145 / 0.12)" : "oklch(0.60 0.18 165 / 0.12)", color: proto.published ? "oklch(0.7 0.15 145)" : "var(--primary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                   {proto.published ? "Sent to client" : "Draft — not sent"}
                 </span>
