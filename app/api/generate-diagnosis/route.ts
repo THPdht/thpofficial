@@ -127,24 +127,15 @@ export async function POST(req: Request) {
     const parsed = JSON.parse(cleaned);
     const sections: { heading: string; text: string }[] = parsed.sections ?? [];
 
-    // Count existing diagnostics for stage number
-    const { count } = await supabase
-      .from('diagnostics')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_email', clientEmail);
-    const stage = (count ?? 0) + 1;
-
-    const diagTitle = `${name} — Diagnosis Stage ${stage}`;
+    // Diagnosis is singular — upsert so regeneration overwrites rather than creates a second record
+    const diagTitle = `${name} — Diagnosis`;
 
     const { data: diag, error: insertError } = await supabase
       .from('diagnostics')
-      .insert({
-        user_email: clientEmail,
-        stage,
-        title: diagTitle,
-        content: { sections },
-        published: false,
-      })
+      .upsert(
+        { user_email: clientEmail, stage: 1, title: diagTitle, content: { sections }, published: false },
+        { onConflict: 'user_email' }
+      )
       .select()
       .single();
 
@@ -169,6 +160,13 @@ export async function POST(req: Request) {
       }).eq('email', clientEmail);
     }
 
+    // Check if this client has any existing protocols to determine phase
+    const { count: protocolCount } = await supabase
+      .from('protocols')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_email', clientEmail);
+    const isPhase1 = (protocolCount ?? 0) === 0;
+
     // Auto-trigger protocol generation after response is sent — use after() so Vercel keeps function alive
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://thpofficial.com';
     after(async () => {
@@ -176,7 +174,7 @@ export async function POST(req: Request) {
         const res = await fetch(`${appUrl}/api/generate-protocol`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ clientEmail, clientName: name, phase1Mode: stage === 1 }),
+          body: JSON.stringify({ clientEmail, clientName: name, phase1Mode: isPhase1 }),
         });
         if (!res.ok) console.error('[generate-diagnosis] protocol auto-gen returned', res.status, await res.text());
       } catch (e) {
@@ -184,7 +182,7 @@ export async function POST(req: Request) {
       }
     });
 
-    return Response.json({ diagnosisId: diag.id, stage, title: diagTitle });
+    return Response.json({ diagnosisId: diag.id, title: diagTitle });
   } catch (err) {
     console.error('[generate-diagnosis]', err);
     return Response.json({ error: 'Internal server error' }, { status: 500 });
