@@ -1937,14 +1937,31 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
           <div>
             {sectionLabel(bwLatest?.test_date ? `Blood Work · ${bwLatest.test_date}` : 'Blood Work')}
             <div style={{ padding: "1rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", flexWrap: "wrap", gap: "0.5rem" }}>
-                <p style={{ fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--dim)", textTransform: "uppercase", fontFamily: "var(--font-mono), monospace" }}>Trends</p>
-                <select value={selectedMarker} onChange={e => setSelectedMarker(e.target.value)}
-                  style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--muted)", fontSize: "0.75rem", padding: "0.25rem 0.5rem", fontFamily: "var(--font-mono), monospace", cursor: "pointer" }}>
-                  {Object.entries(MARKER_DEFAULTS).map(([key, def]) => (
-                    <option key={key} value={key}>{def.label} ({def.unit})</option>
-                  ))}
-                </select>
+              <div style={{ marginBottom: "0.75rem" }}>
+                <p style={{ fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--dim)", textTransform: "uppercase", fontFamily: "var(--font-mono), monospace", marginBottom: "0.5rem" }}>Trends</p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem" }}>
+                  {Object.entries(MARKER_DEFAULTS).map(([key, def]) => {
+                    const hasData = bloodWorkEntries.some(e => (e.markers?.[key]?.value ?? null) !== null);
+                    const isActive = selectedMarker === key;
+                    return (
+                      <button key={key} onClick={() => setSelectedMarker(key)}
+                        style={{
+                          height: "24px", padding: "0 0.5rem",
+                          background: isActive
+                            ? hasData ? 'oklch(0.55 0.18 145)' : 'var(--primary)'
+                            : hasData ? 'oklch(0.55 0.18 145 / 0.15)' : 'var(--surface)',
+                          border: `1px solid ${isActive ? (hasData ? 'oklch(0.55 0.18 145)' : 'var(--primary)') : hasData ? 'oklch(0.55 0.18 145 / 0.5)' : 'var(--border)'}`,
+                          borderRadius: "20px",
+                          color: isActive ? '#fff' : hasData ? 'oklch(0.72 0.18 145)' : 'var(--dim)',
+                          fontSize: "0.65rem", fontWeight: 500, cursor: "pointer",
+                          fontFamily: "var(--font-mono), monospace", whiteSpace: "nowrap",
+                          transition: "all 0.15s",
+                        }}>
+                        {def.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               {(() => {
                 const chartData = [...bloodWorkEntries]
