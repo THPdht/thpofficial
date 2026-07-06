@@ -39,7 +39,11 @@ export async function POST(req: Request) {
         },
         quantity: 1,
       }],
-      metadata: { payment_type: paymentType, user_email: email },
+      metadata: {
+        payment_type: paymentType,
+        user_email: email,
+        ...(paymentType === 'monthly' ? { agreed_monthly: String(amount) } : {}),
+      },
       success_url: paymentType === 'monthly'
         ? `${appUrl}/dashboard?payment=success`
         : `${appUrl}/onboarding?session_id={CHECKOUT_SESSION_ID}`,
