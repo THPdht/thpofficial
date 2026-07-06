@@ -11,15 +11,19 @@ export function Booking() {
   useEffect(() => {
     (async () => {
       const cal = await getCalApi();
-      cal("ui", {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (cal as any)("ui", {
         hideEventTypeDetails: false,
         layout: "month_view",
         cssVarsPerTheme: {
           light: { "cal-brand": "#c8102e" },
           dark: { "cal-brand": "#c8102e" },
         },
+        // Tell cal.com to redirect to our own page after booking is confirmed
+        // This fires even if the bookingSuccessful JS event doesn't fire
+        redirect_url: "https://thpofficial.com/booking-confirmed",
       });
-      // Redirect to pending screen after booking is confirmed + fire booking alarm
+      // Redirect to confirmation screen after booking is confirmed + fire booking alarm
       cal("on", {
         action: "bookingSuccessful",
         callback: () => {
@@ -40,7 +44,7 @@ export function Booking() {
               }).catch(() => {});
             }
           } catch { /* silent — alarm is non-critical */ }
-          router.push("/onboarding/pending");
+          router.push("/booking-confirmed");
         },
       });
     })();

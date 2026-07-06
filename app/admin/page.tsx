@@ -1413,12 +1413,14 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
   const [diagGenerating, setDiagGenerating] = useState(false);
   const [diagGenError, setDiagGenError] = useState("");
   const [sendingProtocolId, setSendingProtocolId] = useState<string | null>(null);
+  const [applicationData, setApplicationData] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     // Reset profile-panel state on client change
     setTrackerSummary(null);
     setGenError("");
     setDiagGenError("");
+    setApplicationData(null);
 
     // Tracker analysis — via API (bypasses RLS)
     fetch(`/api/tracker-analysis?email=${encodeURIComponent(client.email)}&limit=20`)
@@ -1464,6 +1466,10 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
     // Private notes
     supabase.from('applicant_notes').select('notes').eq('user_email', client.email).maybeSingle()
       .then(({ data }) => setNotes(data?.notes ?? ''));
+
+    // Application form answers
+    supabase.from('application_forms').select('*').eq('email', client.email).maybeSingle()
+      .then(({ data }) => { if (data) setApplicationData(data as Record<string, unknown>); });
 
     // Client protocols + admin diagnostics
     getAdminProtocols(client.email).then(setClientProtocols).catch(() => {});
@@ -1651,7 +1657,12 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
           </svg>
         </button>
         {showStats && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "0.5rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.5rem" }}>
+            <div onClick={() => document.getElementById("crm-application")?.scrollIntoView({ behavior: "smooth" })}
+              style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", cursor: "pointer" }}>
+              <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Application</p>
+              <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: applicationData ? "var(--ink)" : "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{applicationData ? "View ↓" : "None"}</p>
+            </div>
             <div onClick={() => document.getElementById("crm-trackers")?.scrollIntoView({ behavior: "smooth" })}
               style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", cursor: "pointer" }}>
               <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Streak</p>
@@ -1676,6 +1687,66 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         )}
       </div>
 
+
+      {/* Application answers */}
+      <div id="crm-application">
+        {sectionLabel('Application')}
+        {!applicationData ? (
+          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, fontStyle: "italic" }}>No application on file.</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+            {[
+              { label: "Full name", value: applicationData.full_name },
+              { label: "Gender", value: applicationData.gender },
+              { label: "Age", value: applicationData.age },
+              { label: "Goals", value: Array.isArray(applicationData.current_state_goals) ? (applicationData.current_state_goals as string[]).join(", ") : applicationData.current_state_goals },
+              { label: "Other goal", value: applicationData.other_goal },
+              { label: "Most important goal", value: applicationData.most_important_goal },
+              { label: "Current weight", value: applicationData.current_weight },
+              { label: "Height", value: applicationData.height },
+              { label: "Body fat %", value: applicationData.body_fat_current },
+              { label: "Body fat goal", value: applicationData.body_fat_goal },
+              { label: "How long at current BF%", value: applicationData.body_fat_duration },
+              { label: "Symptom duration", value: applicationData.symptom_duration },
+              { label: "Bloodwork status", value: applicationData.bloodwork_status },
+              { label: "Testosterone level", value: applicationData.testosterone_level },
+              { label: "Last labs date", value: applicationData.last_labs_date },
+              { label: "Previous attempts", value: Array.isArray(applicationData.previous_attempts) ? (applicationData.previous_attempts as string[]).join(", ") : applicationData.previous_attempts },
+              { label: "Supplements used", value: applicationData.supplements_used },
+              { label: "What they've tried", value: applicationData.what_tried },
+              { label: "How long stuck", value: applicationData.how_long_stuck },
+              { label: "Why it stopped working", value: applicationData.why_stopped_working },
+              { label: "Why still looking", value: applicationData.why_still_looking },
+              { label: "Hours per week available", value: applicationData.hours_per_week },
+              { label: "Current training program", value: applicationData.current_training_program },
+              { label: "Medical conditions", value: applicationData.medical_conditions },
+              { label: "Stress & sleep situation", value: applicationData.stress_sleep_situation },
+              { label: "Consequences of not fixing this", value: applicationData.consequences },
+              { label: "Life if solved", value: applicationData.life_solved },
+              { label: "How found THP", value: applicationData.how_found_us },
+              { label: "Commitment level", value: applicationData.commitment_level ? `${applicationData.commitment_level}/10` : null },
+              { label: "Investment range", value: applicationData.investment_range },
+              { label: "Was referred", value: applicationData.was_referred },
+              { label: "Referred by", value: applicationData.referred_by },
+              { label: "Phone", value: applicationData.phone },
+              { label: "Instagram", value: applicationData.instagram },
+            ].filter(f => f.value && f.value !== "" && f.value !== "0").map(f => (
+              <div key={f.label} style={{ display: "flex", flexDirection: "column", gap: "0.2rem", padding: "0.5rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px" }}>
+                <p style={{ fontSize: "0.65rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{f.label}</p>
+                <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.5 }}>{String(f.value)}</p>
+              </div>
+            ))}
+            {Array.isArray(applicationData.symptom_severities) && (applicationData.symptom_severities as { symptom: string; severity: number }[]).length > 0 && (
+              <div style={{ padding: "0.5rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px" }}>
+                <p style={{ fontSize: "0.65rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Symptom severities</p>
+                {(applicationData.symptom_severities as { symptom: string; severity: number }[]).map(s => (
+                  <p key={s.symptom} style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.6 }}>{s.symptom}: <span style={{ color: s.severity >= 8 ? "var(--danger)" : s.severity >= 5 ? "oklch(0.75 0.14 65)" : "var(--dim)", fontWeight: 500 }}>{s.severity}/10</span></p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Tracker history — always visible */}
       <div id="crm-trackers">
@@ -2580,7 +2651,12 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
                 </div>
                 <div style={{ display: "flex", gap: "0.375rem", flexShrink: 0 }}>
                   {alarmClient && (
-                    <button onClick={() => onSelect(alarmClient)}
+                    <button onClick={() => {
+                      onSelect(alarmClient);
+                      if (a.type === 'new_application') {
+                        setTimeout(() => document.getElementById('crm-application')?.scrollIntoView({ behavior: 'smooth' }), 350);
+                      }
+                    }}
                       style={{ height: "28px", padding: "0 0.625rem", background: `${dotColor}18`, border: `1px solid ${dotColor}44`, borderRadius: "6px", color: dotColor, fontSize: "0.7rem", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap" }}>
                       View →
                     </button>
