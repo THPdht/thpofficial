@@ -908,10 +908,13 @@ function ProtocolTab({ user, protocol, notionPageId }: { user: StoredUser; proto
   if (stages.length === 0) {
     const protocolStatus = user.diagnosticData?.protocolStatus;
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", padding: "2rem" }}>
-        <p style={{ fontSize: "0.9375rem", color: "var(--dim)", fontWeight: 300, textAlign: "center", lineHeight: 1.6 }}>
-          {protocolStatus === "building" ? "Your protocol is being built." : protocolStatus === "updating" ? "Your protocol is being updated." : "Your protocol is being prepared. Check back soon."}
-        </p>
+      <div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
+          <p style={{ fontSize: "0.9375rem", color: "var(--dim)", fontWeight: 300, textAlign: "center", lineHeight: 1.6 }}>
+            {protocolStatus === "building" ? "Your protocol is being built." : protocolStatus === "updating" ? "Your protocol is being updated." : "Your protocol is being prepared. Check back soon."}
+          </p>
+        </div>
+        <ProtocolUploadSection user={user} />
       </div>
     );
   }
@@ -942,6 +945,7 @@ function ProtocolTab({ user, protocol, notionPageId }: { user: StoredUser; proto
           clientName={user.name}
         />
       )}
+      <ProtocolUploadSection user={user} />
     </div>
   );
 }
@@ -1288,9 +1292,6 @@ function BloodWorkTab({ user }: { user: StoredUser }) {
       <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, lineHeight: 1.6, marginTop: "1rem" }}>
         For reference only. This is not medical advice.
       </p>
-
-      {/* Protocol Upload Section */}
-      <ProtocolUploadSection user={user} />
     </div>
   );
 }
@@ -1301,9 +1302,10 @@ function ProtocolUploadSection({ user }: { user: StoredUser }) {
   const [uploading, setUploading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notionUrl, setNotionUrl] = useState('');
+  const [notionLoading, setNotionLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
-  // Check if user already uploaded a protocol (pdfImported flag)
   const alreadyImported = user.diagnosticData?.pdfImported === true;
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1322,50 +1324,89 @@ function ProtocolUploadSection({ user }: { user: StoredUser }) {
     if (e.target) e.target.value = '';
   };
 
+  const handleNotionImport = async () => {
+    if (!notionUrl.trim()) return;
+    setNotionLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/parse-protocol-notion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notionUrl: notionUrl.trim(), email: user.email }),
+      }).then(r => r.json());
+      if (res.error) { setError(res.error); } else { setDone(true); setNotionUrl(''); }
+    } catch { setError('Import failed. Please try again.'); }
+    setNotionLoading(false);
+  };
+
   return (
     <div style={{ marginTop: "2.5rem", paddingTop: "2rem", borderTop: "1px solid var(--border-subtle)" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem", marginBottom: "1.25rem" }}>
-        <div>
-          <h3 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.25rem", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.01em", marginBottom: "0.25rem" }}>Your Protocol</h3>
-          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300 }}>
-            {alreadyImported ? "Your protocol has been uploaded and is on file." : "Already have a THP protocol? Upload it so THP can build your next stage from it."}
-          </p>
-        </div>
-        {!done && !alreadyImported && (
-          <button
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-            style={{ height: "40px", padding: "0 1.25rem", background: "var(--surface)", color: "var(--ink)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "0.875rem", fontWeight: 500, cursor: uploading ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", display: "inline-flex", alignItems: "center", gap: "0.375rem", opacity: uploading ? 0.7 : 1 }}
-          >
-            {uploading ? <><Spinner /> Uploading…</> : "Upload protocol PDF"}
-          </button>
-        )}
-        <input ref={fileRef} type="file" accept=".pdf" style={{ display: "none" }} onChange={handleUpload} />
-      </div>
+      <h3 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.25rem", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.01em", marginBottom: "0.375rem" }}>Upload Your Protocol</h3>
+      <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, marginBottom: "1.25rem" }}>
+        {alreadyImported ? "Protocol on file. THP has full context for your next stage." : "Already have a THP protocol? Upload it so THP can build your next stage from it."}
+      </p>
 
-      {uploading && (
-        <div style={{ padding: "1rem 1.25rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <Spinner />
-          <p style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300 }}>Reading your protocol… this may take a minute.</p>
-        </div>
-      )}
       {done && (
-        <div style={{ padding: "1rem 1.25rem", background: "oklch(0.60 0.18 165 / 0.06)", border: "1px solid oklch(0.60 0.18 165 / 0.2)", borderRadius: "10px" }}>
+        <div style={{ padding: "1rem 1.25rem", background: "oklch(0.60 0.18 165 / 0.06)", border: "1px solid oklch(0.60 0.18 165 / 0.2)", borderRadius: "10px", marginBottom: "1rem" }}>
           <p style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 400 }}>Protocol uploaded. THP will use it to build your next stage.</p>
         </div>
       )}
-      {alreadyImported && !done && (
-        <div style={{ padding: "1rem 1.25rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
-          <p style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300 }}>Protocol on file. THP has full context for your next stage.</p>
-          <button
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-            style={{ height: "34px", padding: "0 1rem", background: "none", color: "var(--dim)", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}
-          >
-            Replace
-          </button>
+
+      {!done && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
+          {/* PDF upload */}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading || notionLoading}
+              style={{ height: "40px", padding: "0 1.25rem", background: "var(--surface)", color: "var(--ink)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "0.875rem", fontWeight: 500, cursor: (uploading || notionLoading) ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", display: "inline-flex", alignItems: "center", gap: "0.375rem", opacity: (uploading || notionLoading) ? 0.7 : 1 }}
+            >
+              {uploading ? <><Spinner /> Uploading…</> : "Upload PDF"}
+            </button>
+            <span style={{ fontSize: "0.75rem", color: "var(--dim)" }}>or paste a Notion link</span>
+          </div>
+
+          {/* Notion URL input */}
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <input
+              type="url"
+              placeholder="https://www.notion.so/your-protocol-page…"
+              value={notionUrl}
+              onChange={e => setNotionUrl(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleNotionImport(); }}
+              disabled={notionLoading || uploading}
+              style={{ flex: 1, height: "40px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", padding: "0 0.875rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", opacity: (notionLoading || uploading) ? 0.7 : 1 }}
+            />
+            <button
+              onClick={handleNotionImport}
+              disabled={notionLoading || uploading || !notionUrl.trim()}
+              style={{ height: "40px", padding: "0 1.125rem", background: notionUrl.trim() ? "var(--primary)" : "var(--surface)", color: notionUrl.trim() ? "#fff" : "var(--dim)", border: "1px solid var(--border)", borderRadius: "8px", fontSize: "0.875rem", fontWeight: 500, cursor: (notionLoading || uploading || !notionUrl.trim()) ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", display: "inline-flex", alignItems: "center", gap: "0.375rem", flexShrink: 0, opacity: (notionLoading || uploading) ? 0.7 : 1 }}
+            >
+              {notionLoading ? <><Spinner /> Importing…</> : "Import"}
+            </button>
+          </div>
+
+          {(uploading || notionLoading) && (
+            <div style={{ padding: "0.875rem 1.125rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+              <Spinner />
+              <p style={{ fontSize: "0.875rem", color: "var(--muted)", fontWeight: 300 }}>Reading your protocol… this may take a minute.</p>
+            </div>
+          )}
         </div>
       )}
+
+      {alreadyImported && !done && (
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          style={{ marginTop: "0.75rem", height: "34px", padding: "0 1rem", background: "none", color: "var(--dim)", border: "1px solid var(--border)", borderRadius: "6px", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}
+        >
+          Replace
+        </button>
+      )}
+
+      <input ref={fileRef} type="file" accept=".pdf" style={{ display: "none" }} onChange={handleUpload} />
+
       {error && (
         <p style={{ fontSize: "0.8125rem", color: "var(--color-red)", fontWeight: 300, marginTop: "0.75rem" }}>{error}</p>
       )}

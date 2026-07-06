@@ -255,36 +255,22 @@ export async function POST(req: Request) {
       .eq('user_email', clientEmail);
     const stage = (count ?? 0) + 1;
 
-    // Split: "What Is Actually Happening" is the permanent diagnostic section
-    // Everything else goes into the protocol (modifiable per stage)
-    const DIAGNOSTIC_HEADINGS = new Set(['WHAT IS ACTUALLY HAPPENING']);
-    const diagnosticSections = sections.filter(s => DIAGNOSTIC_HEADINGS.has(s.heading.toUpperCase()));
-    const protocolSections = sections.filter(s => !DIAGNOSTIC_HEADINGS.has(s.heading.toUpperCase()));
-
-    // Append the mandatory closing message to the protocol sections
+    // All 8 sections go into the protocol record (including "What Is Actually Happening")
+    // Speaking notes are stored inside the protocol content — shown in admin Protocol section only
+    const protocolSections = [...sections];
     protocolSections.push({ heading: 'Closing', text: CLOSING_MESSAGE });
 
-    const diagTitle = `${name} — Diagnosis Stage ${stage}`;
     const protTitle = `${name} — Protocol Stage ${stage}`;
     const title = protTitle;
 
-    // Save diagnostic as unpublished draft — THP must review and send manually from admin
-    // Include speaking notes (Phase 1 holdback intel) when present
-    const diagnosticContent: Record<string, unknown> = { sections: diagnosticSections };
-    if (speakingNotes) diagnosticContent.speaking_notes = speakingNotes;
-
-    await supabase.from('diagnostics').insert({
-      user_email: clientEmail,
-      stage,
-      title: diagTitle,
-      content: diagnosticContent,
-      published: false,
-    });
+    // Build protocol content — include speaking_notes when present (THP-only, never sent to client)
+    const protocolContent: Record<string, unknown> = { sections: protocolSections, todos };
+    if (speakingNotes) protocolContent.speaking_notes = speakingNotes;
 
     // Save protocol as draft (status='draft') — THP must send it manually from admin
     const { data: protocol, error: insertError } = await supabase
       .from('protocols')
-      .insert({ user_email: clientEmail, stage, title, content: { sections: protocolSections, todos }, status: 'draft' })
+      .insert({ user_email: clientEmail, stage, title, content: protocolContent, status: 'draft' })
       .select()
       .single();
     if (insertError) {

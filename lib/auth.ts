@@ -43,7 +43,7 @@ export type ClientProtocol = {
   stage: number;
   notionPageId?: string;
   title: string;
-  content?: { sections: { heading: string; text: string }[]; todos: string[] };
+  content?: { sections: { heading: string; text: string }[]; todos: string[]; speaking_notes?: Record<string, unknown> };
   createdAt: string;
   published?: boolean;
 };

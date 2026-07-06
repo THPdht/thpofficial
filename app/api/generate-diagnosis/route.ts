@@ -158,6 +158,14 @@ export async function POST(req: Request) {
       }).eq('email', clientEmail);
     }
 
+    // Auto-trigger protocol generation — fire and forget, don't block response
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://thpofficial.com';
+    fetch(`${appUrl}/api/generate-protocol`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientEmail, clientName: name, phase1Mode: stage === 1 }),
+    }).catch(e => console.error('[generate-diagnosis] protocol auto-gen failed:', e));
+
     return Response.json({ diagnosisId: diag.id, stage, title: diagTitle });
   } catch (err) {
     console.error('[generate-diagnosis]', err);
