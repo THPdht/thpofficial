@@ -62,6 +62,7 @@ export default function AdminPage() {
   const [selected, setSelected] = useState<StoredUser | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [diagnosticOpen, setDiagnosticOpen] = useState(false);
+  const [appOpen, setAppOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [adminView, setAdminView] = useState<'overview' | 'clients' | 'tools'>('overview');
   const [isMobile, setIsMobile] = useState(false);
@@ -443,6 +444,8 @@ export default function AdminPage() {
                   onBack={() => setSelected(null)}
                   diagnosticOpen={diagnosticOpen}
                   onToggleDiagnostic={() => setDiagnosticOpen(v => !v)}
+                  appOpen={appOpen}
+                  onToggleApp={() => setAppOpen(v => !v)}
                   onActivate={activateClient}
                   onSetStatus={setStatus}
                   onAssignProtocol={assignProtocol}
@@ -1349,11 +1352,13 @@ function PromoteButton({ client, onSetStatus, onClientTypeChange }: { client: St
 
 // ─── CRM PANEL (full-width when client selected) ──────────────────────────
 
-function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActivate, onSetStatus, onAssignProtocol, onProtocolGenerated, onProtocolStatusChange, onAccountStatusChange, onClientTypeChange, onRemoveClient, onSuspendClient, onAddPayment, onRemovePayment }: {
+function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen, onToggleApp, onActivate, onSetStatus, onAssignProtocol, onProtocolGenerated, onProtocolStatusChange, onAccountStatusChange, onClientTypeChange, onRemoveClient, onSuspendClient, onAddPayment, onRemovePayment }: {
   client: StoredUser;
   onBack: () => void;
   diagnosticOpen: boolean;
   onToggleDiagnostic: () => void;
+  appOpen: boolean;
+  onToggleApp: () => void;
   onActivate: (p?: ProtocolId) => void;
   onSetStatus: (s: ClientStatus) => void;
   onAssignProtocol: (p?: ProtocolId) => void;
@@ -1458,13 +1463,15 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
         }
       });
 
-    // Referral count (paid) + pending referrals list
-    supabase.from('referrals').select('id', { count: 'exact', head: true })
-      .eq('referrer_email', client.email).eq('status', 'paid')
-      .then(({ count }) => setReferralCount(count ?? 0));
-    supabase.from('referrals').select('id, referred_email, created_at')
-      .eq('referrer_email', client.email).eq('status', 'pending')
-      .then(({ data }) => setPendingReferrals(data ?? []));
+    // Referral count + pending list — use admin API to bypass RLS
+    fetch(`/api/admin/referrals?email=${encodeURIComponent(client.email)}&pw=${encodeURIComponent(ADMIN_PASSWORD)}`)
+      .then(r => r.json())
+      .then(d => {
+        const all = (d.referrals ?? []) as { id: string; referred_name: string; referred_email: string; status: string; submitted_at: string }[];
+        setReferralCount(all.filter(r => r.status === 'paid').length);
+        setPendingReferrals(all.filter(r => r.status === 'pending').map(r => ({ id: r.id, referred_email: r.referred_email || r.referred_name, created_at: r.submitted_at })));
+      })
+      .catch(() => {});
 
     // Private notes
     supabase.from('applicant_notes').select('notes').eq('user_email', client.email).maybeSingle()
@@ -2079,11 +2086,19 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
 
       {/* ── APPLICATION ANSWERS ── */}
       <div style={{ paddingTop: "1.25rem", borderTop: "1px solid var(--border)" }}>
-        <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "0.75rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Application answers</p>
-        {!applicationData ? (
-          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, fontStyle: "italic" }}>No application on file.</p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+        <button onClick={onToggleApp}
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", padding: "0.125rem 0 0.5rem", cursor: "pointer" }}>
+          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+            Application answers{!applicationData ? " — none on file" : ""}
+          </p>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: appOpen ? "rotate(180deg)" : "none", transition: "transform 200ms", color: "var(--dim)" }} aria-hidden>
+            <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        <AnimatePresence initial={false}>
+          {appOpen && applicationData && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }} style={{ overflow: "hidden" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "0.25rem" }}>
             {[
               { label: "Full name", value: applicationData.full_name },
               { label: "Gender", value: applicationData.gender },
@@ -2133,7 +2148,9 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, onActiva
               </div>
             )}
           </div>
-        )}
+          </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* ── INTAKE FORM ANSWERS ── */}

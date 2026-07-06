@@ -39,6 +39,15 @@ export async function POST(req: Request) {
       return Response.json({ error: error.message }, { status: 500 });
     }
 
+    // Alarm for admin feed
+    const referrerName = referrerEmail.split('@')[0];
+    supabaseAdmin.from('alarms').insert({
+      user_email: referrerEmail,
+      type: 'new_referral',
+      message: `${referrerName} referred ${referredName} (${referredEmail.toLowerCase().trim()})`,
+      created_at: new Date().toISOString(),
+    }).then(({ error: ae }) => { if (ae) console.error('[referrals] alarm:', ae); });
+
     return Response.json({ success: true });
   } catch (err) {
     console.error('[referrals]', err);
