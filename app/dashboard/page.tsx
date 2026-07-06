@@ -872,8 +872,8 @@ function DiagnosisTab({ user }: { user: StoredUser }) {
 
 function ProtocolTab({ user, protocol, notionPageId }: { user: StoredUser; protocol: Protocol | null; notionPageId?: string }) {
   const [stages, setStages] = useState<ClientProtocol[]>([]);
-  const [activeStage, setActiveStage] = useState<ClientProtocol | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showPrevious, setShowPrevious] = useState(false);
 
   useEffect(() => {
     fetch(`/api/protocols?email=${encodeURIComponent(user.email)}`)
@@ -888,10 +888,9 @@ function ProtocolTab({ user, protocol, notionPageId }: { user: StoredUser; proto
           content: row.content ?? undefined,
           createdAt: row.created_at,
         }));
-        if (protocols.length > 0) {
-          setStages(protocols);
-          setActiveStage(protocols[protocols.length - 1]);
-        }
+        // Sort descending so most recent is first
+        protocols.sort((a, b) => (b.stage ?? 0) - (a.stage ?? 0));
+        setStages(protocols);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -919,32 +918,55 @@ function ProtocolTab({ user, protocol, notionPageId }: { user: StoredUser; proto
     );
   }
 
+  const latest = stages[0];
+  const previous = stages.slice(1);
+
   return (
     <div>
-      {stages.length > 1 && (
-        <div style={{ display: "flex", gap: "0.375rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
-          {stages.map(s => (
-            <button key={s.id} onClick={() => setActiveStage(s)} style={{
-              height: "28px", padding: "0 0.875rem", borderRadius: "99px", border: "1px solid",
-              borderColor: activeStage?.id === s.id ? "var(--primary)" : "var(--border-subtle)",
-              background: activeStage?.id === s.id ? "oklch(0.60 0.18 165 / 0.12)" : "none",
-              color: activeStage?.id === s.id ? "var(--primary)" : "var(--dim)",
-              fontSize: "0.75rem", fontWeight: activeStage?.id === s.id ? 500 : 400,
-              cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "all 150ms",
-            }}>Stage {s.stage}</button>
-          ))}
-        </div>
-      )}
-      {activeStage?.content?.sections && (
+      {/* Most recent protocol — always visible */}
+      {latest?.content?.sections && (
         <ProtocolDocumentComponent
-          title={activeStage.title}
-          stage={activeStage.stage}
-          sections={activeStage.content.sections}
-          todos={activeStage.content.todos ?? []}
-          createdAt={activeStage.createdAt}
+          title={latest.title}
+          stage={latest.stage}
+          sections={latest.content.sections}
+          todos={latest.content.todos ?? []}
+          createdAt={latest.createdAt}
           clientName={user.name}
         />
       )}
+
+      {/* Previous protocols — behind expand button */}
+      {previous.length > 0 && (
+        <div style={{ marginTop: "2rem" }}>
+          <button
+            onClick={() => setShowPrevious(v => !v)}
+            style={{ display: "flex", alignItems: "center", gap: "0.5rem", background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--dim)", fontSize: "0.8125rem", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 400 }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              style={{ transform: showPrevious ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 200ms" }}>
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+            {showPrevious ? "Hide previous protocols" : `Show previous protocols (${previous.length})`}
+          </button>
+
+          {showPrevious && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "2rem", marginTop: "1.5rem" }}>
+              {previous.map(s => s.content?.sections && (
+                <ProtocolDocumentComponent
+                  key={s.id}
+                  title={s.title}
+                  stage={s.stage}
+                  sections={s.content.sections}
+                  todos={s.content.todos ?? []}
+                  createdAt={s.createdAt}
+                  clientName={user.name}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <ProtocolUploadSection user={user} />
     </div>
   );
