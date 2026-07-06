@@ -129,9 +129,9 @@ export function Hero() {
       {/* ────────────────────────────────────────────────
           TEXT LAYER — above everything (z-[3])
       ──────────────────────────────────────────────── */}
-      <div className="absolute inset-0 z-[3] flex items-end">
+      <div className="absolute inset-0 z-[3] flex items-start">
         {/* Width constrained on desktop so text doesn't go over images */}
-        <div className="w-full lg:w-[50%] px-6 pb-12 sm:px-8 md:pb-16 lg:px-12 lg:pb-20">
+        <div className="w-full lg:w-[50%] px-6 pt-24 pb-12 sm:px-8 md:pt-28 md:pb-16 lg:px-12 lg:pb-20">
 
           <p className="font-mono uppercase tracking-[0.32em] mb-4" style={{ fontSize: "10px", color: "#c9a24b" }}>
             Testosterone Protocol
