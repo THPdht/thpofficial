@@ -162,7 +162,18 @@ export async function POST(req: Request) {
     if (!client) return Response.json({ error: 'Client not found' }, { status: 404 });
 
     // Fetch Notion page blocks
-    const blocks = await fetchAllBlocks(pageId, notionToken);
+    let blocks;
+    try {
+      blocks = await fetchAllBlocks(pageId, notionToken);
+    } catch (notionErr) {
+      const msg = notionErr instanceof Error ? notionErr.message : '';
+      if (msg.includes('404')) {
+        return Response.json({
+          error: 'This Notion page isn\'t accessible. In Notion, open the page, click Share, and add the "THP Intake Automation" integration. Then try again.',
+        }, { status: 400 });
+      }
+      throw notionErr;
+    }
     const pageText = blocks.map(blockToText).filter(Boolean).join('\n');
 
     if (!pageText.trim()) {

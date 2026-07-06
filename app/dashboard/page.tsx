@@ -1367,6 +1367,9 @@ function ProtocolUploadSection({ user }: { user: StoredUser }) {
           </div>
 
           {/* Notion URL input */}
+          <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, marginTop: "-0.25rem" }}>
+            Before importing: open the Notion page, click <strong style={{ fontWeight: 500, color: "var(--muted)" }}>Share</strong>, and add <strong style={{ fontWeight: 500, color: "var(--muted)" }}>THP Intake Automation</strong> as a connection.
+          </p>
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <input
               type="url"
