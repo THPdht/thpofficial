@@ -200,13 +200,14 @@ export function signOut(): void {
 export async function register(
   name: string,
   email: string,
-  password: string
+  password: string,
+  extras?: { phone?: string; referredBy?: string }
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ name, email, password, ...extras }),
     });
     const json = await res.json();
     if (!res.ok || json.error) return { success: false, error: json.error || 'Could not create account. Please try again.' };

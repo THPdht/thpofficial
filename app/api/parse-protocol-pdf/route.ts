@@ -128,46 +128,25 @@ export async function POST(req: Request) {
     const sections: { heading: string; text: string }[] = parsed.sections ?? [];
     const todos: string[] = parsed.todos ?? [];
 
-    // Count existing protocols for stage number
-    const { count } = await supabaseAdmin
-      .from('protocols')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_email', email);
-    const stage = (count ?? 0) + 1;
-
-    const name = client.name ?? email;
-    const diagTitle = `${name} — Diagnosis Stage ${stage} (PDF Import)`;
-    const protTitle = `${name} — Protocol Stage ${stage} (PDF Import)`;
-
-    const diagnosticSections = sections.filter(s => DIAGNOSTIC_HEADINGS.has(s.heading.toUpperCase()));
-    const protocolSections = sections.filter(s => !DIAGNOSTIC_HEADINGS.has(s.heading.toUpperCase()));
-
-    // Insert diagnostic as unpublished draft — THP must send manually from admin
-    await supabaseAdmin.from('diagnostics').insert({
-      user_email: email,
-      stage,
-      title: diagTitle,
-      content: { sections: diagnosticSections },
-      pdf_url: pdfUrl,
-      published: false,
-    });
-
-    // Insert into protocols table
-    await supabaseAdmin.from('protocols').insert({
-      user_email: email,
-      stage,
-      title: protTitle,
-      content: { sections: protocolSections, todos },
-    });
-
-    // Set user status to active
+    // Save imported content as reference only — do NOT create protocol or diagnostic rows
     const existingDiag = client.diagnostic_data || {};
     await supabaseAdmin.from('users').update({
-      status: 'active',
-      diagnostic_data: { ...existingDiag, protocolStatus: 'active', pdfImported: true },
+      diagnostic_data: {
+        ...existingDiag,
+        importedProtocol: { source: 'pdf', pdfUrl, sections, todos, importedAt: new Date().toISOString() },
+      },
     }).eq('email', email);
 
-    return Response.json({ success: true, stage, pdfUrl });
+    // Alarm for admin feed
+    const clientName = client.name ?? email.split('@')[0];
+    supabaseAdmin.from('alarms').insert({
+      user_email: email,
+      type: 'protocol_imported',
+      message: `${clientName} imported their protocol (PDF)`,
+      created_at: new Date().toISOString(),
+    }).then(({ error: ae }) => { if (ae) console.error('[parse-protocol-pdf] alarm:', ae); });
+
+    return Response.json({ success: true, pdfUrl });
   } catch (err) {
     console.error('[parse-protocol-pdf]', err);
     return Response.json({ error: 'Failed to parse PDF' }, { status: 500 });

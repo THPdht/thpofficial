@@ -259,11 +259,16 @@ export default function ApplyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
-  // Load saved draft on mount
+  // Load saved draft on mount; also pre-fill referral if arriving via referral link
   useEffect(() => {
     try {
       const draft = localStorage.getItem('thp_apply_draft');
-      if (draft) setForm(JSON.parse(draft));
+      if (draft) {
+        setForm(JSON.parse(draft));
+      } else {
+        const ref = localStorage.getItem('thp_ref');
+        if (ref) setForm(f => ({ ...f, wasReferred: 'Yes', referredBy: ref }));
+      }
     } catch {}
   }, []);
 
@@ -337,7 +342,10 @@ export default function ApplyPage() {
     setSubmitting(true);
 
     // Create user account
-    const accountResult = await register(form.fullName.trim(), form.email.trim(), form.password);
+    const accountResult = await register(form.fullName.trim(), form.email.trim(), form.password, {
+      phone: form.phone.trim() || undefined,
+      referredBy: form.referredBy.trim() || undefined,
+    });
     if (!accountResult.success) {
       setErrors([accountResult.error ?? "Could not create account. This email may already be registered."]);
       setSubmitting(false);
@@ -419,6 +427,7 @@ export default function ApplyPage() {
     await login(form.email.trim().toLowerCase(), form.password).catch(() => {});
 
     localStorage.removeItem('thp_apply_draft');
+    localStorage.removeItem('thp_ref');
     setSubmitting(false);
     setDone(true);
   }

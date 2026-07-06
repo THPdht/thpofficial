@@ -279,40 +279,25 @@ export async function POST(req: Request) {
     const sections = parsed.sections ?? [];
     const todos: string[] = parsed.todos ?? [];
 
-    // Count existing protocols for stage number
-    const { count } = await supabaseAdmin
-      .from('protocols')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_email', email);
-    const stage = (count ?? 0) + 1;
-
-    const name = client.name ?? email;
-    const diagTitle = `${name} — Diagnosis (Notion Import)`;
-    const protTitle = `${name} — Protocol Stage ${stage} (Notion Import)`;
-
-    const diagnosticSections = sections.filter(s => DIAGNOSTIC_HEADINGS.has(s.heading.toUpperCase()));
-    const protocolSections = sections.filter(s => !DIAGNOSTIC_HEADINGS.has(s.heading.toUpperCase()));
-
-    // Upsert diagnosis (singular — overwrites if already exists)
-    await supabaseAdmin.from('diagnostics').upsert(
-      { user_email: email, stage: 1, title: diagTitle, content: { sections: diagnosticSections }, published: false },
-      { onConflict: 'user_email' }
-    );
-
-    await supabaseAdmin.from('protocols').insert({
-      user_email: email,
-      stage,
-      title: protTitle,
-      content: { sections: protocolSections, todos },
-    });
-
+    // Save imported content as reference only — do NOT create protocol or diagnostic rows
     const existingDiag = client.diagnostic_data || {};
     await supabaseAdmin.from('users').update({
-      status: 'active',
-      diagnostic_data: { ...existingDiag, protocolStatus: 'active', pdfImported: true },
+      diagnostic_data: {
+        ...existingDiag,
+        importedProtocol: { source: 'notion', notionUrl, sections, todos, importedAt: new Date().toISOString() },
+      },
     }).eq('email', email);
 
-    return Response.json({ success: true, stage });
+    // Alarm for admin feed
+    const clientName = client.name ?? email.split('@')[0];
+    supabaseAdmin.from('alarms').insert({
+      user_email: email,
+      type: 'protocol_imported',
+      message: `${clientName} imported their protocol (Notion)`,
+      created_at: new Date().toISOString(),
+    }).then(({ error: ae }) => { if (ae) console.error('[parse-protocol-notion] alarm:', ae); });
+
+    return Response.json({ success: true });
   } catch (err) {
     console.error('[parse-protocol-notion]', err);
     const msg = err instanceof Error ? err.message : 'Failed to import Notion page';

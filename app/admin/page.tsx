@@ -264,6 +264,18 @@ export default function AdminPage() {
     const updated = { ...selected, diagnosticData: updatedDiag };
     setSelected(updated);
     await refreshClients();
+    // Fire payment_recorded alarm
+    const clientName = selected.name && !selected.name.includes('undefined') ? selected.name : selected.email.split('@')[0];
+    const amountStr = payment.amount ? ` — $${payment.amount}` : '';
+    fetch('/api/alarms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_email: selected.email,
+        type: 'payment_recorded',
+        message: `Payment recorded for ${clientName}${amountStr}`,
+      }),
+    }).catch(() => {});
   }
 
   async function handleRemovePayment(paymentId: string) {
@@ -2643,7 +2655,10 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
               diagnosis_ready: 'oklch(0.78 0.18 55)',
               protocol_ready: 'oklch(0.72 0.22 25)',
               blood_work_uploaded: 'oklch(0.72 0.16 320)',
+              protocol_imported: 'oklch(0.72 0.16 280)',
               payment: 'oklch(0.72 0.18 145)',
+              payment_recorded: 'oklch(0.72 0.18 145)',
+              new_referral: 'oklch(0.75 0.20 50)',
               referral_milestone: 'oklch(0.75 0.14 300)',
             };
             const dotColor = typeColors[a.type] ?? 'oklch(0.75 0.12 65)';
@@ -2657,6 +2672,17 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
                   </p>
                 </div>
                 <div style={{ display: "flex", gap: "0.375rem", flexShrink: 0 }}>
+                  {a.type === 'new_referral' && (() => {
+                    const phoneMatch = a.message.match(/phone:\s*([^\s]+)/);
+                    const phone = phoneMatch?.[1];
+                    if (!phone) return null;
+                    return (
+                      <button onClick={() => { navigator.clipboard.writeText(phone).catch(() => {}); }}
+                        style={{ height: "28px", padding: "0 0.625rem", background: `${dotColor}18`, border: `1px solid ${dotColor}44`, borderRadius: "6px", color: dotColor, fontSize: "0.7rem", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap" }}>
+                        Copy {phone}
+                      </button>
+                    );
+                  })()}
                   {alarmClient && (
                     <button onClick={() => {
                       onSelect(alarmClient);

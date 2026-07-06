@@ -6,13 +6,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
-const DIAGNOSTIC_HEADINGS = new Set([
-  'WHERE YOU ARE RIGHT NOW',
-  'ROOT PROBLEM',
-  'WHY IT IS HAPPENING',
-  'WHY PREVIOUS ATTEMPTS FAILED',
-]);
-
 const EXTRACT_PROMPT = `You are reading screenshots of a THP (The Hormone Prophet) coaching protocol. Extract all content and restructure it into this exact JSON format:
 
 {
@@ -108,38 +101,25 @@ export async function POST(req: Request) {
     const sections = parsed.sections ?? [];
     const todos: string[] = parsed.todos ?? [];
 
-    const { count } = await supabaseAdmin
-      .from('protocols')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_email', email);
-    const stage = (count ?? 0) + 1;
-
-    const name = client.name ?? email;
-    const diagTitle = `${name} — Diagnosis (Screenshot Import)`;
-    const protTitle = `${name} — Protocol Stage ${stage} (Screenshot Import)`;
-
-    const diagnosticSections = sections.filter(s => DIAGNOSTIC_HEADINGS.has(s.heading.toUpperCase()));
-    const protocolSections = sections.filter(s => !DIAGNOSTIC_HEADINGS.has(s.heading.toUpperCase()));
-
-    await supabaseAdmin.from('diagnostics').upsert(
-      { user_email: email, stage: 1, title: diagTitle, content: { sections: diagnosticSections }, published: false },
-      { onConflict: 'user_email' }
-    );
-
-    await supabaseAdmin.from('protocols').insert({
-      user_email: email,
-      stage,
-      title: protTitle,
-      content: { sections: protocolSections, todos },
-    });
-
+    // Save imported content as reference only — do NOT create protocol or diagnostic rows
     const existingDiag = client.diagnostic_data || {};
     await supabaseAdmin.from('users').update({
-      status: 'active',
-      diagnostic_data: { ...existingDiag, protocolStatus: 'active', pdfImported: true },
+      diagnostic_data: {
+        ...existingDiag,
+        importedProtocol: { source: 'screenshots', sections, todos, importedAt: new Date().toISOString() },
+      },
     }).eq('email', email);
 
-    return Response.json({ success: true, stage });
+    // Alarm for admin feed
+    const clientName = client.name ?? email.split('@')[0];
+    supabaseAdmin.from('alarms').insert({
+      user_email: email,
+      type: 'protocol_imported',
+      message: `${clientName} imported their protocol (screenshots)`,
+      created_at: new Date().toISOString(),
+    }).then(({ error: ae }) => { if (ae) console.error('[parse-protocol-screenshots] alarm:', ae); });
+
+    return Response.json({ success: true });
   } catch (err) {
     console.error('[parse-protocol-screenshots]', err);
     const msg = err instanceof Error ? err.message : 'Failed to process screenshots';
