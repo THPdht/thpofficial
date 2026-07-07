@@ -51,11 +51,6 @@ export function Coaching() {
               It won&apos;t. This is the last thing you&apos;ll need to try.
             </p>
 
-            <p className="mt-8 flex items-baseline gap-2 flex-wrap">
-              <span className="font-body font-extrabold text-white tracking-tight" style={{ fontSize: "clamp(2.5rem, 10vw, 4rem)" }}>$2,000</span>
-              <span className="font-mono text-base text-white/50">/month</span>
-            </p>
-
             <a
               href={ctaHref}
               {...(ctaExternal
