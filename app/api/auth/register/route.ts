@@ -53,5 +53,12 @@ export async function POST(req: Request) {
     }).then(({ error: re }) => { if (re) console.error('[register] referral alarm:', re); });
   }
 
+  // Create Supabase Auth account so RLS policies can identify this user
+  await supabaseAdmin.auth.admin.createUser({
+    email: norm,
+    password,
+    email_confirm: true,
+  });
+
   return Response.json({ success: true });
 }

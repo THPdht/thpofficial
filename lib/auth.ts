@@ -1,5 +1,22 @@
 import { supabase } from './supabase';
 
+// ─── Admin context ─────────────────────────────────────────────────────────
+// Call initAdmin(password) once when admin logs in. All admin functions below
+// will then route through the service-role API instead of the anon client.
+let _adminPw = '';
+export function initAdmin(pw: string) { _adminPw = pw; }
+
+function adminFetch(url: string, opts?: RequestInit): Promise<Response> {
+  return fetch(url, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-password': _adminPw,
+      ...(opts?.headers ?? {}),
+    },
+  });
+}
+
 export type ClientStatus = 'new' | 'pending' | 'active' | 'alumni' | 'inactive';
 
 export type AttachmentType = 'image' | 'video' | 'audio' | 'file';
@@ -174,12 +191,10 @@ export function rowToUser(row: any): StoredUser {
 // ─── User queries ──────────────────────────────────────────────────────────
 
 export async function getAllUsers(): Promise<StoredUser[]> {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .order('joined_at', { ascending: false });
-  if (error || !data) return [];
-  return data.map(rowToUser);
+  const res = await adminFetch('/api/admin/users');
+  if (!res.ok) return [];
+  const { users } = await res.json();
+  return (users ?? []).map(rowToUser);
 }
 
 export function getCurrentUser(): StoredUser | null {
@@ -246,7 +261,16 @@ export async function updateUser(email: string, updates: Partial<StoredUser>): P
   if (updates.lastCheckIn !== undefined) dbUpdates.last_check_in = updates.lastCheckIn;
   if (updates.diagnosticData !== undefined) dbUpdates.diagnostic_data = updates.diagnosticData;
 
-  await supabase.from('users').update(dbUpdates).eq('email', email);
+  if (_adminPw) {
+    // Admin context: route through service-role API so RLS is bypassed
+    await adminFetch('/api/admin/users', {
+      method: 'PATCH',
+      body: JSON.stringify({ email, fields: dbUpdates }),
+    });
+  } else {
+    // Client context: update own row via anon client (RLS enforces email = auth.email())
+    await supabase.from('users').update(dbUpdates).eq('email', email);
+  }
 
   if (typeof window !== 'undefined') {
     const raw = localStorage.getItem(`thp_user_${email}`);
@@ -262,71 +286,70 @@ export async function submitDiagnostic(email: string, data: DiagnosticData): Pro
 }
 
 export async function linkNotionPage(email: string, notionPageId: string): Promise<void> {
-  const { data } = await supabase.from('users').select('diagnostic_data').eq('email', email).maybeSingle();
-  const diag = data?.diagnostic_data || {};
-  await supabase.from('users').update({ diagnostic_data: { ...diag, notionPageId, protocolStatus: 'active' } }).eq('email', email);
+  await adminFetch('/api/admin/users', {
+    method: 'PATCH',
+    body: JSON.stringify({ email, diagnostic_merge: { notionPageId, protocolStatus: 'active' } }),
+  });
 }
 
 export async function setProtocolStatus(email: string, status: ProtocolStatus): Promise<void> {
-  const { data } = await supabase.from('users').select('diagnostic_data').eq('email', email).maybeSingle();
-  const diag = data?.diagnostic_data || {};
-  await supabase.from('users').update({ diagnostic_data: { ...diag, protocolStatus: status } }).eq('email', email);
+  await adminFetch('/api/admin/users', {
+    method: 'PATCH',
+    body: JSON.stringify({ email, diagnostic_merge: { protocolStatus: status } }),
+  });
 }
 
 export async function setAccountStatus(email: string, status: AccountStatus): Promise<void> {
-  const { data } = await supabase.from('users').select('diagnostic_data').eq('email', email).maybeSingle();
-  const diag = data?.diagnostic_data || {};
-  await supabase.from('users').update({ diagnostic_data: { ...diag, accountStatus: status } }).eq('email', email);
+  await adminFetch('/api/admin/users', {
+    method: 'PATCH',
+    body: JSON.stringify({ email, diagnostic_merge: { accountStatus: status } }),
+  });
 }
 
 export async function setClientType(email: string, clientType: 'skool' | '1on1'): Promise<void> {
-  const { data } = await supabase.from('users').select('diagnostic_data').eq('email', email).maybeSingle();
-  const diag = data?.diagnostic_data || {};
-  await supabase.from('users').update({ diagnostic_data: { ...diag, clientType } }).eq('email', email);
+  await adminFetch('/api/admin/users', {
+    method: 'PATCH',
+    body: JSON.stringify({ email, diagnostic_merge: { clientType } }),
+  });
 }
 
 export async function addPayment(email: string, payment: Omit<Payment, 'id'>): Promise<void> {
-  const { data } = await supabase.from('users').select('diagnostic_data').eq('email', email).maybeSingle();
-  const diag = data?.diagnostic_data || {};
-  const payments: Payment[] = diag.payments ?? [];
-  payments.push({ ...payment, id: Date.now().toString() });
-  await supabase.from('users').update({ diagnostic_data: { ...diag, payments } }).eq('email', email);
+  await adminFetch('/api/admin/users', {
+    method: 'PATCH',
+    body: JSON.stringify({ email, payment_add: payment }),
+  });
 }
 
 export async function removePayment(email: string, paymentId: string): Promise<void> {
-  const { data } = await supabase.from('users').select('diagnostic_data').eq('email', email).maybeSingle();
-  const diag = data?.diagnostic_data || {};
-  const payments = (diag.payments ?? []).filter((p: Payment) => p.id !== paymentId);
-  await supabase.from('users').update({ diagnostic_data: { ...diag, payments } }).eq('email', email);
+  await adminFetch('/api/admin/users', {
+    method: 'PATCH',
+    body: JSON.stringify({ email, payment_remove: { paymentId } }),
+  });
 }
 
 // ─── Presence ─────────────────────────────────────────────────────────────────
 
 export async function updatePresence(id: string): Promise<void> {
-  await supabase.from('presence').upsert({ id, last_seen: new Date().toISOString() });
+  await supabase.from('presence').upsert({ email: id, last_seen: new Date().toISOString() });
 }
 
 export async function isAdminActive(): Promise<boolean> {
-  const { data } = await supabase.from('presence').select('last_seen').eq('id', 'admin').maybeSingle();
+  const { data } = await supabase.from('presence').select('last_seen').eq('email', 'admin').maybeSingle();
   if (!data) return false;
   return Date.now() - new Date(data.last_seen).getTime() < 3 * 60 * 1000;
 }
 
 export async function isClientActive(email: string): Promise<boolean> {
-  const { data } = await supabase.from('presence').select('last_seen').eq('id', email).maybeSingle();
+  const { data } = await supabase.from('presence').select('last_seen').eq('email', email).maybeSingle();
   if (!data) return false;
   return Date.now() - new Date(data.last_seen).getTime() < 4 * 60 * 1000;
 }
 
 export async function removeClient(email: string): Promise<void> {
-  await supabase.from('diagnostics').delete().eq('user_email', email);
-  await supabase.from('messages').delete().eq('user_email', email);
-  await supabase.from('push_subscriptions').delete().eq('user_email', email);
-  await supabase.from('tracker_responses').delete().eq('user_email', email);
-  await supabase.from('tracker_questions').delete().eq('user_email', email);
-  await supabase.from('protocols').delete().eq('user_email', email);
-  await supabase.from('invites').delete().eq('email', email);
-  await supabase.from('users').delete().eq('email', email);
+  await adminFetch('/api/admin/users', {
+    method: 'DELETE',
+    body: JSON.stringify({ email }),
+  });
 }
 
 // Used by client dashboard — only shows sent protocols
@@ -396,14 +419,11 @@ export async function getClientDiagnostics(email: string): Promise<ClientDiagnos
 
 // Used by admin — returns ALL diagnostics including unpublished drafts
 export async function getAdminDiagnostics(email: string): Promise<ClientDiagnostic[]> {
-  const { data, error } = await supabase
-    .from('diagnostics')
-    .select('*')
-    .eq('user_email', email)
-    .order('stage', { ascending: true });
-  if (error || !data) return [];
+  const res = await adminFetch(`/api/admin/diagnostics?email=${encodeURIComponent(email)}`);
+  if (!res.ok) return [];
+  const { diagnostics } = await res.json();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return data.map((row: any) => ({
+  return (diagnostics ?? []).map((row: any) => ({
     id: row.id,
     userEmail: row.user_email,
     stage: row.stage,
@@ -416,15 +436,20 @@ export async function getAdminDiagnostics(email: string): Promise<ClientDiagnost
 }
 
 export async function publishDiagnosis(diagId: string): Promise<void> {
-  await supabase.from('diagnostics').update({ published: true }).eq('id', diagId);
+  await adminFetch('/api/admin/diagnostics', {
+    method: 'PATCH',
+    body: JSON.stringify({ diagId }),
+  });
 }
 
 export async function setSuspended(email: string, suspended: boolean): Promise<void> {
-  const { data } = await supabase.from('users').select('diagnostic_data').eq('email', email).maybeSingle();
-  const diag = data?.diagnostic_data || {};
-  await supabase.from('users').update({
-    diagnostic_data: { ...diag, suspended, suspendedAt: suspended ? new Date().toISOString() : undefined },
-  }).eq('email', email);
+  await adminFetch('/api/admin/users', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      email,
+      diagnostic_merge: { suspended, suspendedAt: suspended ? new Date().toISOString() : undefined },
+    }),
+  });
 }
 
 export async function createClient(
@@ -432,19 +457,12 @@ export async function createClient(
   email: string,
   password: string
 ): Promise<{ success: boolean; error?: string }> {
-  const norm = email.toLowerCase().trim();
-  const { data: existing } = await supabase.from('users').select('email').eq('email', norm).maybeSingle();
-  if (existing) return { success: false, error: 'An account with this email already exists.' };
-  const { error } = await supabase.from('users').insert({
-    name: name.trim(),
-    email: norm,
-    password,
-    status: 'new',
-    streak: 0,
-    longest_streak: 0,
-    joined_at: new Date().toISOString().split('T')[0],
+  const res = await adminFetch('/api/admin/users', {
+    method: 'POST',
+    body: JSON.stringify({ name, email, password }),
   });
-  if (error) return { success: false, error: 'Could not create account.' };
+  const json = await res.json();
+  if (!res.ok) return { success: false, error: json.error || 'Could not create account.' };
   return { success: true };
 }
 

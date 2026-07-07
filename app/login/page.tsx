@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { login } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 
 function LoginForm() {
   const router = useRouter();
@@ -38,6 +39,8 @@ function LoginForm() {
       setLoading(false);
       return;
     }
+    // Activate Supabase Auth session so RLS policies can identify this user
+    await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
     const user = result.user!;
     if (user.status === "inactive") {
       setError(`Your access with THP has been removed. For questions contact ${process.env.NEXT_PUBLIC_CONTACT_EMAIL || "info.shopzul@gmail.com"}`);
