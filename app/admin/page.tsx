@@ -1438,7 +1438,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
   // Protocol generation state
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
-  const [protocolFormatOverride, setProtocolFormatOverride] = useState<'hormonal' | 'behavioral' | null>(null);
   const [clientProtocols, setClientProtocols] = useState<ClientProtocol[]>([]);
   const [trackerSummary, setTrackerSummary] = useState<{
     trends: { category: string; avgScore: number; direction: string; delta: number }[];
@@ -1622,7 +1621,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
   }
 
   function getEffectiveProtocolFormat(): 'hormonal' | 'behavioral' {
-    if (protocolFormatOverride) return protocolFormatOverride;
     if (client.clientType === 'psychological') return 'behavioral';
     return 'hormonal';
   }
@@ -1773,6 +1771,28 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
       </div>
 
 
+
+      {/* Coaching Type — set after booking call, before sending intake */}
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.5rem" }}>
+        <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "var(--font-mono), monospace", whiteSpace: "nowrap" }}>Coaching Type</p>
+        <div style={{ display: "flex", gap: "0.375rem", flex: 1 }}>
+          {(['hormonal', 'psychological', 'both'] as const).map(t => {
+            const active = client.clientType === t;
+            const colors: Record<string, { border: string; bg: string; text: string }> = {
+              hormonal:     { border: "oklch(0.72 0.14 145 / 0.5)", bg: "oklch(0.72 0.14 145 / 0.1)", text: "oklch(0.72 0.14 145)" },
+              psychological:{ border: "oklch(0.72 0.15 260 / 0.5)", bg: "oklch(0.72 0.15 260 / 0.1)", text: "oklch(0.72 0.15 260)" },
+              both:         { border: "oklch(0.72 0.14 65 / 0.5)",  bg: "oklch(0.72 0.14 65 / 0.1)",  text: "oklch(0.75 0.12 65)" },
+            };
+            const c = colors[t];
+            return (
+              <button key={t} onClick={() => onCoachingTypeChange(t)}
+                style={{ flex: 1, height: "28px", borderRadius: "6px", border: "1px solid", borderColor: active ? c.border : "var(--border-subtle)", background: active ? c.bg : "none", color: active ? c.text : "var(--dim)", fontSize: "0.7rem", fontWeight: active ? 600 : 400, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "all 150ms", textTransform: "capitalize" }}>
+                {t}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Payments */}
       <div style={{ marginBottom: "1.5rem" }}>
@@ -2010,45 +2030,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
             </div>
             );
           })}
-        </div>
-
-        {/* Coaching type + protocol format */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
-          <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Coaching Type</p>
-          <div style={{ display: "flex", gap: "0.375rem" }}>
-            {(['hormonal', 'psychological', 'both'] as const).map(t => {
-              const active = client.clientType === t;
-              const colors: Record<string, { border: string; bg: string; text: string }> = {
-                hormonal: { border: "oklch(0.72 0.14 145 / 0.5)", bg: "oklch(0.72 0.14 145 / 0.1)", text: "oklch(0.72 0.14 145)" },
-                psychological: { border: "oklch(0.72 0.15 260 / 0.5)", bg: "oklch(0.72 0.15 260 / 0.1)", text: "oklch(0.72 0.15 260)" },
-                both: { border: "oklch(0.72 0.14 65 / 0.5)", bg: "oklch(0.72 0.14 65 / 0.1)", text: "oklch(0.75 0.12 65)" },
-              };
-              const c = colors[t];
-              return (
-                <button key={t} onClick={() => onCoachingTypeChange(t)}
-                  style={{ flex: 1, height: "30px", borderRadius: "6px", border: "1px solid", borderColor: active ? c.border : "var(--border-subtle)", background: active ? c.bg : "none", color: active ? c.text : "var(--dim)", fontSize: "0.7rem", fontWeight: active ? 600 : 400, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "all 150ms", textTransform: "capitalize" }}>
-                  {t}
-                </button>
-              );
-            })}
-          </div>
-          {/* Format override — only shown when type is 'both' or unset */}
-          {(!client.clientType || client.clientType === 'both') && (
-            <div>
-              <p style={{ fontSize: "0.65rem", color: "var(--dim)", marginBottom: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Generate as:</p>
-              <div style={{ display: "flex", gap: "0.375rem" }}>
-                {(['hormonal', 'behavioral'] as const).map(f => {
-                  const active = (protocolFormatOverride ?? 'hormonal') === f;
-                  return (
-                    <button key={f} onClick={() => setProtocolFormatOverride(f)}
-                      style={{ flex: 1, height: "28px", borderRadius: "6px", border: "1px solid", borderColor: active ? "oklch(0.60 0.18 165 / 0.5)" : "var(--border-subtle)", background: active ? "oklch(0.60 0.18 165 / 0.1)" : "none", color: active ? "var(--primary)" : "var(--dim)", fontSize: "0.7rem", fontWeight: active ? 600 : 400, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "all 150ms", textTransform: "capitalize" }}>
-                      {f}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Protocol — view draft + send to client */}
