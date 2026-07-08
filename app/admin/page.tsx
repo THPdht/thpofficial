@@ -1743,22 +1743,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
               <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Referrals</p>
               <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{allReferrals.length} / 3</p>
             </div>
-            {(() => {
-              const refCode = btoa(client.email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase();
-              const refUrl = `https://thpofficial.com/referral?ref=${refCode}`;
-              return (
-                <div style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", gridColumn: "span 2" }}>
-                  <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Referral link</p>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <p style={{ fontSize: "0.7rem", color: "var(--muted)", fontFamily: "var(--font-mono), monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{refUrl}</p>
-                    <button onClick={() => navigator.clipboard.writeText(refUrl).catch(() => {})}
-                      style={{ height: "22px", padding: "0 0.5rem", background: "none", border: "1px solid var(--border)", borderRadius: "4px", color: "var(--dim)", fontSize: "0.65rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", flexShrink: 0, whiteSpace: "nowrap" }}>
-                      Copy
-                    </button>
-                  </div>
-                </div>
-              );
-            })()}
           </div>
         )}
       </div>
