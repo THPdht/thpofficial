@@ -1396,6 +1396,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
   const [agreedMonthly, setAgreedMonthly] = useState("");
   const [allReferrals, setAllReferrals] = useState<{ id: string; referred_name: string; referred_email: string; referred_phone?: string; status: string; created_at: string }[]>([]);
   const [markingReferral, setMarkingReferral] = useState<string | null>(null);
+  const [showReferralModal, setShowReferralModal] = useState(false);
   const [notes, setNotes] = useState("");
   const [notesSaving, setNotesSaving] = useState(false);
   const [telegramUsername, setTelegramUsername] = useState("");
@@ -1735,9 +1736,12 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
                 {client.diagnosticData?.monthlyRate ? `$${client.diagnosticData.monthlyRate}` : "—"}
               </p>
             </div>
-            <div style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px" }}>
+            <div onClick={() => allReferrals.length > 0 && setShowReferralModal(true)}
+              style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", cursor: allReferrals.length > 0 ? "pointer" : "default", transition: "border-color 150ms" }}
+              onMouseEnter={e => { if (allReferrals.length > 0) (e.currentTarget as HTMLDivElement).style.borderColor = "var(--primary)"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = "var(--border-subtle)"; }}>
               <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Referrals</p>
-              <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{allReferrals.filter(r => r.status === 'paid').length} / 3</p>
+              <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{allReferrals.length} / 3</p>
             </div>
             {(() => {
               const refCode = btoa(client.email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase();
@@ -2272,35 +2276,42 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
             {client.diagnosticData?.freeMonthEarned ? 'Free Month Applied' : 'Apply Free Month'}
           </button>
         )}
-        {allReferrals.length > 0 && (() => {
-          const refCode = btoa(client.email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase();
-          const refUrl = `https://thpofficial.com/referral?ref=${refCode}`;
-          return (
-            <div style={{ marginTop: "0.75rem" }}>
-              <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif", marginBottom: "0.375rem" }}>Referrals</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+      </div>
+
+      {/* Referral modal */}
+      {showReferralModal && (() => {
+        const refCode = btoa(client.email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase();
+        const refUrl = `https://thpofficial.com/referral?ref=${refCode}`;
+        return (
+          <div onClick={() => setShowReferralModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "12px", padding: "1.5rem", width: "100%", maxWidth: "480px", maxHeight: "80vh", overflowY: "auto" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem" }}>
+                <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Referrals — {client.nickname || client.name}</p>
+                <button onClick={() => setShowReferralModal(false)} style={{ background: "none", border: "none", color: "var(--dim)", fontSize: "1.25rem", cursor: "pointer", lineHeight: 1, padding: "0 0.25rem" }}>×</button>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
                 {allReferrals.map(r => (
-                  <div key={r.id} style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "6px" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: r.referred_email || r.referred_phone ? "0.375rem" : 0 }}>
-                      <span style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{r.referred_name}</span>
-                      <span style={{ fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", padding: "0.2rem 0.5rem", borderRadius: "99px", background: r.status === 'paid' ? "oklch(0.45 0.15 145 / 0.08)" : "var(--surface)", border: `1px solid ${r.status === 'paid' ? "oklch(0.45 0.15 145 / 0.25)" : "var(--border)"}`, color: r.status === 'paid' ? "oklch(0.7 0.15 145)" : "var(--dim)", fontFamily: "var(--font-mono), monospace" }}>{r.status === 'paid' ? 'Paying' : 'Pending'}</span>
+                  <div key={r.id} style={{ padding: "0.875rem 1rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.375rem" }}>
+                      <span style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{r.referred_name}</span>
+                      <span style={{ fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", padding: "0.2rem 0.5rem", borderRadius: "99px", background: r.status === 'paid' ? "oklch(0.45 0.15 145 / 0.08)" : "transparent", border: `1px solid ${r.status === 'paid' ? "oklch(0.45 0.15 145 / 0.25)" : "var(--border)"}`, color: r.status === 'paid' ? "oklch(0.7 0.15 145)" : "var(--dim)", fontFamily: "var(--font-mono), monospace" }}>{r.status === 'paid' ? 'Paying' : 'Pending'}</span>
                     </div>
-                    {r.referred_email && <p style={{ fontSize: "0.75rem", color: "var(--muted)", fontFamily: "var(--font-ui), system-ui, sans-serif", marginBottom: "0.25rem" }}>{r.referred_email}</p>}
-                    {r.referred_phone && <p style={{ fontSize: "0.75rem", color: "var(--muted)", fontFamily: "var(--font-ui), system-ui, sans-serif", marginBottom: "0.375rem" }}>{r.referred_phone}</p>}
-                    <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
+                    {r.referred_email && <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontFamily: "var(--font-ui), system-ui, sans-serif", marginBottom: "0.2rem" }}>{r.referred_email}</p>}
+                    {r.referred_phone && <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontFamily: "var(--font-ui), system-ui, sans-serif", marginBottom: "0.5rem" }}>{r.referred_phone}</p>}
+                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.5rem" }}>
                       {r.referred_phone && (
                         <a href={`https://wa.me/${r.referred_phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hey ${r.referred_name}, here's your THP application link: ${refUrl}`)}`} target="_blank" rel="noopener noreferrer"
-                          style={{ height: "24px", padding: "0 0.625rem", background: "oklch(0.45 0.18 145 / 0.08)", border: "1px solid oklch(0.45 0.18 145 / 0.2)", borderRadius: "5px", color: "oklch(0.7 0.18 145)", fontSize: "0.7rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
-                          WhatsApp
+                          style={{ height: "28px", padding: "0 0.75rem", background: "oklch(0.45 0.18 145 / 0.08)", border: "1px solid oklch(0.45 0.18 145 / 0.2)", borderRadius: "6px", color: "oklch(0.7 0.18 145)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+                          WhatsApp ↗
                         </a>
                       )}
                       <button onClick={() => navigator.clipboard.writeText(refUrl).catch(() => {})}
-                        style={{ height: "24px", padding: "0 0.625rem", background: "none", border: "1px solid var(--border)", borderRadius: "5px", color: "var(--dim)", fontSize: "0.7rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                        style={{ height: "28px", padding: "0 0.75rem", background: "none", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--dim)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
                         Copy link
                       </button>
                       {r.status === 'pending' && (
                         <button onClick={() => markReferralPaid(r.id)} disabled={markingReferral === r.id}
-                          style={{ height: "24px", padding: "0 0.625rem", background: "oklch(0.45 0.15 145 / 0.08)", border: "1px solid oklch(0.45 0.15 145 / 0.2)", borderRadius: "5px", color: "oklch(0.7 0.15 145)", fontSize: "0.7rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: markingReferral === r.id ? 0.5 : 1 }}>
+                          style={{ height: "28px", padding: "0 0.75rem", background: "oklch(0.45 0.15 145 / 0.08)", border: "1px solid oklch(0.45 0.15 145 / 0.2)", borderRadius: "6px", color: "oklch(0.7 0.15 145)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: markingReferral === r.id ? 0.5 : 1 }}>
                           {markingReferral === r.id ? '...' : 'Mark paid'}
                         </button>
                       )}
@@ -2309,9 +2320,9 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
                 ))}
               </div>
             </div>
-          );
-        })()}
-      </div>
+          </div>
+        );
+      })()}
 
     </div>
   );
