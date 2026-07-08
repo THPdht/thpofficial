@@ -158,6 +158,7 @@ export type StoredUser = {
   joinedAt: string;
   diagnosticData?: DiagnosticData;
   referralCode?: string;
+  clientType?: 'hormonal' | 'psychological' | 'both';
 };
 
 // ─── Local session cache ───────────────────────────────────────────────────
@@ -188,6 +189,7 @@ export function rowToUser(row: any): StoredUser {
     joinedAt: row.joined_at,
     diagnosticData: diagData,
     referralCode: row.referral_code ?? undefined,
+    clientType: (row.client_type as 'hormonal' | 'psychological' | 'both') ?? undefined,
   };
 }
 

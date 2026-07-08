@@ -3,9 +3,11 @@ import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
 import type { WeeklyResponseSummary } from '@/lib/auth';
 import { requireApiKey } from '@/lib/apiAuth';
 
-const INITIAL_SYSTEM_PROMPT = `You are generating a personalised daily tracker question bank for a health mentorship client. You write on behalf of Nikodem Kosowski.
+const INITIAL_SYSTEM_PROMPT_HORMONAL = `You are generating a personalised daily tracker question bank for a health mentorship client. You write on behalf of Nikodem Kosowski.
 
 Generate 20 to 25 daily tracker questions that are hyper-specific to this client's protocol and their named problems from their intake form. These questions rotate daily so the client is never asked the same question two days in a row.
+
+This client is on a HORMONAL / NUTRITIONAL protocol. Focus questions on: nutrition compliance, training performance, sleep quality, energy levels, libido, morning erections, mitochondrial signals, supplement adherence, bloodwork markers they are tracking.
 
 Rules:
 - Distribute questions across these 8 categories: sleep, gut, hormones, energy, training, nervous_system, diet, mood
@@ -20,6 +22,47 @@ Rules:
 
 Output a valid JSON array. No markdown fences. No preamble. No trailing text.
 Each object: { "id": "snake_case_unique_id", "label": "question text", "hint": "optional sub-label or unit", "type": "rating|boolean|text|textarea", "category": "sleep|gut|hormones|energy|training|nervous_system|diet|mood", "weight": 1 }`;
+
+const INITIAL_SYSTEM_PROMPT_PSYCHOLOGICAL = `You are generating a personalised daily tracker question bank for a behavioral and identity coaching client. You write on behalf of Nikodem Kosowski.
+
+Generate 20 to 25 daily tracker questions that are hyper-specific to this client's protocol and their named behavioral patterns from their intake form. These questions rotate daily so the client is never asked the same question two days in a row.
+
+This client is on a PSYCHOLOGICAL / BEHAVIORAL protocol. Focus questions on: execution of protocol installations (morning declarations, frame practices, behavioral drills), social behavior (eye contact, directness, approaches), internal state (frame, presence, reactivity), and specific behavioral metrics from their FOUNDATION PHASE and IMPLEMENTATION PHASE.
+
+Rules:
+- Distribute questions across these 8 categories: sleep, gut, hormones, energy, training, nervous_system, diet, mood — but weight heavily toward nervous_system (behavioral state, reactivity, presence) and mood (internal frame, confidence, approval-seeking)
+- Every question answerable in under 30 seconds
+- Boolean questions check specific protocol actions: "did you complete the morning declaration today" not "did you work on yourself"
+- Rating questions name the specific behavioral dimension: "how present were you in conversations today" not "rate your mood"
+- Maximum 2 text or textarea questions in the entire bank
+- Questions must reference the client's specific protocol installations and named behavioral patterns. No generic wellness questions.
+- No em dashes, no en dashes. Hyphens in compound words are fine.
+- No motivational or coaching language. Direct and observational.
+
+Output a valid JSON array. No markdown fences. No preamble. No trailing text.
+Each object: { "id": "snake_case_unique_id", "label": "question text", "hint": "optional sub-label or unit", "type": "rating|boolean|text|textarea", "category": "sleep|gut|hormones|energy|training|nervous_system|diet|mood", "weight": 1 }`;
+
+const INITIAL_SYSTEM_PROMPT_BOTH = `You are generating a personalised daily tracker question bank for a client working on both hormonal and behavioral optimization. You write on behalf of Nikodem Kosowski.
+
+Generate 22 to 28 daily tracker questions that are hyper-specific to this client's protocol covering BOTH the physiological (hormonal, nutritional, training, sleep) and the psychological/behavioral dimensions.
+
+Split roughly: 12 to 15 hormonal/physical questions (nutrition compliance, training, sleep, energy, libido, morning erections, supplements), 8 to 12 behavioral questions (protocol installations, internal state, social behavior, frame execution).
+
+Rules:
+- Distribute across these 8 categories: sleep, gut, hormones, energy, training, nervous_system, diet, mood
+- Every question answerable in under 30 seconds
+- Rating questions name the specific thing being measured
+- Boolean questions check specific protocol actions from their plan
+- Maximum 2 text or textarea questions
+- No generic wellness questions — every question traces back to something specific in their protocol
+- No em dashes, no en dashes. Hyphens in compound words are fine.
+- No motivational or coaching language. Direct and clinical.
+
+Output a valid JSON array. No markdown fences. No preamble. No trailing text.
+Each object: { "id": "snake_case_unique_id", "label": "question text", "hint": "optional sub-label or unit", "type": "rating|boolean|text|textarea", "category": "sleep|gut|hormones|energy|training|nervous_system|diet|mood", "weight": 1 }`;
+
+// Keep a single name for backward compatibility (used for weekly refresh)
+const INITIAL_SYSTEM_PROMPT = INITIAL_SYSTEM_PROMPT_HORMONAL;
 
 const WEEKLY_SYSTEM_PROMPT = `You are generating a refreshed weekly tracker question bank for a health mentorship client. You write on behalf of Nikodem Kosowski. Prepare questions the way Nikodem would prepare before a weekly check-in call.
 
@@ -68,8 +111,35 @@ export async function POST(req: Request) {
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
     if (!anthropicKey) return Response.json({ error: 'ANTHROPIC_API_KEY not set' }, { status: 500 });
 
+    // Read client_type from DB to tailor initial questions
+    let clientCoachingType: string | null = null;
+    try {
+      const { data: userRow } = await supabase
+        .from('tracker_questions')
+        .select('user_email')
+        .eq('user_email', clientEmail)
+        .limit(0); // just to verify supabase connection; actual fetch below
+      void userRow;
+      const { data: userData } = await supabase
+        .from('users')
+        .select('client_type')
+        .eq('email', clientEmail)
+        .maybeSingle();
+      clientCoachingType = userData?.client_type ?? null;
+    } catch { /* ignore, fall back to hormonal */ }
+
     const isWeeklyRefresh = !!recentResponses && recentResponses.days.length > 0;
-    const systemPrompt = isWeeklyRefresh ? WEEKLY_SYSTEM_PROMPT : INITIAL_SYSTEM_PROMPT;
+
+    let systemPrompt: string;
+    if (isWeeklyRefresh) {
+      systemPrompt = WEEKLY_SYSTEM_PROMPT;
+    } else if (clientCoachingType === 'psychological') {
+      systemPrompt = INITIAL_SYSTEM_PROMPT_PSYCHOLOGICAL;
+    } else if (clientCoachingType === 'both') {
+      systemPrompt = INITIAL_SYSTEM_PROMPT_BOTH;
+    } else {
+      systemPrompt = INITIAL_SYSTEM_PROMPT_HORMONAL;
+    }
 
     let userMessage: string;
 

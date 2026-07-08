@@ -221,6 +221,64 @@ WAKE UP RECOVERED: ${d.wakeUpRecovered || 'not provided'}
 RECENT HORMONE PANEL: ${d.recentHormonePanel || 'not provided'}`;
 }
 
+const BEHAVIORAL_PROMPT = `You are Ali, founder of The Hormone Prophet and The Order. You are a high-performance identity, psychology, and behavioral architect. You do not reference any other coaches, researchers, or public figures by name. All methodology is your own.
+
+You generate behavioral protocol documents for clients whose primary work is psychological, identity-based, and behavioral — not hormonal or nutritional.
+
+UNIVERSAL RULES
+Never use em dashes. Never use passive voice. Never use adverbs ending in ly.
+Never open a section with a question.
+Never be generic. Every sentence must feel written for this specific man based on his intake data.
+Always speak directly to the client by name.
+Sentences vary in length. Short when landing a point. Longer when building context.
+Never moralize. Acknowledge where he is without shame and move forward with precision.
+
+OUTPUT FORMAT
+You must output valid JSON with no markdown fences and no preamble:
+
+{
+  "sections": [
+    { "heading": "WHERE YOU ARE RIGHT NOW", "text": "..." },
+    { "heading": "ROOT PROBLEM", "text": "..." },
+    { "heading": "WHY IT IS HAPPENING", "text": "..." },
+    { "heading": "WHY PREVIOUS ATTEMPTS FAILED", "text": "..." },
+    { "heading": "FOUNDATION PHASE", "text": "..." },
+    { "heading": "IMPLEMENTATION PHASE", "text": "..." },
+    { "heading": "SUCCESS METRICS", "text": "..." },
+    { "heading": "WHERE THIS IS GOING", "text": "..." }
+  ],
+  "todos": ["specific measurable action 1", "specific measurable action 2"]
+}
+
+SECTION GUIDANCE
+
+WHERE YOU ARE RIGHT NOW
+A precise, direct account of where this man is psychologically, behaviorally, and socially right now. Name the specific patterns from his intake. Make him feel seen. Do not soften it.
+
+ROOT PROBLEM
+Name the single core identity or psychological mechanism driving everything else. Not symptoms. The root. One mechanism, clearly named and explained to him.
+
+WHY IT IS HAPPENING
+Explain the mechanism underneath the root problem. The developmental origin, the wiring, the pattern that formed it. Give him enough to understand without giving him the full architecture. Gatekeep the deeper layer.
+
+WHY PREVIOUS ATTEMPTS FAILED
+Be specific to his history. Name what he tried, why it felt like it should have worked, and exactly why it did not at the level of identity and behavioral architecture.
+
+FOUNDATION PHASE
+The 3 to 5 core behavioral and identity installations he builds first. Each one is a named uppercase heading (e.g. THE FRAME INSTALLATION, THE MORNING DECLARATION, THE BODY AS SIGNAL). After each uppercase heading, write 2 to 3 tight paragraphs explaining the specific protocol for that installation. Be precise about what he does, when, and why.
+
+IMPLEMENTATION PHASE
+2 to 3 named action areas (uppercase headings) with specific weekly behavioral targets. These are the moves that express the Foundation. Each should be measurable and slightly uncomfortable.
+
+SUCCESS METRICS
+What he will notice first. What changes by week 4. What changes by month 3. Be specific to his starting point and stated goal. No hype. No promises. Just what the data will show.
+
+WHERE THIS IS GOING
+One paragraph. The man on the other side of this work. What he will be capable of that he cannot access now. Write it as a statement of fact, not a goal.
+
+TODOS
+Extract 8 to 15 specific, measurable behavioral actions from the FOUNDATION PHASE and IMPLEMENTATION PHASE sections. These are the client's immediate action items. Concrete and executable.`;
+
 function splitText(text: string, maxLen = 1900): string[] {
   if (text.length <= maxLen) return [text];
   const chunks: string[] = [];
@@ -268,7 +326,7 @@ function buildNotionBlocks(sections: { heading: string; text: string }[], todos:
 
 export async function POST(req: Request) {
   try {
-    const { clientEmail, clientName, createNotion, phase1Mode, trackerSummary } = await req.json();
+    const { clientEmail, clientName, createNotion, phase1Mode, trackerSummary, protocolFormat: requestedFormat } = await req.json();
     if (!clientEmail) return Response.json({ error: 'Missing clientEmail' }, { status: 400 });
 
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
@@ -284,6 +342,19 @@ export async function POST(req: Request) {
     const name: string = clientName ?? client.name ?? clientEmail;
     const d: Record<string, unknown> = client.diagnostic_data || {};
 
+    // Determine protocol format: explicit request > client_type column > default hormonal
+    let protocolFormat: 'hormonal' | 'behavioral' = 'hormonal';
+    if (requestedFormat === 'behavioral') {
+      protocolFormat = 'behavioral';
+    } else if (requestedFormat === 'hormonal') {
+      protocolFormat = 'hormonal';
+    } else {
+      // Auto-detect from client_type column
+      const clientType = client.client_type as string | null;
+      if (clientType === 'psychological') protocolFormat = 'behavioral';
+      else protocolFormat = 'hormonal'; // hormonal, both, or unset → hormonal
+    }
+
     // Fetch the most recent sent/active protocol to determine if this is the first
     const { data: prevProtocols } = await supabase
       .from('protocols')
@@ -296,11 +367,51 @@ export async function POST(req: Request) {
     // Auto-detect if this is the initial protocol when not explicitly passed
     const isInitial: boolean = phase1Mode ?? (prevProtocols === null || prevProtocols.length === 0);
 
-    const clientContext = buildClientContext(name, d, isInitial, trackerSummary ?? null);
-
     const anthropic = new Anthropic({ apiKey: anthropicKey });
 
     let fullText = '';
+
+    if (protocolFormat === 'behavioral') {
+      // Behavioral format — simpler prompt, no streaming needed for same speed
+      const behavioralContext = `Generate a behavioral protocol for this client.
+
+Client name: ${name}
+
+FULL NAME: ${d.fullName || name}
+AGE / LOCATION: ${d.ageLocation || 'not provided'}
+WHAT THEY ARE TRYING TO FIX: ${d.whatTryingToFix || 'not provided'}
+HOW THEY ASK FOR WHAT THEY WANT: ${d.howAskForWhatYouWant || 'not provided'}
+PEOPLE PLEASING PATTERN: ${d.avoidDisappointing || 'not provided'}
+VALIDATION SOURCE: ${d.validationSource || 'not provided'}
+CURRENT STATE OF ENERGY: ${d.energyState || 'not provided'}
+HOW THEY SEE THEMSELVES: ${d.selfPerception || 'not provided'}
+CONFLICT AVOIDANCE: ${d.avoidConflict || 'not provided'}
+RESPONSE TO CRITICISM: ${d.responseToCriticism || 'not provided'}
+INTERNAL STATE ENTERING A ROOM: ${d.internalStateEnteringRoom || 'not provided'}
+PAST RELATIONSHIP PATTERNS: ${d.pastRelationshipPatterns || 'not provided'}
+RELATIONSHIP STATUS / FAMILY: ${d.relationshipStatus || 'not provided'}
+RELATIONSHIP TO RISK: ${d.relationshipToRisk || 'not provided'}
+SEXUAL CONFIDENCE: ${d.sexualConfidence || 'not provided'}
+BASELINE INTERNAL STATE: ${d.baselineInternalState || 'not provided'}
+EYE CONTACT: ${d.eyeContact || 'not provided'}
+SEXUAL DYNAMIC IN RELATIONSHIP: ${d.sexualDynamic || 'not provided'}
+HOW THEY DECOMPRESS: ${d.howDecompress || 'not provided'}
+LIBIDO (MENTAL SEX DRIVE): ${d.libido || 'not provided'}`;
+
+      const stream = await anthropic.messages.stream({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 16000,
+        system: BEHAVIORAL_PROMPT,
+        messages: [{ role: 'user', content: behavioralContext }],
+      });
+      for await (const chunk of stream) {
+        if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+          fullText += chunk.delta.text;
+        }
+      }
+    } else {
+    const clientContext = buildClientContext(name, d, isInitial, trackerSummary ?? null);
+
     const stream = await anthropic.messages.stream({
       model: 'claude-sonnet-4-6',
       max_tokens: isInitial ? 20000 : 16000,
@@ -312,6 +423,7 @@ export async function POST(req: Request) {
         fullText += chunk.delta.text;
       }
     }
+    } // end else (hormonal)
 
     const cleaned = fullText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
     const parsed = JSON.parse(cleaned);
@@ -393,7 +505,7 @@ export async function POST(req: Request) {
       }
     }
 
-    return Response.json({ protocolId: protocol.id, notionPageId, stage, title });
+    return Response.json({ protocolId: protocol.id, notionPageId, stage, title, protocolFormat });
   } catch (err) {
     console.error('[generate-protocol]', err);
     return Response.json({ error: 'Internal server error' }, { status: 500 });

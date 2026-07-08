@@ -239,6 +239,18 @@ export default function AdminPage() {
     await refreshClients();
   }
 
+  async function handleCoachingTypeChange(coachingType: 'hormonal' | 'psychological' | 'both') {
+    if (!selected) return;
+    await fetch('/api/admin/users', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD },
+      body: JSON.stringify({ email: selected.email, fields: { client_type: coachingType } }),
+    });
+    const updated = { ...selected, clientType: coachingType as 'hormonal' | 'psychological' | 'both' };
+    setSelected(updated);
+    setClients(prev => prev.map(c => c.email === selected.email ? updated : c));
+  }
+
   async function handleNicknameChange(nickname: string) {
     if (!selected) return;
     await updateUser(selected.email, { nickname: nickname || undefined });
@@ -469,6 +481,7 @@ export default function AdminPage() {
                   onProtocolStatusChange={handleProtocolStatusChange}
                   onAccountStatusChange={handleAccountStatusChange}
                   onClientTypeChange={handleClientTypeChange}
+                  onCoachingTypeChange={handleCoachingTypeChange}
                   onNicknameChange={handleNicknameChange}
                   onRemoveClient={handleRemoveClient}
                   onSuspendClient={handleSuspendClient}
@@ -1366,7 +1379,7 @@ function PromoteButton({ client, onSetStatus, onClientTypeChange }: { client: St
 
 // ─── CRM PANEL (full-width when client selected) ──────────────────────────
 
-function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen, onToggleApp, onActivate, onSetStatus, onAssignProtocol, onProtocolGenerated, onProtocolStatusChange, onAccountStatusChange, onClientTypeChange, onNicknameChange, onRemoveClient, onSuspendClient, onAddPayment, onRemovePayment }: {
+function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen, onToggleApp, onActivate, onSetStatus, onAssignProtocol, onProtocolGenerated, onProtocolStatusChange, onAccountStatusChange, onClientTypeChange, onCoachingTypeChange, onNicknameChange, onRemoveClient, onSuspendClient, onAddPayment, onRemovePayment }: {
   client: StoredUser;
   onBack: () => void;
   diagnosticOpen: boolean;
@@ -1380,6 +1393,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
   onProtocolStatusChange: (status: ProtocolStatus) => void;
   onAccountStatusChange: (status: AccountStatus) => void;
   onClientTypeChange: (t: 'skool' | '1on1') => void;
+  onCoachingTypeChange: (t: 'hormonal' | 'psychological' | 'both') => void;
   onNicknameChange: (nickname: string) => void;
   onRemoveClient: () => void;
   onSuspendClient: () => void;
@@ -1424,6 +1438,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
   // Protocol generation state
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState("");
+  const [protocolFormatOverride, setProtocolFormatOverride] = useState<'hormonal' | 'behavioral' | null>(null);
   const [clientProtocols, setClientProtocols] = useState<ClientProtocol[]>([]);
   const [trackerSummary, setTrackerSummary] = useState<{
     trends: { category: string; avgScore: number; direction: string; delta: number }[];
@@ -1606,10 +1621,17 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
     setRegeneratingQuestions(false);
   }
 
+  function getEffectiveProtocolFormat(): 'hormonal' | 'behavioral' {
+    if (protocolFormatOverride) return protocolFormatOverride;
+    if (client.clientType === 'psychological') return 'behavioral';
+    return 'hormonal';
+  }
+
   async function handleGenerateProtocol() {
     setGenerating(true); setGenError("");
     try {
-      const res = await fetch("/api/generate-protocol", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientEmail: client.email, clientName: client.name, diagnosticData: client.diagnosticData ?? null, phase1Mode: true }) });
+      const protocolFormat = getEffectiveProtocolFormat();
+      const res = await fetch("/api/generate-protocol", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientEmail: client.email, clientName: client.name, diagnosticData: client.diagnosticData ?? null, phase1Mode: true, protocolFormat }) });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || "Generation failed");
       const updated = await getAdminProtocols(client.email);
@@ -1990,19 +2012,81 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
           })}
         </div>
 
+        {/* Coaching type + protocol format */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
+          <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Coaching Type</p>
+          <div style={{ display: "flex", gap: "0.375rem" }}>
+            {(['hormonal', 'psychological', 'both'] as const).map(t => {
+              const active = client.clientType === t;
+              const colors: Record<string, { border: string; bg: string; text: string }> = {
+                hormonal: { border: "oklch(0.72 0.14 145 / 0.5)", bg: "oklch(0.72 0.14 145 / 0.1)", text: "oklch(0.72 0.14 145)" },
+                psychological: { border: "oklch(0.72 0.15 260 / 0.5)", bg: "oklch(0.72 0.15 260 / 0.1)", text: "oklch(0.72 0.15 260)" },
+                both: { border: "oklch(0.72 0.14 65 / 0.5)", bg: "oklch(0.72 0.14 65 / 0.1)", text: "oklch(0.75 0.12 65)" },
+              };
+              const c = colors[t];
+              return (
+                <button key={t} onClick={() => onCoachingTypeChange(t)}
+                  style={{ flex: 1, height: "30px", borderRadius: "6px", border: "1px solid", borderColor: active ? c.border : "var(--border-subtle)", background: active ? c.bg : "none", color: active ? c.text : "var(--dim)", fontSize: "0.7rem", fontWeight: active ? 600 : 400, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "all 150ms", textTransform: "capitalize" }}>
+                  {t}
+                </button>
+              );
+            })}
+          </div>
+          {/* Format override — only shown when type is 'both' or unset */}
+          {(!client.clientType || client.clientType === 'both') && (
+            <div>
+              <p style={{ fontSize: "0.65rem", color: "var(--dim)", marginBottom: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Generate as:</p>
+              <div style={{ display: "flex", gap: "0.375rem" }}>
+                {(['hormonal', 'behavioral'] as const).map(f => {
+                  const active = (protocolFormatOverride ?? 'hormonal') === f;
+                  return (
+                    <button key={f} onClick={() => setProtocolFormatOverride(f)}
+                      style={{ flex: 1, height: "28px", borderRadius: "6px", border: "1px solid", borderColor: active ? "oklch(0.60 0.18 165 / 0.5)" : "var(--border-subtle)", background: active ? "oklch(0.60 0.18 165 / 0.1)" : "none", color: active ? "var(--primary)" : "var(--dim)", fontSize: "0.7rem", fontWeight: active ? 600 : 400, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "all 150ms", textTransform: "capitalize" }}>
+                      {f}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Protocol — view draft + send to client */}
         <div id="crm-protocol" style={{ display: "flex", flexDirection: "column", gap: "0.625rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
-          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Protocol</p>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Protocol</p>
+            {genError && <p style={{ fontSize: "0.7rem", color: "var(--primary)" }}>{genError}</p>}
+          </div>
           {clientProtocols.length === 0 ? (
-            <p style={{ fontSize: "0.8rem", color: "var(--dim)", fontWeight: 300 }}>No protocol yet — auto-generates after diagnosis.</p>
-          ) : clientProtocols.map(proto => (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <p style={{ fontSize: "0.8rem", color: "var(--dim)", fontWeight: 300 }}>No protocol yet.</p>
+              <button onClick={handleGenerateProtocol} disabled={generating}
+                style={{ height: "36px", background: generating ? "var(--surface-2)" : "oklch(0.60 0.18 165 / 0.12)", border: "1px solid oklch(0.60 0.18 165 / 0.3)", borderRadius: "7px", color: generating ? "var(--dim)" : "var(--primary)", fontSize: "0.8125rem", fontWeight: 500, cursor: generating ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                {generating ? "Generating…" : `Generate ${getEffectiveProtocolFormat()} protocol with AI`}
+              </button>
+            </div>
+          ) : (
+            <>
+              <button onClick={handleGenerateProtocol} disabled={generating}
+                style={{ height: "32px", background: generating ? "var(--surface-2)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: generating ? "var(--dim)" : "var(--muted)", fontSize: "0.75rem", fontWeight: 500, cursor: generating ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                {generating ? "Generating…" : `+ Generate new ${getEffectiveProtocolFormat()} protocol`}
+              </button>
+              {clientProtocols.map(proto => (
             <div key={proto.id} style={{ background: "var(--surface)", border: `1px solid ${proto.published ? "oklch(0.7 0.15 145 / 0.3)" : "oklch(0.60 0.18 165 / 0.3)"}`, borderRadius: "8px", padding: "0.75rem" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.375rem" }}>
-                <p style={{ fontSize: "0.8rem", fontWeight: 500, color: "var(--ink)" }}>Protocol Stage {proto.stage}{proto.title?.includes('PDF Import') ? ' — PDF Import' : ''}</p>
+                <p style={{ fontSize: "0.8rem", fontWeight: 500, color: "var(--ink)" }}>
+                  {proto.source === 'imported'
+                    ? `Imported Protocol (${proto.title?.match(/Imported Protocol (\d+)/i)?.[1] ?? '?'})`
+                    : `Protocol Stage ${proto.stage}`}
+                </p>
                 <span style={{ fontSize: "0.65rem", fontWeight: 600, padding: "2px 7px", borderRadius: "4px", background: proto.published ? "oklch(0.7 0.15 145 / 0.12)" : "oklch(0.60 0.18 165 / 0.12)", color: proto.published ? "oklch(0.7 0.15 145)" : "var(--primary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                   {proto.published ? "Sent to client" : "Draft — not sent"}
                 </span>
               </div>
+              {/* Checklist progress */}
+              {proto.published && proto.content?.todos && proto.content.todos.length > 0 && (
+                <TodoProgress protocolId={proto.id} userEmail={client.email} total={proto.content.todos.length} />
+              )}
               {proto.content?.sections?.filter(s => s.heading.toUpperCase() !== 'WHAT IS ACTUALLY HAPPENING').map(s => (
                 <details key={s.heading} style={{ marginBottom: "0.25rem" }}>
                   <summary style={{ fontSize: "0.75rem", color: "var(--muted)", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", userSelect: "none" }}>{s.heading}</summary>
@@ -2024,6 +2108,8 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
               )}
             </div>
           ))}
+            </>
+          )}
         </div>
 
         {/* Recent trackers */}
@@ -2597,6 +2683,24 @@ function statusColor(status: ClientStatus): string {
   if (status === "alumni") return "var(--primary)";
   if (status === "new") return "oklch(0.7 0.12 300)";
   return "var(--dim)";
+}
+
+function TodoProgress({ protocolId, userEmail, total }: { protocolId: string; userEmail: string; total: number }) {
+  const [doneCount, setDoneCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/protocol-todos?email=${encodeURIComponent(userEmail)}&protocol_id=${protocolId}`)
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data.checked)) setDoneCount(data.checked.length); })
+      .catch(() => {});
+  }, [protocolId, userEmail]);
+
+  if (doneCount === null) return null;
+  return (
+    <p style={{ fontSize: "0.7rem", color: doneCount === total ? "oklch(0.7 0.15 145)" : "var(--dim)", fontFamily: "var(--font-mono), monospace", marginBottom: "0.5rem" }}>
+      TO DO: {doneCount}/{total} complete
+    </p>
+  );
 }
 
 function SparkleIcon() {

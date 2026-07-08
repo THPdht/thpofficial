@@ -975,6 +975,9 @@ function ProtocolTab({ user, protocol, notionPageId }: { user: StoredUser; proto
           todos={current.content.todos ?? []}
           createdAt={current.createdAt}
           clientName={user.name}
+          source={current.source}
+          protocolId={current.id}
+          userEmail={user.email}
         />
       )}
 
