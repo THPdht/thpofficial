@@ -128,7 +128,42 @@ export async function POST(req: Request) {
     const sections: { heading: string; text: string }[] = parsed.sections ?? [];
     const todos: string[] = parsed.todos ?? [];
 
-    // Save imported content as reference only — do NOT create protocol or diagnostic rows
+    const clientName = client.name ?? email.split('@')[0];
+
+    // Count imported-only protocols for the import number label
+    const { count: importedCount } = await supabaseAdmin
+      .from('protocols')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_email', email)
+      .eq('source', 'imported');
+    const importNum = (importedCount ?? 0) + 1;
+
+    // Count all protocols for the stage field (ordering)
+    const { count: totalCount } = await supabaseAdmin
+      .from('protocols')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_email', email);
+    const stage = (totalCount ?? 0) + 1;
+
+    const title = `${clientName} — Imported Protocol ${importNum}`;
+
+    // Insert into protocols table so client can see it in their portal
+    const { error: insertError } = await supabaseAdmin
+      .from('protocols')
+      .insert({
+        user_email: email,
+        stage,
+        title,
+        content: { sections, todos },
+        status: 'sent',
+        source: 'imported',
+      });
+    if (insertError) {
+      console.error('[parse-protocol-pdf] protocol insert error:', insertError);
+      return Response.json({ error: 'Failed to save protocol: ' + insertError.message }, { status: 500 });
+    }
+
+    // Also store reference in diagnostic_data for admin visibility
     const existingDiag = client.diagnostic_data || {};
     await supabaseAdmin.from('users').update({
       diagnostic_data: {
@@ -138,11 +173,10 @@ export async function POST(req: Request) {
     }).eq('email', email);
 
     // Alarm for admin feed
-    const clientName = client.name ?? email.split('@')[0];
     supabaseAdmin.from('alarms').insert({
       user_email: email,
       type: 'protocol_imported',
-      message: `${clientName} imported their protocol (PDF)`,
+      message: `${clientName}'s PDF protocol imported — Imported Protocol ${importNum} sent to client`,
       created_at: new Date().toISOString(),
     }).then(({ error: ae }) => { if (ae) console.error('[parse-protocol-pdf] alarm:', ae); });
 

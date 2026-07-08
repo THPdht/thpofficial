@@ -647,7 +647,8 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
   async function handleRegenerateQuestions() {
     if (clientProtocols.length === 0) return;
     setRegeneratingQuestions(true);
-    const currentStage = clientProtocols[clientProtocols.length - 1].stage;
+    const genProtos = clientProtocols.filter(p => p.source !== 'imported');
+    const currentStage = (genProtos[genProtos.length - 1] ?? clientProtocols[clientProtocols.length - 1]).stage;
     const res = await fetch(`/api/tracker-questions-bank?email=${encodeURIComponent(client.email)}&stage=${currentStage}`);
     const { bank } = await res.json();
     if (bank?.protocol_text) {
@@ -920,7 +921,7 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
                 onMouseEnter={e => { if (!generating) e.currentTarget.style.background = "oklch(0.60 0.18 165 / 0.2)"; }}
                 onMouseLeave={e => { if (!generating) e.currentTarget.style.background = "oklch(0.60 0.18 165 / 0.12)"; }}>
                 <SparkleIcon />
-                {generating ? "Generating…" : clientProtocols.length === 0 ? "Generate protocol with AI" : `Regenerate protocol stage ${clientProtocols[clientProtocols.length - 1].stage} with AI`}
+                {generating ? "Generating…" : (() => { const gp = clientProtocols.filter(p => p.source !== 'imported'); return gp.length === 0 ? "Generate protocol with AI" : `Regenerate protocol stage ${gp[gp.length - 1].stage} with AI`; })()}
               </button>
               {genSuccess && <span style={{ fontSize: "0.75rem", color: "oklch(0.7 0.15 145)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Protocol generated ✓</span>}
             </div>
@@ -1265,8 +1266,9 @@ function TrackerSection({ protocols, summary, loading, regenerating, onLoadSumma
   onRegenerateQuestions: () => void;
   onGenerateNextStage: () => void;
 }) {
-  const nextStage = protocols.length + 1;
-  const currentStage = protocols[protocols.length - 1]?.stage ?? 1;
+  const generatedProtocols = protocols.filter(p => p.source !== 'imported');
+  const nextStage = generatedProtocols.length + 1;
+  const currentStage = generatedProtocols[generatedProtocols.length - 1]?.stage ?? 1;
 
   const directionArrow = (d: string) => d === 'improving' ? '↑' : d === 'declining' ? '↓' : '→';
   const directionColor = (d: string) => d === 'improving' ? 'oklch(0.7 0.15 145)' : d === 'declining' ? 'var(--danger)' : 'var(--dim)';
@@ -1590,7 +1592,8 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
   async function handleRegenerateQuestions() {
     if (clientProtocols.length === 0) return;
     setRegeneratingQuestions(true);
-    const currentStage = clientProtocols[clientProtocols.length - 1].stage;
+    const genProtos = clientProtocols.filter(p => p.source !== 'imported');
+    const currentStage = (genProtos[genProtos.length - 1] ?? clientProtocols[clientProtocols.length - 1]).stage;
     const res = await fetch(`/api/tracker-questions-bank?email=${encodeURIComponent(client.email)}&stage=${currentStage}`);
     const { bank } = await res.json();
     if (bank?.protocol_text) {

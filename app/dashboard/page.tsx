@@ -886,6 +886,7 @@ function ProtocolTab({ user, protocol, notionPageId }: { user: StoredUser; proto
           stage: row.stage,
           notionPageId: row.notion_page_id ?? undefined,
           title: row.title,
+          source: (row.source as 'generated' | 'imported') ?? 'generated',
           content: row.content ?? undefined,
           createdAt: row.created_at,
         }));
@@ -930,25 +931,33 @@ function ProtocolTab({ user, protocol, notionPageId }: { user: StoredUser; proto
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem", gap: "1rem" }}>
         {/* Stage pills */}
         <div style={{ display: "flex", gap: "0.375rem", overflowX: "auto", flexWrap: "nowrap", paddingBottom: "2px" }}>
-          {stages.map((s, i) => (
-            <button key={s.id} onClick={() => setSelectedIdx(i)}
-              style={{
-                flexShrink: 0,
-                height: "32px",
-                padding: "0 0.875rem",
-                background: selectedIdx === i ? "var(--primary)" : "var(--surface)",
-                color: selectedIdx === i ? "#fff" : "var(--muted)",
-                border: `1px solid ${selectedIdx === i ? "var(--primary)" : "var(--border)"}`,
-                borderRadius: "99px",
-                fontSize: "0.8125rem",
-                fontWeight: selectedIdx === i ? 500 : 400,
-                cursor: "pointer",
-                fontFamily: "var(--font-ui), system-ui, sans-serif",
-                transition: "background 150ms, color 150ms",
-              }}>
-              Stage {s.stage}
-            </button>
-          ))}
+          {(() => {
+            let importIdx = 0;
+            return stages.map((s, i) => {
+              const isImported = s.source === 'imported';
+              if (isImported) importIdx++;
+              const label = isImported ? `Imported ${importIdx}` : `Stage ${s.stage}`;
+              return (
+                <button key={s.id} onClick={() => setSelectedIdx(i)}
+                  style={{
+                    flexShrink: 0,
+                    height: "32px",
+                    padding: "0 0.875rem",
+                    background: selectedIdx === i ? (isImported ? "oklch(0.55 0.14 260)" : "var(--primary)") : "var(--surface)",
+                    color: selectedIdx === i ? "#fff" : "var(--muted)",
+                    border: `1px solid ${selectedIdx === i ? (isImported ? "oklch(0.55 0.14 260)" : "var(--primary)") : "var(--border)"}`,
+                    borderRadius: "99px",
+                    fontSize: "0.8125rem",
+                    fontWeight: selectedIdx === i ? 500 : 400,
+                    cursor: "pointer",
+                    fontFamily: "var(--font-ui), system-ui, sans-serif",
+                    transition: "background 150ms, color 150ms",
+                  }}>
+                  {label}
+                </button>
+              );
+            });
+          })()}
         </div>
         {/* Upload button */}
         <button onClick={() => setShowUpload(true)}

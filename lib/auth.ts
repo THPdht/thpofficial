@@ -60,6 +60,7 @@ export type ClientProtocol = {
   stage: number;
   notionPageId?: string;
   title: string;
+  source?: 'generated' | 'imported';
   content?: { sections: { heading: string; text: string }[]; todos: string[]; speaking_notes?: Record<string, unknown> };
   createdAt: string;
   published?: boolean;
@@ -371,6 +372,7 @@ export async function getClientProtocols(email: string): Promise<ClientProtocol[
     stage: row.stage,
     notionPageId: row.notion_page_id ?? undefined,
     title: row.title,
+    source: row.source ?? 'generated',
     content: row.content ?? undefined,
     createdAt: row.created_at,
   }));
@@ -389,6 +391,7 @@ export async function getAdminProtocols(email: string): Promise<ClientProtocol[]
       stage: row.stage,
       notionPageId: row.notion_page_id ?? undefined,
       title: row.title,
+      source: row.source ?? 'generated',
       content: row.content ?? undefined,
       createdAt: row.created_at,
       published: row.status === 'sent',

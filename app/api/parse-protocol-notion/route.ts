@@ -279,15 +279,24 @@ export async function POST(req: Request) {
     const sections = parsed.sections ?? [];
     const todos: string[] = parsed.todos ?? [];
 
-    // Count existing protocols to assign the correct stage number
-    const { count: existingCount } = await supabaseAdmin
+    const clientName = client.name ?? email.split('@')[0];
+
+    // Count imported-only protocols for the import number label
+    const { count: importedCount } = await supabaseAdmin
+      .from('protocols')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_email', email)
+      .eq('source', 'imported');
+    const importNum = (importedCount ?? 0) + 1;
+
+    // Count all protocols for the stage field (used for ordering)
+    const { count: totalCount } = await supabaseAdmin
       .from('protocols')
       .select('id', { count: 'exact', head: true })
       .eq('user_email', email);
-    const stage = (existingCount ?? 0) + 1;
+    const stage = (totalCount ?? 0) + 1;
 
-    const clientName = client.name ?? email.split('@')[0];
-    const title = `${clientName} — Protocol Stage ${stage} (Imported)`;
+    const title = `${clientName} — Imported Protocol ${importNum}`;
 
     // Insert as sent so client can see it immediately in their portal
     const { error: insertError } = await supabaseAdmin
@@ -298,6 +307,7 @@ export async function POST(req: Request) {
         title,
         content: { sections, todos },
         status: 'sent',
+        source: 'imported',
       });
     if (insertError) {
       console.error('[parse-protocol-notion] protocol insert error:', insertError);
@@ -317,7 +327,7 @@ export async function POST(req: Request) {
     supabaseAdmin.from('alarms').insert({
       user_email: email,
       type: 'protocol_imported',
-      message: `${clientName}'s Notion protocol imported — Stage ${stage} sent to client`,
+      message: `${clientName}'s Notion protocol imported — Imported Protocol ${importNum} sent to client`,
       created_at: new Date().toISOString(),
     }).then(({ error: ae }) => { if (ae) console.error('[parse-protocol-notion] alarm:', ae); });
 

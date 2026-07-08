@@ -318,11 +318,12 @@ export async function POST(req: Request) {
     const sections: { heading: string; text: string }[] = parsed.sections ?? [];
     const todos: string[] = parsed.todos ?? [];
 
-    // Count existing protocols for stage number
+    // Count only generated protocols for stage number (imports have separate numbering)
     const { count } = await supabase
       .from('protocols')
       .select('id', { count: 'exact', head: true })
-      .eq('user_email', clientEmail);
+      .eq('user_email', clientEmail)
+      .eq('source', 'generated');
     const stage = (count ?? 0) + 1;
 
     const title = `${name} — Protocol Stage ${stage}`;
@@ -332,7 +333,7 @@ export async function POST(req: Request) {
     // Save protocol as draft — THP must review and send manually from admin
     const { data: protocol, error: insertError } = await supabase
       .from('protocols')
-      .insert({ user_email: clientEmail, stage, title, content: protocolContent, status: 'draft' })
+      .insert({ user_email: clientEmail, stage, title, content: protocolContent, status: 'draft', source: 'generated' })
       .select()
       .single();
     if (insertError) {
