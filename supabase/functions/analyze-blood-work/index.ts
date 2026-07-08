@@ -74,10 +74,12 @@ Deno.serve(async (req) => {
     const fileBuffer = await fileResp.arrayBuffer();
     const base64Data = arrayBufferToBase64(fileBuffer);
     const rawMimeType = fileResp.headers.get("content-type") ?? "image/jpeg";
-    const isPdf = rawMimeType.includes("pdf");
+    // Detect PDF by content-type OR by URL extension (storage may serve application/octet-stream)
+    const isPdf = rawMimeType.includes("pdf") || imageUrl.toLowerCase().includes(".pdf");
     const imageMime = rawMimeType.split(";")[0] as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
-    // PDFs use type:"document" + beta header; images use type:"image"
+    // PDFs use type:"document"; images use type:"image"
+    // PDF support is GA in the main API — no beta header needed
     type ContentBlock =
       | { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } }
       | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } }
@@ -87,16 +89,12 @@ Deno.serve(async (req) => {
       ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64Data } }
       : { type: "image", source: { type: "base64", media_type: imageMime, data: base64Data } };
 
-    // Send to Claude vision (PDFs need the pdfs beta)
-    const createParams = {
+    // Send to Claude — same API path for both PDFs and images
+    const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 1500,
       messages: [{ role: "user" as const, content: [fileBlock, { type: "text" as const, text: EXTRACT_PROMPT }] }],
-      ...(isPdf ? { betas: ["pdfs-2024-09-25"] } : {}),
-    };
-    const response = await (isPdf
-      ? anthropic.beta.messages.create(createParams as Parameters<typeof anthropic.beta.messages.create>[0])
-      : anthropic.messages.create(createParams));
+    });
 
     const rawText = response.content[0].type === "text" ? response.content[0].text : "{}";
     let parsed: { markers?: Record<string, unknown>; test_date?: string; lab_name?: string; notes?: string };
