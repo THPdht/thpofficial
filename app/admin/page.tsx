@@ -1975,14 +1975,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
 
         {/* Diagnosis */}
         <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem", paddingTop: "1rem", borderTop: "1px solid var(--border)", marginBottom: "1.25rem" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Diagnosis</p>
-            <button onClick={handleGenerateDiagnosis} disabled={diagGenerating}
-              style={{ height: "28px", padding: "0 0.75rem", background: diagGenerating ? "var(--surface-2)" : "oklch(0.55 0.18 30 / 0.15)", border: "1px solid oklch(0.55 0.18 30 / 0.4)", borderRadius: "6px", color: diagGenerating ? "var(--dim)" : "oklch(0.75 0.18 30)", fontSize: "0.7rem", fontWeight: 600, cursor: diagGenerating ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
-              {diagGenerating ? "Generating…" : "+ Generate with AI"}
-            </button>
-          </div>
-          {diagGenError && <p style={{ fontSize: "0.75rem", color: "var(--primary)" }}>{diagGenError}</p>}
+          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Diagnosis</p>
           {adminDiagnostics.filter(d =>
             // Only show real diagnostics — filter out generate-protocol artifacts
             // Records whose only section is "What Is Actually Happening" are now stored in Protocol
