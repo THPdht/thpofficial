@@ -1,8 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 export default function BookingConfirmedPage() {
+  const [hasAccount, setHasAccount] = useState(false);
+
+  useEffect(() => {
+    setHasAccount(!!localStorage.getItem("thp_current"));
+  }, []);
+
   return (
     <div style={{ minHeight: "100dvh", background: "var(--color-ink)", display: "flex", flexDirection: "column" }}>
       <div aria-hidden style={{ position: "fixed", top: "-10%", right: "0", width: "50%", height: "60%", background: "radial-gradient(ellipse, rgba(200,16,46,0.06) 0%, transparent 60%)", pointerEvents: "none" }} />
@@ -31,14 +38,18 @@ export default function BookingConfirmedPage() {
           </p>
 
           <p style={{ fontSize: "0.875rem", color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-body), sans-serif", lineHeight: 1.6, marginBottom: "2.5rem", maxWidth: "46ch" }}>
-            Check your email for the calendar invite. If you have not applied yet, do that now so THP has your full picture before you speak.
+            {hasAccount
+              ? "Check your email for the calendar invite. See you on the call."
+              : "Check your email for the calendar invite. If you have not applied yet, do that now so THP has your full picture before you speak."}
           </p>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-            <Link href="/apply"
-              style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "54px", background: "var(--color-red)", color: "#fff", borderRadius: "8px", fontSize: "1rem", fontWeight: 700, textDecoration: "none", fontFamily: "var(--font-body), sans-serif", letterSpacing: "0.02em" }}>
-              Complete your application →
-            </Link>
+            {!hasAccount && (
+              <Link href="/apply"
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "54px", background: "var(--color-red)", color: "#fff", borderRadius: "8px", fontSize: "1rem", fontWeight: 700, textDecoration: "none", fontFamily: "var(--font-body), sans-serif", letterSpacing: "0.02em" }}>
+                Complete your application →
+              </Link>
+            )}
             <Link href="/"
               style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "100%", height: "44px", background: "transparent", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.4)", borderRadius: "8px", fontSize: "0.875rem", textDecoration: "none", fontFamily: "var(--font-body), sans-serif" }}>
               Back to home

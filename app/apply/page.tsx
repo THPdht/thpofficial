@@ -439,7 +439,7 @@ export default function ApplyPage() {
   }
 
   return (
-    <div style={{ minHeight: "100dvh", background: bg, padding: "2rem 1.5rem 4rem" }}>
+    <div style={{ minHeight: "100dvh", background: bg, padding: "5.5rem 1.5rem 4rem" }}>
       <div style={{ maxWidth: "600px", margin: "0 auto" }}>
         {/* Header */}
         <div style={{ marginBottom: "2rem" }}>
