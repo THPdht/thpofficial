@@ -1520,6 +1520,7 @@ function ReferralsTab({ user }: { user: StoredUser }) {
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -1544,10 +1545,10 @@ function ReferralsTab({ user }: { user: StoredUser }) {
     const res = await fetch('/api/referrals', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ referrerEmail: user.email, referredName: name.trim(), referredEmail: email.trim() }),
+      body: JSON.stringify({ referrerEmail: user.email, referredName: name.trim(), referredEmail: email.trim(), referredPhone: phone.trim() || undefined }),
     }).then(r => r.json()).catch(() => ({ error: "Request failed" }));
     if (res.error) { setError(res.error); setSubmitting(false); return; }
-    setSuccess(true); setName(""); setEmail(""); setSubmitting(false);
+    setSuccess(true); setName(""); setEmail(""); setPhone(""); setSubmitting(false);
     load();
   };
 
@@ -1601,6 +1602,11 @@ function ReferralsTab({ user }: { user: StoredUser }) {
           <div>
             <label style={{ display: "block", fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 400, marginBottom: "0.375rem" }}>Their email</label>
             <input value={email} onChange={e => { setEmail(e.target.value); setSuccess(false); }} placeholder="email@example.com" type="email"
+              style={{ width: "100%", height: "42px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.9rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none", boxSizing: "border-box" }} />
+          </div>
+          <div>
+            <label style={{ display: "block", fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 400, marginBottom: "0.375rem" }}>Their phone <span style={{ color: "var(--dim)", fontWeight: 300 }}>(optional)</span></label>
+            <input value={phone} onChange={e => { setPhone(e.target.value); setSuccess(false); }} placeholder="+1 555 000 0000" type="tel"
               style={{ width: "100%", height: "42px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.9rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none", boxSizing: "border-box" }} />
           </div>
           {error && <p style={{ fontSize: "0.8125rem", color: "oklch(0.70 0.15 25)" }}>{error}</p>}

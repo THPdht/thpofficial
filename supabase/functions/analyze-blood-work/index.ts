@@ -99,10 +99,17 @@ Deno.serve(async (req) => {
     const rawText = response.content[0].type === "text" ? response.content[0].text : "{}";
     let parsed: { markers?: Record<string, unknown>; test_date?: string; lab_name?: string; notes?: string };
     try {
-      const cleaned = rawText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-      parsed = JSON.parse(cleaned);
+      // Strip markdown fences, then find the JSON object boundaries
+      const stripped = rawText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      let jsonStr = stripped;
+      if (!jsonStr.startsWith("{")) {
+        const start = jsonStr.indexOf("{");
+        const end = jsonStr.lastIndexOf("}");
+        if (start !== -1 && end > start) jsonStr = jsonStr.slice(start, end + 1);
+      }
+      parsed = JSON.parse(jsonStr);
     } catch {
-      console.error("[analyze-blood-work] JSON parse failed:", rawText.slice(0, 200));
+      console.error("[analyze-blood-work] JSON parse failed. Raw response (first 500 chars):", rawText.slice(0, 500));
       parsed = { notes: "Could not parse extraction result" };
     }
 

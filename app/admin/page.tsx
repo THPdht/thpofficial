@@ -1394,8 +1394,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
   const [selectedMarker, setSelectedMarker] = useState("total_t");
   const [userData, setUserData] = useState<{ deposit_paid: number | null; total_owed: number | null; telegram_username: string | null; last_login: string | null; last_tracker_date: string | null; agreed_monthly: number | null; last_monthly_paid: string | null; last_monthly_amount: number | null } | null>(null);
   const [agreedMonthly, setAgreedMonthly] = useState("");
-  const [referralCount, setReferralCount] = useState(0);
-  const [pendingReferrals, setPendingReferrals] = useState<{ id: string; referred_email: string; created_at: string }[]>([]);
+  const [allReferrals, setAllReferrals] = useState<{ id: string; referred_name: string; referred_email: string; referred_phone?: string; status: string; created_at: string }[]>([]);
   const [markingReferral, setMarkingReferral] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [notesSaving, setNotesSaving] = useState(false);
@@ -1478,13 +1477,12 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
         }
       });
 
-    // Referral count + pending list — use admin API to bypass RLS
+    // Referral list — use admin API to bypass RLS
     fetch(`/api/admin/referrals?email=${encodeURIComponent(client.email)}&pw=${encodeURIComponent(ADMIN_PASSWORD)}`)
       .then(r => r.json())
       .then(d => {
-        const all = (d.referrals ?? []) as { id: string; referred_name: string; referred_email: string; status: string; submitted_at: string }[];
-        setReferralCount(all.length); // total (paid + pending)
-        setPendingReferrals(all.filter(r => r.status === 'pending').map(r => ({ id: r.id, referred_email: r.referred_email || r.referred_name, created_at: r.submitted_at })));
+        const all = (d.referrals ?? []) as { id: string; referred_name: string; referred_email: string; referred_phone?: string; status: string; submitted_at: string }[];
+        setAllReferrals(all.map(r => ({ id: r.id, referred_name: r.referred_name, referred_email: r.referred_email, referred_phone: r.referred_phone, status: r.status, created_at: r.submitted_at })));
       })
       .catch(() => {});
 
@@ -1551,8 +1549,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ referralId, adminPw: ADMIN_PASSWORD }),
     });
-    setPendingReferrals(prev => prev.filter(r => r.id !== referralId));
-    setReferralCount(prev => prev + 1);
+    setAllReferrals(prev => prev.map(r => r.id === referralId ? { ...r, status: 'paid' } : r));
     setMarkingReferral(null);
   };
 
@@ -1740,7 +1737,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
             </div>
             <div style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px" }}>
               <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Referrals</p>
-              <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{referralCount} / 3</p>
+              <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{allReferrals.filter(r => r.status === 'paid').length} / 3</p>
             </div>
             {(() => {
               const refCode = btoa(client.email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase();
@@ -2269,28 +2266,51 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
           )}
           <button onClick={onRemoveClient} style={{ height: "28px", padding: "0 0.75rem", background: "oklch(0.55 0.18 25 / 0.08)", border: "1px solid oklch(0.55 0.18 25 / 0.25)", borderRadius: "6px", color: "oklch(0.68 0.18 25)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Remove client</button>
         </div>
-        {referralCount >= 3 && (
+        {allReferrals.filter(r => r.status === 'paid').length >= 3 && (
           <button onClick={applyFreeMonth} disabled={applyingFreeMonth || !!client.diagnosticData?.freeMonthEarned}
             style={{ marginTop: "0.25rem", height: "32px", padding: "0 0.875rem", background: "var(--primary)", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: client.diagnosticData?.freeMonthEarned ? 0.5 : 1, width: "fit-content" }}>
             {client.diagnosticData?.freeMonthEarned ? 'Free Month Applied' : 'Apply Free Month'}
           </button>
         )}
-        {pendingReferrals.length > 0 && (
-          <div style={{ marginTop: "0.75rem" }}>
-            <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif", marginBottom: "0.375rem" }}>Pending referrals</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-              {pendingReferrals.map(r => (
-                <div key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.5rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "6px" }}>
-                  <span style={{ fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{r.referred_email}</span>
-                  <button onClick={() => markReferralPaid(r.id)} disabled={markingReferral === r.id}
-                    style={{ height: "24px", padding: "0 0.625rem", background: "oklch(0.45 0.15 145 / 0.08)", border: "1px solid oklch(0.45 0.15 145 / 0.2)", borderRadius: "5px", color: "oklch(0.7 0.15 145)", fontSize: "0.7rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: markingReferral === r.id ? 0.5 : 1 }}>
-                    {markingReferral === r.id ? '...' : 'Mark paid'}
-                  </button>
-                </div>
-              ))}
+        {allReferrals.length > 0 && (() => {
+          const refCode = btoa(client.email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8).toUpperCase();
+          const refUrl = `https://thpofficial.com/referral?ref=${refCode}`;
+          return (
+            <div style={{ marginTop: "0.75rem" }}>
+              <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif", marginBottom: "0.375rem" }}>Referrals</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                {allReferrals.map(r => (
+                  <div key={r.id} style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "6px" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: r.referred_email || r.referred_phone ? "0.375rem" : 0 }}>
+                      <span style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{r.referred_name}</span>
+                      <span style={{ fontSize: "0.65rem", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", padding: "0.2rem 0.5rem", borderRadius: "99px", background: r.status === 'paid' ? "oklch(0.45 0.15 145 / 0.08)" : "var(--surface)", border: `1px solid ${r.status === 'paid' ? "oklch(0.45 0.15 145 / 0.25)" : "var(--border)"}`, color: r.status === 'paid' ? "oklch(0.7 0.15 145)" : "var(--dim)", fontFamily: "var(--font-mono), monospace" }}>{r.status === 'paid' ? 'Paying' : 'Pending'}</span>
+                    </div>
+                    {r.referred_email && <p style={{ fontSize: "0.75rem", color: "var(--muted)", fontFamily: "var(--font-ui), system-ui, sans-serif", marginBottom: "0.25rem" }}>{r.referred_email}</p>}
+                    {r.referred_phone && <p style={{ fontSize: "0.75rem", color: "var(--muted)", fontFamily: "var(--font-ui), system-ui, sans-serif", marginBottom: "0.375rem" }}>{r.referred_phone}</p>}
+                    <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
+                      {r.referred_phone && (
+                        <a href={`https://wa.me/${r.referred_phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hey ${r.referred_name}, here's your THP application link: ${refUrl}`)}`} target="_blank" rel="noopener noreferrer"
+                          style={{ height: "24px", padding: "0 0.625rem", background: "oklch(0.45 0.18 145 / 0.08)", border: "1px solid oklch(0.45 0.18 145 / 0.2)", borderRadius: "5px", color: "oklch(0.7 0.18 145)", fontSize: "0.7rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+                          WhatsApp
+                        </a>
+                      )}
+                      <button onClick={() => navigator.clipboard.writeText(refUrl).catch(() => {})}
+                        style={{ height: "24px", padding: "0 0.625rem", background: "none", border: "1px solid var(--border)", borderRadius: "5px", color: "var(--dim)", fontSize: "0.7rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                        Copy link
+                      </button>
+                      {r.status === 'pending' && (
+                        <button onClick={() => markReferralPaid(r.id)} disabled={markingReferral === r.id}
+                          style={{ height: "24px", padding: "0 0.625rem", background: "oklch(0.45 0.15 145 / 0.08)", border: "1px solid oklch(0.45 0.15 145 / 0.2)", borderRadius: "5px", color: "oklch(0.7 0.15 145)", fontSize: "0.7rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: markingReferral === r.id ? 0.5 : 1 }}>
+                          {markingReferral === r.id ? '...' : 'Mark paid'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
     </div>

@@ -8,7 +8,7 @@ export async function GET(req: Request) {
 
   const { data, error } = await supabaseAdmin
     .from('referrals')
-    .select('id, referred_name, referred_email, status, submitted_at, paid_at')
+    .select('id, referred_name, referred_email, referred_phone, status, submitted_at, paid_at')
     .eq('referrer_email', email)
     .order('submitted_at', { ascending: false });
 
@@ -19,7 +19,7 @@ export async function GET(req: Request) {
 // POST /api/referrals — submit a new referral
 export async function POST(req: Request) {
   try {
-    const { referrerEmail, referredName, referredEmail } = await req.json();
+    const { referrerEmail, referredName, referredEmail, referredPhone } = await req.json();
     if (!referrerEmail || !referredName || !referredEmail) {
       return Response.json({ error: 'Missing required fields' }, { status: 400 });
     }
@@ -28,6 +28,7 @@ export async function POST(req: Request) {
       referrer_email: referrerEmail,
       referred_name: referredName,
       referred_email: referredEmail.toLowerCase().trim(),
+      referred_phone: referredPhone?.trim() || null,
       status: 'pending',
       submitted_at: new Date().toISOString(),
     });

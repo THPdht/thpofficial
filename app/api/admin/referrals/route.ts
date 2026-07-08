@@ -12,7 +12,7 @@ export async function GET(req: Request) {
 
   const { data, error } = await supabaseAdmin
     .from('referrals')
-    .select('id, referred_name, referred_email, status, submitted_at, paid_at')
+    .select('id, referred_name, referred_email, referred_phone, status, submitted_at, paid_at')
     .eq('referrer_email', email.toLowerCase().trim())
     .order('submitted_at', { ascending: false });
 
