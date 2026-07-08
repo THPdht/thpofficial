@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { getCurrentUser, signOut, register, login } from "@/lib/auth";
+import { getCurrentUser, signOut, register, login, cacheUser } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 
 type FormData = {
@@ -263,6 +263,9 @@ function OnboardingInner() {
         throw new Error(body.error ?? "Failed to save intake");
       }
 
+      // Update localStorage cache so dashboard doesn't bounce back to onboarding
+      const cached = getCurrentUser();
+      if (cached) cacheUser({ ...cached, status: "pending" });
       setSubmitStatus("done");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
@@ -310,6 +313,9 @@ function OnboardingInner() {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? "Failed to save intake");
       }
+      // Update localStorage cache so dashboard doesn't bounce back to onboarding
+      const cached = getCurrentUser();
+      if (cached) cacheUser({ ...cached, status: "pending" });
       setSubmitStatus("done");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
