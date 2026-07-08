@@ -239,6 +239,14 @@ export default function AdminPage() {
     await refreshClients();
   }
 
+  async function handleNicknameChange(nickname: string) {
+    if (!selected) return;
+    await updateUser(selected.email, { nickname: nickname || undefined });
+    const updated = { ...selected, nickname: nickname || undefined };
+    setSelected(updated);
+    setClients(prev => prev.map(c => c.email === selected.email ? updated : c));
+  }
+
   async function handleRemoveClient() {
     if (!selected) return;
     if (!window.confirm(`Remove ${selected.name} permanently? This cannot be undone.`)) return;
@@ -295,6 +303,7 @@ export default function AdminPage() {
   const searchFiltered = q
     ? clients.filter(c =>
         c.name.toLowerCase().includes(q) ||
+        (c.nickname ?? "").toLowerCase().includes(q) ||
         c.email.toLowerCase().includes(q) ||
         (c.diagnosticData?.contactInfo ?? "").toLowerCase().includes(q)
       )
@@ -460,6 +469,7 @@ export default function AdminPage() {
                   onProtocolStatusChange={handleProtocolStatusChange}
                   onAccountStatusChange={handleAccountStatusChange}
                   onClientTypeChange={handleClientTypeChange}
+                  onNicknameChange={handleNicknameChange}
                   onRemoveClient={handleRemoveClient}
                   onSuspendClient={handleSuspendClient}
                   onAddPayment={handleAddPayment}
@@ -1354,7 +1364,7 @@ function PromoteButton({ client, onSetStatus, onClientTypeChange }: { client: St
 
 // ─── CRM PANEL (full-width when client selected) ──────────────────────────
 
-function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen, onToggleApp, onActivate, onSetStatus, onAssignProtocol, onProtocolGenerated, onProtocolStatusChange, onAccountStatusChange, onClientTypeChange, onRemoveClient, onSuspendClient, onAddPayment, onRemovePayment }: {
+function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen, onToggleApp, onActivate, onSetStatus, onAssignProtocol, onProtocolGenerated, onProtocolStatusChange, onAccountStatusChange, onClientTypeChange, onNicknameChange, onRemoveClient, onSuspendClient, onAddPayment, onRemovePayment }: {
   client: StoredUser;
   onBack: () => void;
   diagnosticOpen: boolean;
@@ -1368,6 +1378,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
   onProtocolStatusChange: (status: ProtocolStatus) => void;
   onAccountStatusChange: (status: AccountStatus) => void;
   onClientTypeChange: (t: 'skool' | '1on1') => void;
+  onNicknameChange: (nickname: string) => void;
   onRemoveClient: () => void;
   onSuspendClient: () => void;
   onAddPayment: (p: Omit<Payment, 'id'>) => void;
@@ -1393,6 +1404,8 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
   const [pushSending, setPushSending] = useState(false);
   const [pushResult, setPushResult] = useState<"sent" | "failed" | null>(null);
   const [savedField, setSavedField] = useState<string | null>(null);
+  const [nickEditing, setNickEditing] = useState(false);
+  const [nickValue, setNickValue] = useState("");
   const [applyingFreeMonth, setApplyingFreeMonth] = useState(false);
   const [showPayForm, setShowPayForm] = useState(false);
   const [payDeposit, setPayDeposit] = useState("");
@@ -1607,13 +1620,14 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
     setGenerating(false);
   }
 
-  const firstName = client.name.split(' ')[0];
+  const displayName = client.nickname || client.name;
+  const firstName = displayName.split(' ')[0];
 
   const sectionLabel = (text: string) => (
     <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "0.75rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{text}</p>
   );
 
-  const initials = client.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+  const initials = displayName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
   const joinedDate = new Date(client.joinedAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 
   return (
@@ -1623,7 +1637,38 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
       <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "0.5rem", paddingBottom: "1rem", borderBottom: "1px solid var(--border)" }}>
         <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--dim)", cursor: "pointer", fontSize: "0.875rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>← Back</button>
         <div style={{ flex: 1 }}>
-          <h2 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.25rem", fontWeight: 400, color: "var(--ink)", margin: 0 }}>{client.name}</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            {nickEditing ? (
+              <input
+                autoFocus
+                value={nickValue}
+                onChange={e => setNickValue(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { onNicknameChange(nickValue.trim()); setNickEditing(false); }
+                  if (e.key === 'Escape') setNickEditing(false);
+                }}
+                onBlur={() => { onNicknameChange(nickValue.trim()); setNickEditing(false); }}
+                placeholder={client.name}
+                style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.25rem", fontWeight: 400, color: "var(--ink)", background: "var(--surface)", border: "1px solid var(--primary)", borderRadius: "6px", padding: "0 0.5rem", height: "2rem", outline: "none", minWidth: 0, width: "220px" }}
+              />
+            ) : (
+              <h2 style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.25rem", fontWeight: 400, color: "var(--ink)", margin: 0 }}>{displayName}</h2>
+            )}
+            {!nickEditing && (
+              <button
+                onClick={() => { setNickValue(client.nickname || ""); setNickEditing(true); }}
+                title={client.nickname ? `Nickname: ${client.nickname}` : "Set nickname"}
+                style={{ background: "none", border: "none", cursor: "pointer", color: client.nickname ? "var(--primary)" : "var(--dim)", padding: "0 2px", lineHeight: 1, opacity: 0.6, transition: "opacity 150ms" }}
+                onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+                onMouseLeave={e => (e.currentTarget.style.opacity = "0.6")}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+            )}
+            {client.nickname && !nickEditing && (
+              <span style={{ fontSize: "0.7rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>({client.name})</span>
+            )}
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.25rem", flexWrap: "wrap" }}>
             {/* Telegram */}
             <div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
@@ -2423,7 +2468,7 @@ function ToolsPanel({ clients, onClientCreated }: { clients: StoredUser[]; onCli
             <select value={toolsClientEmail} onChange={e => { setToolsClientEmail(e.target.value); setToolsPayUrl(null); setToolsPayError(""); }}
               style={{ width: "100%", height: "36px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.875rem", color: toolsClientEmail ? "var(--ink)" : "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }}>
               <option value="">Select client…</option>
-              {activeClients.map(c => <option key={c.email} value={c.email}>{c.name} · {c.email}</option>)}
+              {activeClients.map(c => <option key={c.email} value={c.email}>{c.nickname || c.name} · {c.email}</option>)}
             </select>
           </div>
           <div>
@@ -2478,7 +2523,7 @@ function ToolsPanel({ clients, onClientCreated }: { clients: StoredUser[]; onCli
             <select value={protoClientEmail} onChange={e => { setProtoClientEmail(e.target.value); setProtoResult(null); }}
               style={{ width: "100%", height: "36px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.875rem", color: protoClientEmail ? "var(--ink)" : "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none" }}>
               <option value="">Select client…</option>
-              {activeClients.map(c => <option key={c.email} value={c.email}>{c.name} · {c.email}</option>)}
+              {activeClients.map(c => <option key={c.email} value={c.email}>{c.nickname || c.name} · {c.email}</option>)}
             </select>
           </div>
           <div>
@@ -2516,7 +2561,7 @@ function ClientRow({ u, selected, unreadCounts, onSelect }: { u: StoredUser; sel
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", minWidth: 0 }}>
             <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: statusColor(u.status), flexShrink: 0 }} />
             <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {u.name && !u.name.includes('undefined') ? u.name : u.email.split('@')[0]}
+              {u.nickname || (u.name && !u.name.includes('undefined') ? u.name : u.email.split('@')[0])}
             </p>
           </div>
           {unread > 0 && (
@@ -2807,7 +2852,7 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
                 onMouseLeave={e => e.currentTarget.style.borderColor = "oklch(0.60 0.18 165 / 0.2)"}>
                 <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--accent)", flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)" }}>{c.name}</p>
+                  <p style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--ink)" }}>{c.nickname || c.name}</p>
                   <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300 }}>
                     {c.status === 'pending' ? "Intake complete · needs protocol" : "Registered · no intake yet"} · joined {new Date(c.joinedAt + 'T12:00:00').toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
                   </p>

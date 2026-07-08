@@ -146,6 +146,7 @@ export type DiagnosticData = {
 
 export type StoredUser = {
   name: string;
+  nickname?: string;
   email: string;
   password: string;
   status: ClientStatus;
@@ -175,6 +176,7 @@ export function rowToUser(row: any): StoredUser {
   const diagData = row.diagnostic_data ?? undefined;
   return {
     name: row.name,
+    nickname: row.nickname ?? undefined,
     email: row.email,
     password: row.password,
     status: row.status as ClientStatus,
@@ -255,6 +257,7 @@ export async function login(
 export async function updateUser(email: string, updates: Partial<StoredUser>): Promise<void> {
   const dbUpdates: Record<string, unknown> = {};
   if (updates.name !== undefined) dbUpdates.name = updates.name;
+  if (updates.nickname !== undefined) dbUpdates.nickname = updates.nickname || null;
   if (updates.status !== undefined) dbUpdates.status = updates.status;
   if (updates.streak !== undefined) dbUpdates.streak = updates.streak;
   if (updates.longestStreak !== undefined) dbUpdates.longest_streak = updates.longestStreak;
