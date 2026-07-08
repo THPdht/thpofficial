@@ -279,7 +279,32 @@ export async function POST(req: Request) {
     const sections = parsed.sections ?? [];
     const todos: string[] = parsed.todos ?? [];
 
-    // Save imported content as reference only — do NOT create protocol or diagnostic rows
+    // Count existing protocols to assign the correct stage number
+    const { count: existingCount } = await supabaseAdmin
+      .from('protocols')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_email', email);
+    const stage = (existingCount ?? 0) + 1;
+
+    const clientName = client.name ?? email.split('@')[0];
+    const title = `${clientName} — Protocol Stage ${stage} (Imported)`;
+
+    // Insert as sent so client can see it immediately in their portal
+    const { error: insertError } = await supabaseAdmin
+      .from('protocols')
+      .insert({
+        user_email: email,
+        stage,
+        title,
+        content: { sections, todos },
+        status: 'sent',
+      });
+    if (insertError) {
+      console.error('[parse-protocol-notion] protocol insert error:', insertError);
+      return Response.json({ error: 'Failed to save protocol: ' + insertError.message }, { status: 500 });
+    }
+
+    // Also store reference in diagnostic_data for admin visibility
     const existingDiag = client.diagnostic_data || {};
     await supabaseAdmin.from('users').update({
       diagnostic_data: {
@@ -289,11 +314,10 @@ export async function POST(req: Request) {
     }).eq('email', email);
 
     // Alarm for admin feed
-    const clientName = client.name ?? email.split('@')[0];
     supabaseAdmin.from('alarms').insert({
       user_email: email,
       type: 'protocol_imported',
-      message: `${clientName} imported their protocol (Notion)`,
+      message: `${clientName}'s Notion protocol imported — Stage ${stage} sent to client`,
       created_at: new Date().toISOString(),
     }).then(({ error: ae }) => { if (ae) console.error('[parse-protocol-notion] alarm:', ae); });
 
