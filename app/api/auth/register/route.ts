@@ -25,7 +25,6 @@ export async function POST(req: Request) {
     streak: 0,
     longest_streak: 0,
     joined_at: new Date().toISOString().split('T')[0],
-    ...(phone?.trim() ? { phone: phone.trim() } : {}),
   });
 
   if (error) {
