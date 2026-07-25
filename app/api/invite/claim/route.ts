@@ -1,4 +1,4 @@
-import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
+import { supabaseAdmin as supabase, syncAuthPassword } from '@/lib/supabaseAdmin';
 
 export async function POST(req: Request) {
   try {
@@ -27,6 +27,14 @@ export async function POST(req: Request) {
       .eq('email', invite.email);
 
     if (updateError) return Response.json({ error: 'Failed to set password' }, { status: 500 });
+
+    // Keep Supabase Auth in step with the table, or the client lands on /dashboard
+    // with no Auth session and gets the "access has been removed" screen.
+    const { error: authError } = await syncAuthPassword(invite.email, password);
+    if (authError) {
+      console.error('[invite/claim] auth sync', authError);
+      return Response.json({ error: 'Failed to set password' }, { status: 500 });
+    }
 
     // Fetch user status to determine redirect
     const { data: userRow } = await supabase

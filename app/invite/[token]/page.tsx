@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { login } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 
 export default function InvitePage() {
   const params = useParams();
@@ -45,6 +46,16 @@ export default function InvitePage() {
       // account-creation step at the end (registering again would 409).
       const signedIn = await login(data.email, password);
       if (!signedIn.success) {
+        setError("Password set, but sign-in failed. Please log in at /login.");
+        return;
+      }
+      // Establish the Supabase Auth session too. Without it every RLS-guarded query
+      // on /dashboard comes back null, which the dashboard reads as a deleted account.
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: data.email.trim().toLowerCase(),
+        password,
+      });
+      if (authError) {
         setError("Password set, but sign-in failed. Please log in at /login.");
         return;
       }

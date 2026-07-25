@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { supabaseAdmin, syncAuthPassword } from '@/lib/supabaseAdmin';
 
 export async function POST(req: Request) {
   const { email, currentPassword, newPassword } = await req.json();
@@ -11,5 +11,12 @@ export async function POST(req: Request) {
 
   const { error } = await supabaseAdmin.from('users').update({ password: newPassword }).eq('email', email);
   if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  const { error: authError } = await syncAuthPassword(email, newPassword);
+  if (authError) {
+    console.error('[change-password] auth sync', authError);
+    return Response.json({ error: 'Failed to update password' }, { status: 500 });
+  }
+
   return Response.json({ success: true });
 }

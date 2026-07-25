@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { supabaseAdmin, syncAuthPassword } from '@/lib/supabaseAdmin';
 
 export async function POST(req: Request) {
   const { email, password } = await req.json();
@@ -13,6 +13,13 @@ export async function POST(req: Request) {
 
   if (error || !data) return Response.json({ error: 'No account found with this email.' }, { status: 401 });
   if (data.password !== password) return Response.json({ error: 'Incorrect password.' }, { status: 401 });
+
+  // The table password is now confirmed correct, so it's safe to point Supabase Auth
+  // at it. This heals accounts whose two passwords drifted apart before the invite
+  // and change-password routes started syncing them — without it the client signs in
+  // here, fails to get an Auth session, and hits the "access removed" screen.
+  const { error: authError } = await syncAuthPassword(norm, password);
+  if (authError) console.error('[auth/login] auth sync', authError);
 
   return Response.json({ success: true, user: data });
 }
