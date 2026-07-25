@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
+import { login } from "@/lib/auth";
 
 export default function InvitePage() {
   const params = useParams();
@@ -40,6 +41,14 @@ export default function InvitePage() {
         setError(data.error ?? "Something went wrong. This link may have expired.");
         return;
       }
+      // Sign in immediately so /onboarding knows who they are and skips the
+      // account-creation step at the end (registering again would 409).
+      const signedIn = await login(data.email, password);
+      if (!signedIn.success) {
+        setError("Password set, but sign-in failed. Please log in at /login.");
+        return;
+      }
+
       setDone(true);
       // Active/alumni clients skip intake and go straight to dashboard.
       // New clients go to /onboarding with the token in the URL so the paywall passes.
