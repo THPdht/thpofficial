@@ -36,8 +36,19 @@ export default function Dashboard() {
     if (!u) { router.replace("/login"); return; }
     if (u.status === "new") { router.replace("/onboarding"); return; }
 
-    // Verify the account still exists and isn't suspended before rendering anything
-    supabase.from('users').select('diagnostic_data').eq('email', u.email).maybeSingle().then(({ data }) => {
+    // Verify the account still exists and isn't suspended before rendering anything.
+    // A missing row here is ambiguous — it can mean the account was removed, but it
+    // also means "no Supabase Auth session" (RLS returns null) or "the cached email
+    // is stale". Only the first deserves the removal screen; the rest are sign-in
+    // problems, so confirm there's a live session for this exact email first.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!isMounted) return;
+      if (!session || session.user.email?.toLowerCase() !== u.email.toLowerCase()) {
+        signOut();
+        router.replace("/login");
+        return;
+      }
+      return supabase.from('users').select('diagnostic_data').eq('email', u.email).maybeSingle().then(({ data }) => {
       if (!isMounted) return;
       if (!data || data.diagnostic_data?.suspended) {
         fetch('/api/log-access', {
@@ -67,6 +78,7 @@ export default function Dashboard() {
           }
         }
       } catch { /* ignore */ }
+      });
     });
 
     // PWA install banner - show once on mobile when not already installed
