@@ -83,9 +83,6 @@ Map every protocol element to their exact existing daily schedule from the intak
 WEEKLY CHALLENGE
 One specific, measurable, slightly uncomfortable challenge for week one. Psychological edge, testosterone signalling, or identity-based. Advanced enough to create curiosity. Simple enough to execute immediately.
 
-WHAT TO EXPECT
-Week by week and month by month breakdown specific to their starting point, their history, and their stated goal. Realistic. No hype. Tell them what they will feel before they see it.
-
 CLOSING BLOCK
 End with this word for word:
 
@@ -124,9 +121,6 @@ Based on the month's data and any bloodwork submitted, adjust the stack. Add one
 WEEKLY CHALLENGES
 Four challenges, one per week of the coming month. Each one must push slightly further than the last. Rotate between physical, psychological, testosterone signalling, and identity-based challenges. Make each challenge specific, measurable, and slightly outside the client's current comfort zone. Gatekeep the reason. Give the action not the full explanation.
 
-NEXT PHASE FOCUS
-One paragraph. What the coming month is optimizing for specifically. What the client should feel by the end of it. What we will assess on the next call. Give them direction without giving them the full roadmap.
-
 CLOSING BLOCK
 End with this word for word:
 
@@ -153,10 +147,10 @@ You must output valid JSON with no markdown fences and no preamble:
 }
 
 For INITIAL protocols use these headings in this exact order:
-What Is Actually Happening In Your Body, The Objective, Nutrition, Training, Sleep, Mitochondrial Optimization, Supplements, Bloodwork, Your Daily System, Weekly Challenge, What To Expect, Closing
+What Is Actually Happening In Your Body, The Objective, Nutrition, Training, Sleep, Mitochondrial Optimization, Supplements, Bloodwork, Your Daily System, Weekly Challenge, Closing
 
 For ONGOING protocols use these headings in this exact order:
-Month In Review, What Your Data Is Telling Us, Nutrition Adjustments, Training Progression, Sleep Adjustments, Supplement Stack Update, Weekly Challenges, Next Phase Focus, Closing
+Month In Review, What Your Data Is Telling Us, Nutrition Adjustments, Training Progression, Sleep Adjustments, Supplement Stack Update, Weekly Challenges, Closing
 
 The Closing section text must be the exact closing block word for word as specified above. Write each section as flowing paragraphs. Never use bullet points or numbered lists inside section text.`;
 
@@ -243,9 +237,7 @@ You must output valid JSON with no markdown fences and no preamble:
     { "heading": "WHY IT IS HAPPENING", "text": "..." },
     { "heading": "WHY PREVIOUS ATTEMPTS FAILED", "text": "..." },
     { "heading": "FOUNDATION PHASE", "text": "..." },
-    { "heading": "IMPLEMENTATION PHASE", "text": "..." },
-    { "heading": "SUCCESS METRICS", "text": "..." },
-    { "heading": "WHERE THIS IS GOING", "text": "..." }
+    { "heading": "IMPLEMENTATION PHASE", "text": "..." }
   ],
   "todos": ["specific measurable action 1", "specific measurable action 2"]
 }
@@ -269,12 +261,6 @@ The 3 to 5 core behavioral and identity installations he builds first. Each one 
 
 IMPLEMENTATION PHASE
 2 to 3 named action areas (uppercase headings) with specific weekly behavioral targets. These are the moves that express the Foundation. Each should be measurable and slightly uncomfortable.
-
-SUCCESS METRICS
-What he will notice first. What changes by week 4. What changes by month 3. Be specific to his starting point and stated goal. No hype. No promises. Just what the data will show.
-
-WHERE THIS IS GOING
-One paragraph. The man on the other side of this work. What he will be capable of that he cannot access now. Write it as a statement of fact, not a goal.
 
 TODOS
 Extract 8 to 15 specific, measurable behavioral actions from the FOUNDATION PHASE and IMPLEMENTATION PHASE sections. These are the client's immediate action items. Concrete and executable.`;

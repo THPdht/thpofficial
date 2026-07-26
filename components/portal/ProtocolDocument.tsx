@@ -8,17 +8,16 @@ export type ProtocolSection = { heading: string; text: string };
 // Hormonal format section names for grouping
 const FOUNDATION_BEFORE = "Nutrition";
 const IMPLEMENTATION_BEFORE = "Weekly Challenge";
-const SUCCESS_BEFORE = "What To Expect";
 
 const HORMONAL_SECTIONS = new Set([
   "What Is Actually Happening In Your Body", "The Objective",
   "Nutrition", "Training", "Sleep", "Mitochondrial Optimization",
   "Supplements", "Bloodwork", "Your Daily System",
-  "Weekly Challenge", "What To Expect", "Closing",
+  "Weekly Challenge", "Closing",
   // Ongoing variants
   "Month In Review", "What Your Data Is Telling Us",
   "Nutrition Adjustments", "Training Progression", "Sleep Adjustments",
-  "Supplement Stack Update", "Weekly Challenges", "Next Phase Focus",
+  "Supplement Stack Update", "Weekly Challenges",
 ]);
 
 function isHormonalFormat(sections: ProtocolSection[]): boolean {
@@ -144,13 +143,11 @@ export default function ProtocolDocument({
           // Inject phase dividers for hormonal format
           const showFoundationDivider = hormonal && heading === FOUNDATION_BEFORE;
           const showImplementationDivider = hormonal && heading === IMPLEMENTATION_BEFORE;
-          const showSuccessDivider = hormonal && heading === SUCCESS_BEFORE;
 
           return (
             <div key={i}>
               {showFoundationDivider && <PhaseDivider label="— FOUNDATION PHASE —" />}
               {showImplementationDivider && <PhaseDivider label="— IMPLEMENTATION PHASE —" />}
-              {showSuccessDivider && <PhaseDivider label="— SUCCESS METRICS —" />}
 
               <p style={{
                 fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.14em",
