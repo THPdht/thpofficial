@@ -31,6 +31,7 @@ export default function Dashboard() {
   const [pwError, setPwError] = useState('');
   const [pwSaving, setPwSaving] = useState(false);
   const [pwDone, setPwDone] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -230,6 +231,60 @@ export default function Dashboard() {
 
   const isLimited = accountStatus === 'limited';
 
+  // Rendered in the sidebar on desktop and inside the mobile menu, so the two
+  // can never drift apart.
+  const passwordForm = (
+        <div style={{ margin: "0.5rem 0.875rem 0", padding: "1rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+          {pwDone ? (
+            <p style={{ fontSize: "0.8125rem", color: "var(--primary)", fontFamily: "var(--font-ui), system-ui, sans-serif", textAlign: "center" }}>Password updated.</p>
+          ) : (
+            <>
+              <input
+                type="password"
+                placeholder="Current password"
+                value={pwCurrent}
+                onChange={e => setPwCurrent(e.target.value)}
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "0.5rem 0.625rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", width: "100%", boxSizing: "border-box" }}
+              />
+              <input
+                type="password"
+                placeholder="New password"
+                value={pwNew}
+                onChange={e => setPwNew(e.target.value)}
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "0.5rem 0.625rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", width: "100%", boxSizing: "border-box" }}
+              />
+              <input
+                type="password"
+                placeholder="Confirm new password"
+                value={pwConfirm}
+                onChange={e => setPwConfirm(e.target.value)}
+                style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "0.5rem 0.625rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", width: "100%", boxSizing: "border-box" }}
+              />
+              {pwError && (
+                <p style={{ fontSize: "0.75rem", color: "var(--color-red)", fontFamily: "var(--font-ui), system-ui, sans-serif", margin: 0 }}>{pwError}</p>
+              )}
+              <button
+                onClick={handlePwChange}
+                disabled={pwSaving}
+                style={{ background: "var(--primary)", border: "none", borderRadius: "6px", padding: "0.5rem", fontSize: "0.8125rem", fontWeight: 600, color: "#fff", cursor: pwSaving ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: pwSaving ? 0.6 : 1 }}
+              >
+                {pwSaving ? "Saving…" : "Save"}
+              </button>
+            </>
+          )}
+        </div>
+  );
+
+  // One source of truth for the sidebar and the mobile menu, so a tab can never
+  // exist in one and be missing from the other.
+  const navTabs = [
+    { id: 'today', label: 'Today', show: !isLimited && (user.status === 'active' || user.status === 'alumni') },
+    { id: 'protocol', label: 'Protocol', show: true },
+    { id: 'trackers', label: 'My Trackers', show: !isLimited },
+    { id: 'blood-work', label: 'Blood Work', show: !isLimited },
+    { id: 'referrals', label: 'Referrals', show: !isLimited },
+  ].filter(t => t.show);
+
   // Show holding screen only if neither a static protocol nor a Notion protocol is assigned
   if (user.status === "pending") {
     return (
@@ -275,8 +330,25 @@ export default function Dashboard() {
         height: "60px",
         gap: "1rem",
       }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/images/thprebrandlogo2.png" alt="THP" style={{ height: "28px", width: "auto", filter: "brightness(0) invert(1)", flexShrink: 0 }} />
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", minWidth: 0 }}>
+          {/* Mobile menu. The sidebar is hidden below 768px, so this is the only
+              way to reach Protocol, Trackers, Blood Work and Referrals on a phone. */}
+          <button
+            className="dash-menu-btn"
+            onClick={() => setMenuOpen(o => !o)}
+            aria-label="Menu"
+            aria-expanded={menuOpen}
+            style={{ background: "none", border: "none", padding: "0.375rem", margin: "0 -0.375rem", cursor: "pointer", color: "var(--ink)", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+          >
+            {menuOpen ? (
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M18 6 6 18M6 6l12 12" /></svg>
+            ) : (
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M3 6h18M3 12h18M3 18h18" /></svg>
+            )}
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/images/thprebrandlogo2.png" alt="THP" style={{ height: "28px", width: "auto", filter: "brightness(0) invert(1)", flexShrink: 0 }} />
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           {user.streak > 0 && (
             <div className="dash-streak" style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.25rem 0.625rem", background: "var(--surface)", border: "1px solid oklch(0.60 0.18 165 / 0.35)", borderRadius: "100px" }}>
@@ -300,6 +372,54 @@ export default function Dashboard() {
           >Sign out</button>
         </div>
       </header>
+
+      {/* Mobile menu panel */}
+      {menuOpen && (
+        <>
+          <div
+            onClick={() => setMenuOpen(false)}
+            style={{ position: "fixed", inset: "60px 0 0 0", background: "oklch(0 0 0 / 0.5)", zIndex: 190 }}
+            aria-hidden
+          />
+          <div className="dash-menu-panel" style={{
+            position: "fixed", top: "60px", left: 0, right: 0, zIndex: 195,
+            background: "var(--bg)", borderBottom: "1px solid var(--border)",
+            padding: "0.5rem 0.75rem 1rem", display: "flex", flexDirection: "column", gap: "0.125rem",
+            maxHeight: "calc(100dvh - 60px)", overflowY: "auto",
+          }}>
+            {navTabs.map(t => (
+              <button
+                key={t.id}
+                onClick={() => { setDashTab(t.id as DashTab); setMenuOpen(false); window.scrollTo({ top: 0 }); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: "0.625rem",
+                  padding: "0.875rem 0.875rem", borderRadius: "8px", border: "none",
+                  background: dashTab === t.id ? "color-mix(in srgb, var(--color-red) 12%, transparent)" : "none",
+                  color: dashTab === t.id ? "var(--ink)" : "var(--muted)",
+                  fontSize: "0.9375rem", fontWeight: dashTab === t.id ? 500 : 400,
+                  fontFamily: "var(--font-ui), system-ui, sans-serif",
+                  textAlign: "left", width: "100%", cursor: "pointer",
+                }}>
+                <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: dashTab === t.id ? "var(--color-red)" : "transparent", flexShrink: 0 }} />
+                {t.label}
+              </button>
+            ))}
+
+            <div style={{ borderTop: "1px solid var(--border-subtle)", margin: "0.625rem 0.875rem" }} />
+
+            <div style={{ padding: "0 0.25rem" }}>
+              <NotificationToggle mode="client" email={user.email} password={user.password} />
+            </div>
+
+            <button
+              onClick={() => { setShowPwChange(p => !p); setPwError(''); setPwDone(false); }}
+              style={{ background: "none", border: "none", color: "var(--dim)", fontSize: "0.875rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", padding: "0.875rem", textAlign: "left", width: "100%", borderRadius: "8px" }}>
+              Change password
+            </button>
+            {showPwChange && passwordForm}
+          </div>
+        </>
+      )}
 
       {/* Limited access banner */}
       {isLimited && (
@@ -332,17 +452,16 @@ export default function Dashboard() {
         .dash-nav-item.active .dash-nav-dot { background: var(--color-red); }
         .dash-nav-dot { width: 5px; height: 5px; border-radius: 50%; background: transparent; flex-shrink: 0; transition: background 120ms; }
         .dash-content { flex: 1; padding: 2rem clamp(1rem, 3vw, 2rem); max-width: 820px; min-width: 0; }
+        /* Desktop keeps the sidebar; the hamburger is mobile-only. */
+        .dash-menu-btn { display: none; }
         @media (max-width: 768px) {
           .dash-layout { flex-direction: column; }
-          .dash-sidebar {
-            width: 100%; height: auto; position: static;
-            border-right: none; border-bottom: 1px solid var(--border-subtle);
-            padding: 0.5rem 0.75rem; flex-direction: row; overflow-x: auto; overflow-y: hidden;
-            gap: 0.25rem; scrollbar-width: none;
-          }
-          .dash-sidebar::-webkit-scrollbar { display: none; }
-          .dash-nav-item { padding: 0.5rem 0.75rem; font-size: 0.8125rem; white-space: nowrap; flex-shrink: 0; }
-          .dash-nav-dot { display: none; }
+          /* The sidebar used to become a horizontal strip here, but .dash-nav-item
+             carries width:100% from the desktop rule, so every tab was a full
+             viewport wide and everything after "Today" sat off the right edge with
+             nothing indicating it scrolled. Navigation moves into the menu panel. */
+          .dash-sidebar { display: none; }
+          .dash-menu-btn { display: inline-flex; }
           .dash-content { padding: 1.25rem 1rem; }
           .dash-pw-section { display: none; }
         }
@@ -355,13 +474,7 @@ export default function Dashboard() {
 
         {/* Sidebar nav */}
         <nav className="dash-sidebar">
-          {[
-            { id: 'today', label: 'Today', show: !isLimited && (user.status === 'active' || user.status === 'alumni') },
-            { id: 'protocol', label: 'Protocol', show: true },
-            { id: 'trackers', label: 'My Trackers', show: !isLimited },
-            { id: 'blood-work', label: 'Blood Work', show: !isLimited },
-            { id: 'referrals', label: 'Referrals', show: !isLimited },
-          ].filter(t => t.show).map(t => (
+          {navTabs.map(t => (
             <button
               key={t.id}
               className={`dash-nav-item${dashTab === t.id ? ' active' : ''}`}
@@ -385,57 +498,20 @@ export default function Dashboard() {
             >
               Change password
             </button>
-            {showPwChange && (
-              <div style={{ margin: "0.5rem 0.875rem 0", padding: "1rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                {pwDone ? (
-                  <p style={{ fontSize: "0.8125rem", color: "var(--primary)", fontFamily: "var(--font-ui), system-ui, sans-serif", textAlign: "center" }}>Password updated.</p>
-                ) : (
-                  <>
-                    <input
-                      type="password"
-                      placeholder="Current password"
-                      value={pwCurrent}
-                      onChange={e => setPwCurrent(e.target.value)}
-                      style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "0.5rem 0.625rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", width: "100%", boxSizing: "border-box" }}
-                    />
-                    <input
-                      type="password"
-                      placeholder="New password"
-                      value={pwNew}
-                      onChange={e => setPwNew(e.target.value)}
-                      style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "0.5rem 0.625rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", width: "100%", boxSizing: "border-box" }}
-                    />
-                    <input
-                      type="password"
-                      placeholder="Confirm new password"
-                      value={pwConfirm}
-                      onChange={e => setPwConfirm(e.target.value)}
-                      style={{ background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "6px", padding: "0.5rem 0.625rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", width: "100%", boxSizing: "border-box" }}
-                    />
-                    {pwError && (
-                      <p style={{ fontSize: "0.75rem", color: "var(--color-red)", fontFamily: "var(--font-ui), system-ui, sans-serif", margin: 0 }}>{pwError}</p>
-                    )}
-                    <button
-                      onClick={handlePwChange}
-                      disabled={pwSaving}
-                      style={{ background: "var(--primary)", border: "none", borderRadius: "6px", padding: "0.5rem", fontSize: "0.8125rem", fontWeight: 600, color: "#fff", cursor: pwSaving ? "not-allowed" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", opacity: pwSaving ? 0.6 : 1 }}
-                    >
-                      {pwSaving ? "Saving…" : "Save"}
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
+            {showPwChange && passwordForm}
           </div>
         </nav>
 
         {/* Tab content */}
         <main className="dash-content">
-          {/* Sits above the tabs so it is reachable on mobile, where the sidebar
-              settings are hidden. Disappears once notifications are on. */}
-          <div style={{ marginBottom: "1.25rem" }}>
-            <NotificationToggle mode="client" email={user.email} password={user.password} hideWhenGranted />
-          </div>
+          {/* Also in the menu, but few clients open a menu to find this. Prompting
+              in the content is what actually gets notifications turned on. Hidden
+              while the menu is open so the two copies are never both on screen. */}
+          {!menuOpen && (
+            <div style={{ marginBottom: "1.25rem" }}>
+              <NotificationToggle mode="client" email={user.email} password={user.password} hideWhenGranted />
+            </div>
+          )}
           {dashTab === 'today' && (['pending', 'new'] as string[]).includes(user.status) && (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "4rem 2rem", textAlign: "center", gap: "1rem" }}>
               <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "var(--primary)", animation: "pulse 2s ease infinite" }} />
