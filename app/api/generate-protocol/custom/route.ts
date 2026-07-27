@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { notifyAdmin } from '@/lib/notifyAdmin';
 import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
 import { IDENTITY, VOICE_RULES, METHODOLOGY, TONE } from '../prompt';
 import { hasIntakeData } from '@/lib/protocols';
@@ -152,14 +153,7 @@ TRAINING FREQUENCY: ${d.trainingFrequency ?? 'not stated'}`;
       return Response.json({ error: 'Failed to save protocol' }, { status: 500 });
     }
 
-    await supabase.from('alarms').insert({
-      user_email: clientEmail,
-      type: 'protocol_ready',
-      message: `${name}'s one-off protocol "${title}" is ready — review and send`,
-      created_at: new Date().toISOString(),
-    }).then(({ error: alarmErr }) => {
-      if (alarmErr) console.error('[generate-protocol/custom] alarm insert failed:', alarmErr);
-    });
+    await notifyAdmin(clientEmail, 'protocol_ready', `${name}'s one-off protocol "${title}" is ready — review and send`);
 
     return Response.json({ protocolId: protocol.id, title, stage });
   } catch (err) {

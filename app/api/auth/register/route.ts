@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { notifyAdmin } from '@/lib/notifyAdmin';
 
 export async function POST(req: Request) {
   const { name, email, password, phone, referredBy } = await req.json();
@@ -33,23 +34,12 @@ export async function POST(req: Request) {
   }
 
   // new_application alarm
-  const { error: alarmErr } = await supabaseAdmin.from('alarms').insert({
-    user_email: norm,
-    type: 'new_application',
-    message: `New application from ${name.trim()}`,
-    created_at: new Date().toISOString(),
-  });
-  if (alarmErr) console.error('[register] alarm insert failed:', alarmErr);
+  await notifyAdmin(norm, 'new_application', `New application from ${name.trim()}`);
 
   // new_referral alarm if they came via a referral link
   if (referredBy?.trim()) {
     const phoneStr = phone?.trim() ? ` — phone: ${phone.trim()}` : '';
-    supabaseAdmin.from('alarms').insert({
-      user_email: norm,
-      type: 'new_referral',
-      message: `${name.trim()} applied via ${referredBy.trim()}'s referral${phoneStr}`,
-      created_at: new Date().toISOString(),
-    }).then(({ error: re }) => { if (re) console.error('[register] referral alarm:', re); });
+    await notifyAdmin(norm, 'new_referral', `${name.trim()} applied via ${referredBy.trim()}'s referral${phoneStr}`);
   }
 
   // Create Supabase Auth account so RLS policies can identify this user

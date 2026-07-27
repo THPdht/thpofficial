@@ -7,6 +7,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { notifyAdmin } from '@/lib/notifyAdmin';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 const DIAGNOSTIC_HEADINGS = new Set([
@@ -324,12 +325,7 @@ export async function POST(req: Request) {
     }).eq('email', email);
 
     // Alarm for admin feed
-    supabaseAdmin.from('alarms').insert({
-      user_email: email,
-      type: 'protocol_imported',
-      message: `${clientName}'s Notion protocol imported — Imported Protocol ${importNum} sent to client`,
-      created_at: new Date().toISOString(),
-    }).then(({ error: ae }) => { if (ae) console.error('[parse-protocol-notion] alarm:', ae); });
+    await notifyAdmin(email, 'protocol_imported', `${clientName}'s Notion protocol imported — Imported Protocol ${importNum} sent to client`);
 
     return Response.json({ success: true });
   } catch (err) {

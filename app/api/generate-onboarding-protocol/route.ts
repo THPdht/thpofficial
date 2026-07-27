@@ -5,6 +5,7 @@
  */
 
 import { after } from 'next/server';
+import { notifyAdmin } from '@/lib/notifyAdmin';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export async function POST(req: Request) {
@@ -39,13 +40,7 @@ export async function POST(req: Request) {
     }
 
     // Insert intake_submitted alarm for admin feed
-    const { error: alarmErr } = await supabaseAdmin.from('alarms').insert({
-      user_email: email,
-      type: 'intake_submitted',
-      message: `${clientName} submitted their intake — building diagnosis now`,
-      created_at: new Date().toISOString(),
-    });
-    if (alarmErr) console.error('[generate-onboarding-protocol] alarm insert failed:', alarmErr);
+    await notifyAdmin(email, 'intake_submitted', `${clientName} submitted their intake — building diagnosis now`);
 
     // Auto-generate DIAGNOSIS after response is sent — use after() so Vercel keeps function alive
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://thpofficial.com';

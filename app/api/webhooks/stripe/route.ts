@@ -9,6 +9,7 @@
  */
 
 import Stripe from 'stripe';
+import { notifyAdmin } from '@/lib/notifyAdmin';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export async function POST(req: Request) {
@@ -136,12 +137,7 @@ export async function POST(req: Request) {
           .limit(1);
 
         if (!existingAlarm?.length) {
-          await supabaseAdmin.from('alarms').insert({
-            user_email: referral.referrer_email,
-            type: 'referral_milestone',
-            message: `${referrerName} has earned a free month — 3 paying referrals`,
-            created_at: new Date().toISOString(),
-          });
+          await notifyAdmin(referral.referrer_email, 'referral_milestone', `${referrerName} has earned a free month — 3 paying referrals`);
         }
       }
 

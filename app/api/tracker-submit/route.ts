@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { notifyAdmin } from '@/lib/notifyAdmin';
 
 export async function POST(req: Request) {
   try {
@@ -54,6 +55,15 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({ userEmail, date }),
     }).catch((err) => console.error('[tracker-submit] analyze-tracker invoke failed:', err));
+
+    const { data: nameRow } = await supabaseAdmin
+      .from('users').select('nickname, name').eq('email', userEmail).maybeSingle();
+    const who = nameRow?.nickname || nameRow?.name || userEmail;
+    await notifyAdmin(
+      userEmail,
+      'tracker_submitted',
+      `${who} submitted their tracker${newStreak > 1 ? ` — ${newStreak} day streak` : ''}`,
+    );
 
     return Response.json({ success: true });
   } catch (err) {

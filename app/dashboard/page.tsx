@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase";
 import type { StoredUser } from "@/lib/auth";
 import type { Protocol } from "@/lib/protocols";
 import { authedFetch } from "@/lib/authedFetch";
+import NotificationToggle from "@/components/portal/NotificationToggle";
 import ProtocolDocumentComponent from "@/components/portal/ProtocolDocument";
 import DiagnosticDocumentComponent from "@/components/portal/DiagnosticDocument";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
@@ -44,7 +45,16 @@ export default function Dashboard() {
     // problems, so confirm there's a live session for this exact email first.
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!isMounted) return;
-      if (!session || session.user.email?.toLowerCase() !== u.email.toLowerCase()) {
+      if (!session) {
+        // No session right now can mean signed out, but it also means a refresh
+        // that failed on a flaky connection. signOut() here would clear the
+        // refresh token and turn a momentary blip into a permanent logout, so
+        // send them to /login with their stored session left intact.
+        router.replace("/login");
+        return;
+      }
+      if (session.user.email?.toLowerCase() !== u.email.toLowerCase()) {
+        // A confirmed different person. This one really is stale state.
         signOut();
         router.replace("/login");
         return;
@@ -91,17 +101,11 @@ export default function Dashboard() {
     }
 
     // Register service worker and subscribe to push notifications
+    // Register the worker only. Asking for permission here would be a prompt with
+    // no user gesture behind it, which iOS rejects outright and which burns the one
+    // chance to ask — NotificationToggle asks from inside a tap instead.
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js')
-        .then(async () => {
-          // Request notification permission then subscribe to push
-          const permission = await Notification.requestPermission();
-          if (permission === 'granted') {
-            const { subscribeToPush } = await import('@/lib/push');
-            subscribeToPush(u.email, u.password).catch(() => { /* ignore if VAPID not configured */ });
-          }
-        })
-        .catch(() => { /* ignore */ });
+      navigator.serviceWorker.register('/sw.js').catch(() => { /* ignore */ });
     }
 
     // Real-time: listen for any changes to THIS user's row in Supabase.
@@ -370,6 +374,9 @@ export default function Dashboard() {
 
           {/* Change password — bottom of sidebar (hidden on mobile tab bar) */}
           <div className="dash-pw-section" style={{ marginTop: "auto", paddingTop: "1rem" }}>
+            <div style={{ marginBottom: "0.75rem" }}>
+              <NotificationToggle mode="client" email={user.email} password={user.password} />
+            </div>
             <button
               onClick={() => { setShowPwChange(p => !p); setPwError(''); setPwDone(false); }}
               style={{ background: "none", border: "none", color: "var(--dim)", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", padding: "0.5rem 0.875rem", textAlign: "left", width: "100%", borderRadius: "8px", transition: "color 120ms" }}
@@ -424,6 +431,11 @@ export default function Dashboard() {
 
         {/* Tab content */}
         <main className="dash-content">
+          {/* Sits above the tabs so it is reachable on mobile, where the sidebar
+              settings are hidden. Disappears once notifications are on. */}
+          <div style={{ marginBottom: "1.25rem" }}>
+            <NotificationToggle mode="client" email={user.email} password={user.password} hideWhenGranted />
+          </div>
           {dashTab === 'today' && (['pending', 'new'] as string[]).includes(user.status) && (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "4rem 2rem", textAlign: "center", gap: "1rem" }}>
               <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "var(--primary)", animation: "pulse 2s ease infinite" }} />

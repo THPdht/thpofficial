@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { notifyAdmin } from '@/lib/notifyAdmin';
 import { requireSelfOrAdmin } from '@/lib/apiAuth';
 
 export async function POST(req: Request) {
@@ -56,12 +57,7 @@ export async function POST(req: Request) {
 
     // Alarm for admin feed
     const clientName = userEmail.split('@')[0];
-    supabaseAdmin.from('alarms').insert({
-      user_email: userEmail,
-      type: 'blood_work_uploaded',
-      message: `${clientName} uploaded blood work`,
-      created_at: new Date().toISOString(),
-    }).then(({ error: ae }) => { if (ae) console.error('[blood-work-upload] alarm:', ae); });
+    await notifyAdmin(userEmail, 'blood_work_uploaded', `${clientName} uploaded blood work`);
 
     // Fire-and-forget: call analyze-blood-work Edge Function
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;

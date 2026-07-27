@@ -27,6 +27,13 @@ const dmMono = DM_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://thpofficial.com"),
   manifest: "/manifest.json",
+  // iOS only grants the Push API to home-screen web apps, and only treats the site
+  // as one when this is present. Without it, notifications can never work on iPhone.
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "THP",
+  },
   title: "THP — The Hormone Prophet",
   description:
     "Rebuild your hormones, physique, and energy from the ground up. A biological transformation system built on bloodwork, metabolism, and human chemistry.",

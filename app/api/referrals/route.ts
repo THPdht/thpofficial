@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { notifyAdmin } from '@/lib/notifyAdmin';
 import { requireSelfOrAdmin } from '@/lib/apiAuth';
 
 // GET /api/referrals?email=... — fetch referral list for a client
@@ -46,12 +47,7 @@ export async function POST(req: Request) {
 
     // Alarm for admin feed
     const referrerName = referrerEmail.split('@')[0];
-    supabaseAdmin.from('alarms').insert({
-      user_email: referrerEmail,
-      type: 'new_referral',
-      message: `${referrerName} referred ${referredName} (${referredEmail.toLowerCase().trim()})`,
-      created_at: new Date().toISOString(),
-    }).then(({ error: ae }) => { if (ae) console.error('[referrals] alarm:', ae); });
+    await notifyAdmin(referrerEmail, 'new_referral', `${referrerName} referred ${referredName} (${referredEmail.toLowerCase().trim()})`);
 
     return Response.json({ success: true });
   } catch (err) {

@@ -4,6 +4,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { notifyAdmin } from '@/lib/notifyAdmin';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 const EXTRACT_PROMPT = `You are reading screenshots of a THP (The Hormone Prophet) coaching protocol. Extract all content and restructure it into this exact JSON format:
@@ -112,12 +113,7 @@ export async function POST(req: Request) {
 
     // Alarm for admin feed
     const clientName = client.name ?? email.split('@')[0];
-    supabaseAdmin.from('alarms').insert({
-      user_email: email,
-      type: 'protocol_imported',
-      message: `${clientName} imported their protocol (screenshots)`,
-      created_at: new Date().toISOString(),
-    }).then(({ error: ae }) => { if (ae) console.error('[parse-protocol-screenshots] alarm:', ae); });
+    await notifyAdmin(email, 'protocol_imported', `${clientName} imported their protocol (screenshots)`);
 
     return Response.json({ success: true });
   } catch (err) {

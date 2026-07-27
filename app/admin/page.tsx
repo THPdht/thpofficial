@@ -12,6 +12,7 @@ import type { StoredUser, ClientStatus, ProtocolStatus, AccountStatus, Payment, 
 import type { ProtocolId } from "@/lib/protocols";
 import { hasIntakeData } from "@/lib/protocols";
 import { supabase } from "@/lib/supabase";
+import NotificationToggle from "@/components/portal/NotificationToggle";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
 
 const ADMIN_EMAIL = "info.shopzul@gmail.com";
@@ -93,6 +94,10 @@ export default function AdminPage() {
       initAdmin(ADMIN_PASSWORD);
       setAuthed(true);
       loadData();
+      // Admin never registered the worker, so THP could not receive push at all.
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("/sw.js").catch(() => { /* ignore */ });
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -3008,6 +3013,9 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "860px", margin: "0 auto" }}>
+
+      {/* Push for THP's own phone. Hides itself once this device is registered. */}
+      <NotificationToggle mode="admin" adminPassword={ADMIN_PASSWORD} hideWhenGranted />
 
       {/* Top stats — collapsible */}
       <div>

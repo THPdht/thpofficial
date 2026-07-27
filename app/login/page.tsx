@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { login } from "@/lib/auth";
+import { login, getCurrentUser } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 
 function LoginForm() {
@@ -16,6 +16,22 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Skip the form for anyone already signed in. Sessions persist and refresh on
+  // their own, so reaching this page with a live session means a redirect landed
+  // them here, not that they need to type their password again.
+  useEffect(() => {
+    let active = true;
+    if (localStorage.getItem("mn_admin") === "1") { router.replace("/admin"); return; }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!active || !session?.user?.email) return;
+      const cached = getCurrentUser();
+      if (cached && cached.email.toLowerCase() === session.user.email.toLowerCase()) {
+        router.replace("/dashboard");
+      }
+    });
+    return () => { active = false; };
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

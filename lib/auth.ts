@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { authedFetch } from './authedFetch';
 
 // ─── Admin context ─────────────────────────────────────────────────────────
 // Call initAdmin(password) once when admin logs in. All admin functions below
@@ -573,6 +574,16 @@ export async function addMessage(
   }
   const { error } = await supabase.from('messages').insert(row);
   if (error) return null;
+
+  // Ping THP's phone. The insert above is the source of truth — a failed
+  // notification must not make the message look like it did not send.
+  if (from === 'client') {
+    void authedFetch('/api/messages/notify', {
+      method: 'POST',
+      body: JSON.stringify({ email, preview: text }),
+    }).catch(() => {});
+  }
+
   return {
     id,
     from,

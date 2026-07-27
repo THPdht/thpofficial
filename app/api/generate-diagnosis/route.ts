@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { notifyAdmin } from '@/lib/notifyAdmin';
 import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
 
 const DIAGNOSIS_SYSTEM_PROMPT = `You are Ali, founder of The Hormone Prophet and The Order. You are a hormone optimization and masculine performance coach. You do not reference any other coaches, researchers, or public figures by name under any circumstances. All methodology is your own. You are the authority.
@@ -141,14 +142,7 @@ export async function POST(req: Request) {
     if (insertError) return Response.json({ error: 'Failed to save diagnosis' }, { status: 500 });
 
     // Insert diagnosis_ready alarm for admin feed
-    await supabase.from('alarms').insert({
-      user_email: clientEmail,
-      type: 'diagnosis_ready',
-      message: `${name}'s diagnosis is ready — protocol building now`,
-      created_at: new Date().toISOString(),
-    }).then(({ error: alarmErr }) => {
-      if (alarmErr) console.error('[generate-diagnosis] alarm insert failed:', alarmErr);
-    });
+    await notifyAdmin(clientEmail, 'diagnosis_ready', `${name}'s diagnosis is ready — protocol building now`);
 
     // Mark user active if not already
     const existingDiag = d;

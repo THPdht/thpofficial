@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { notifyAdmin } from '@/lib/notifyAdmin';
 import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
 import { IDENTITY, VOICE_RULES, METHODOLOGY, TONE } from "./prompt";
 import { hasIntakeData } from "@/lib/protocols";
@@ -454,14 +455,7 @@ LIBIDO (MENTAL SEX DRIVE): ${d.libido || 'not provided'}`;
     }
 
     // Insert protocol_ready alarm for admin feed
-    await supabase.from('alarms').insert({
-      user_email: clientEmail,
-      type: 'protocol_ready',
-      message: `${name}'s Phase ${stage} protocol is ready — review and send`,
-      created_at: new Date().toISOString(),
-    }).then(({ error: alarmErr }) => {
-      if (alarmErr) console.error('[generate-protocol] alarm insert failed:', alarmErr);
-    });
+    await notifyAdmin(clientEmail, 'protocol_ready', `${name}'s Phase ${stage} protocol is ready — review and send`);
 
     // Update user status
     const existingDiag = d;
