@@ -6,9 +6,11 @@ import {
   getAllUsers, updateUser, linkNotionPage, setProtocolStatus,
   setAccountStatus, setClientType, addPayment, removePayment, removeClient, createClient,
   setSuspended, updatePresence, getAdminProtocols, getAdminDiagnostics, publishDiagnosis, initAdmin,
+  saveCoachingSummary,
 } from "@/lib/auth";
 import type { StoredUser, ClientStatus, ProtocolStatus, AccountStatus, Payment, ClientProtocol, ClientDiagnostic } from "@/lib/auth";
 import type { ProtocolId } from "@/lib/protocols";
+import { hasIntakeData } from "@/lib/protocols";
 import { supabase } from "@/lib/supabase";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
 
@@ -1454,6 +1456,20 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
   const [sendingProtocolId, setSendingProtocolId] = useState<string | null>(null);
   const [applicationData, setApplicationData] = useState<Record<string, unknown> | null>(null);
 
+  const [deletingProtocolId, setDeletingProtocolId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // One-off protocol — THP types what it is about and that drives the whole document
+  const [customBrief, setCustomBrief] = useState("");
+  const [customGenerating, setCustomGenerating] = useState(false);
+  const [customError, setCustomError] = useState("");
+
+  // Coaching summary — THP's paste of the client's Claude chat history
+  const [coachingSummary, setCoachingSummary] = useState("");
+  const [summarySaving, setSummarySaving] = useState(false);
+  const [summarySavedAt, setSummarySavedAt] = useState<string | null>(null);
+  const summaryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Portal access
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
@@ -1469,6 +1485,11 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
     setInviteUrl(null);
     setInviteCopied(false);
     setInviteError("");
+    setCustomBrief("");
+    setCustomError("");
+    setCoachingSummary(client.coachingSummary ?? "");
+    setSummarySavedAt(client.coachingSummaryUpdatedAt ?? null);
+    setSummarySaving(false);
 
     // Tracker analysis — via API (bypasses RLS)
     fetch(`/api/tracker-analysis?email=${encodeURIComponent(client.email)}&limit=20`)
@@ -1533,6 +1554,16 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
       setNotesSaving(true);
       await supabase.from('applicant_notes').upsert({ user_email: client.email, notes: val, updated_at: new Date().toISOString() });
       setNotesSaving(false);
+    }, 800);
+  };
+
+  const saveCoachingSummaryDebounced = (val: string) => {
+    if (summaryTimer.current) clearTimeout(summaryTimer.current);
+    summaryTimer.current = setTimeout(async () => {
+      setSummarySaving(true);
+      const result = await saveCoachingSummary(client.email, val);
+      if (result) setSummarySavedAt(result.updatedAt);
+      setSummarySaving(false);
     }, 800);
   };
 
@@ -1650,6 +1681,43 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
     setGenerating(false);
   }
 
+  async function handleDeleteDraft(protocolId: string) {
+    setDeletingProtocolId(protocolId);
+    try {
+      const res = await fetch('/api/protocols', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD },
+        body: JSON.stringify({ protocolId }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Delete failed');
+      setClientProtocols(prev => prev.filter(p => p.id !== protocolId));
+    } catch (err) {
+      setGenError(err instanceof Error ? err.message : 'Delete failed');
+    }
+    setDeletingProtocolId(null);
+    setConfirmDeleteId(null);
+  }
+
+  async function handleGenerateCustom() {
+    if (!customBrief.trim()) return;
+    setCustomGenerating(true); setCustomError("");
+    try {
+      const res = await fetch("/api/generate-protocol/custom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": ADMIN_PASSWORD },
+        body: JSON.stringify({ clientEmail: client.email, brief: customBrief.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Generation failed");
+      setCustomBrief("");
+      setClientProtocols(await getAdminProtocols(client.email));
+    } catch (err) {
+      setCustomError(err instanceof Error ? err.message : "Unknown error");
+    }
+    setCustomGenerating(false);
+  }
+
   async function handleGenerateInvite() {
     setInviteLoading(true);
     setInviteError("");
@@ -1677,6 +1745,10 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
   }
 
   const hasSignedIn = !!userData?.last_login;
+
+  const hasProtocolContext =
+    hasIntakeData(client.diagnosticData as Record<string, unknown> | undefined) ||
+    coachingSummary.trim().length > 0;
 
   const displayName = client.nickname || client.name;
   const firstName = displayName.split(' ')[0];
@@ -1806,6 +1878,15 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
 
         {inviteError && (
           <p style={{ fontSize: "0.7rem", color: "var(--danger)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{inviteError}</p>
+        )}
+
+        {!hasProtocolContext && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", paddingTop: "0.5rem", borderTop: "1px solid var(--border-subtle)" }}>
+            <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "oklch(0.75 0.14 65)", flexShrink: 0 }} />
+            <p style={{ fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+              No coaching summary — protocols have nothing to build from.
+            </p>
+          </div>
         )}
       </div>
 
@@ -2028,6 +2109,29 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
         );
       })()}
 
+      {/* Coaching summary — the data protocols get built from for imported clients
+          who never filled in the intake form. Never leaves the admin side. */}
+      <div>
+        {sectionLabel(
+          `Coaching summary — THP only${
+            summarySaving
+              ? ' · saving…'
+              : summarySavedAt
+                ? ` · saved ${new Date(summarySavedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
+                : ''
+          }`
+        )}
+        <textarea value={coachingSummary}
+          onChange={e => { setCoachingSummary(e.target.value); saveCoachingSummaryDebounced(e.target.value); }} rows={12}
+          placeholder={`Paste the in-depth summary from ${firstName}'s Claude chat. This is what their protocols get built from.`}
+          style={{ width: "100%", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", padding: "0.75rem 0.875rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-mono), monospace", fontWeight: 300, outline: "none", resize: "vertical", lineHeight: 1.6, boxSizing: "border-box" }}
+          onFocus={e => e.target.style.borderColor = 'var(--primary)'}
+          onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+        <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+          {firstName} never sees this. Protocols are generated from it.
+        </p>
+      </div>
+
       {/* Private notes */}
       <div>
         {sectionLabel(`Private notes${notesSaving ? ' · saving…' : ''}`)}
@@ -2115,15 +2219,22 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
           {clientProtocols.length === 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               <p style={{ fontSize: "0.8rem", color: "var(--dim)", fontWeight: 300 }}>No protocol yet.</p>
-              <button onClick={handleGenerateProtocol} disabled={generating}
-                style={{ height: "36px", background: generating ? "var(--surface-2)" : "oklch(0.60 0.18 165 / 0.12)", border: "1px solid oklch(0.60 0.18 165 / 0.3)", borderRadius: "7px", color: generating ? "var(--dim)" : "var(--primary)", fontSize: "0.8125rem", fontWeight: 500, cursor: generating ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+              <button onClick={handleGenerateProtocol} disabled={generating || !hasProtocolContext}
+                title={hasProtocolContext ? undefined : "Add a coaching summary first"}
+                style={{ height: "36px", background: generating || !hasProtocolContext ? "var(--surface-2)" : "oklch(0.60 0.18 165 / 0.12)", border: "1px solid", borderColor: hasProtocolContext ? "oklch(0.60 0.18 165 / 0.3)" : "var(--border)", borderRadius: "7px", color: generating || !hasProtocolContext ? "var(--dim)" : "var(--primary)", fontSize: "0.8125rem", fontWeight: 500, cursor: generating || !hasProtocolContext ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
                 {generating ? "Generating…" : `Generate ${getEffectiveProtocolFormat()} protocol with AI`}
               </button>
+              {!hasProtocolContext && (
+                <p style={{ fontSize: "0.7rem", color: "oklch(0.78 0.13 65)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                  Nothing to build from. Paste {firstName}&apos;s coaching summary above first.
+                </p>
+              )}
             </div>
           ) : (
             <>
-              <button onClick={handleGenerateProtocol} disabled={generating}
-                style={{ height: "32px", background: generating ? "var(--surface-2)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: generating ? "var(--dim)" : "var(--muted)", fontSize: "0.75rem", fontWeight: 500, cursor: generating ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+              <button onClick={handleGenerateProtocol} disabled={generating || !hasProtocolContext}
+                title={hasProtocolContext ? undefined : "Add a coaching summary first"}
+                style={{ height: "32px", background: generating ? "var(--surface-2)" : "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", color: generating || !hasProtocolContext ? "var(--dim)" : "var(--muted)", fontSize: "0.75rem", fontWeight: 500, cursor: generating || !hasProtocolContext ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
                 {generating ? "Generating…" : `+ Generate new ${getEffectiveProtocolFormat()} protocol`}
               </button>
               {clientProtocols.map(proto => (
@@ -2132,7 +2243,9 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
                 <p style={{ fontSize: "0.8rem", fontWeight: 500, color: "var(--ink)" }}>
                   {proto.source === 'imported'
                     ? `Imported Protocol (${proto.title?.match(/Imported Protocol (\d+)/i)?.[1] ?? '?'})`
-                    : `Protocol Stage ${proto.stage}`}
+                    : proto.source === 'custom'
+                      ? proto.title
+                      : `Protocol Stage ${proto.stage}`}
                 </p>
                 <span style={{ fontSize: "0.65rem", fontWeight: 600, padding: "2px 7px", borderRadius: "4px", background: proto.published ? "oklch(0.7 0.15 145 / 0.12)" : "oklch(0.60 0.18 165 / 0.12)", color: proto.published ? "oklch(0.7 0.15 145)" : "var(--primary)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                   {proto.published ? "Sent to client" : "Draft — not sent"}
@@ -2161,10 +2274,51 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
                   {sendingProtocolId === proto.id ? "Sending…" : "Send protocol to client →"}
                 </button>
               )}
+              {!proto.published && (
+                confirmDeleteId === proto.id ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>
+                    <span style={{ fontSize: "0.7rem", color: "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Delete this draft?</span>
+                    <button onClick={() => handleDeleteDraft(proto.id)} disabled={deletingProtocolId === proto.id}
+                      style={{ height: "26px", padding: "0 0.625rem", background: "none", border: "1px solid var(--danger)", borderRadius: "6px", color: "var(--danger)", fontSize: "0.7rem", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                      {deletingProtocolId === proto.id ? "Deleting…" : "Delete"}
+                    </button>
+                    <button onClick={() => setConfirmDeleteId(null)}
+                      style={{ height: "26px", padding: "0 0.625rem", background: "none", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--dim)", fontSize: "0.7rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => setConfirmDeleteId(proto.id)}
+                    style={{ marginTop: "0.5rem", background: "none", border: "none", padding: 0, color: "var(--dim)", fontSize: "0.7rem", fontWeight: 400, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", textDecoration: "underline", opacity: 0.7 }}>
+                    Delete draft
+                  </button>
+                )
+              )}
             </div>
           ))}
             </>
           )}
+
+          {/* One-off protocol — the thing THP promises mid-call */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.75rem", padding: "0.875rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "9px" }}>
+            <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.08em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Send a one-off protocol</p>
+            <textarea
+              value={customBrief}
+              onChange={e => setCustomBrief(e.target.value)}
+              rows={2}
+              placeholder="What is this protocol about? e.g. can't sleep when travelling for work"
+              style={{ width: "100%", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0.5rem 0.625rem", fontSize: "0.8125rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none", resize: "vertical", lineHeight: 1.5, boxSizing: "border-box" }}
+              onFocus={e => e.target.style.borderColor = 'var(--primary)'}
+              onBlur={e => e.target.style.borderColor = 'var(--border)'} />
+            <button onClick={handleGenerateCustom} disabled={customGenerating || !customBrief.trim()}
+              style={{ height: "34px", background: customGenerating || !customBrief.trim() ? "var(--surface-2)" : "var(--primary)", border: "none", borderRadius: "7px", color: customGenerating || !customBrief.trim() ? "var(--dim)" : "#fff", fontSize: "0.8125rem", fontWeight: 600, cursor: customGenerating || !customBrief.trim() ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+              {customGenerating ? "Writing…" : "Generate one-off protocol"}
+            </button>
+            {customError && <p style={{ fontSize: "0.7rem", color: "var(--danger)", fontWeight: 300 }}>{customError}</p>}
+            <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+              Saves as a draft. Review it, then send.
+            </p>
+          </div>
         </div>
 
         {/* Recent trackers */}

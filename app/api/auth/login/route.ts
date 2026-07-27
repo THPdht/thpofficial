@@ -30,5 +30,9 @@ export async function POST(req: Request) {
     .eq('email', norm);
   if (stampError) console.error('[auth/login] last_login', stampError);
 
-  return Response.json({ success: true, user: { ...data, last_login: now } });
+  // coaching_summary is THP's private notes on the client. The response gets cached
+  // into the client's own localStorage, so it must never leave the server here.
+  const { coaching_summary: _s, coaching_summary_updated_at: _u, ...safe } = data;
+
+  return Response.json({ success: true, user: { ...safe, last_login: now } });
 }

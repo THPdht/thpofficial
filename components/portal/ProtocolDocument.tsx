@@ -90,7 +90,7 @@ interface ProtocolDocumentProps {
   todos: string[];
   createdAt: string;
   clientName?: string;
-  source?: 'generated' | 'imported';
+  source?: 'generated' | 'imported' | 'custom';
   protocolId?: string;
   userEmail?: string;
 }
@@ -123,8 +123,18 @@ export default function ProtocolDocument({
             textTransform: "uppercase",
             fontFamily: "var(--font-mono), monospace", marginBottom: "0.25rem",
           }}>
-            {isImported ? `IMPORTED · ${importNum}` : `PROTOCOL · STAGE ${stage}`}
+            {isImported
+              ? `IMPORTED · ${importNum}`
+              : source === 'custom'
+                ? 'PROTOCOL'
+                : `PROTOCOL · STAGE ${stage}`}
           </p>
+          {/* A one-off protocol is about a subject, so the subject is the heading. */}
+          {source === 'custom' && (
+            <p style={{ fontFamily: "var(--font-display), Georgia, serif", fontSize: "1.25rem", fontWeight: 400, color: "var(--ink)", letterSpacing: "-0.01em", margin: "0.25rem 0 0.375rem" }}>
+              {title}
+            </p>
+          )}
           {clientName && (
             <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.125rem" }}>
               {clientName}

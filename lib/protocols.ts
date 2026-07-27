@@ -97,3 +97,19 @@ export const DEFAULT_TRACKER_FIELDS: TrackerField[] = [
   { id: 'progress_media', label: 'Progress photo or video', hint: 'Show the work.', type: 'upload' },
   { id: 'notes', label: 'Notes for THP', hint: 'PRs, questions, anything to flag.', type: 'textarea', optional: true },
 ];
+
+// Fields that only ever get set by the onboarding intake form. Stripe-imported
+// clients always carry a source/clientType/stripeCustomerId stub in diagnostic_data,
+// so a non-empty object is not proof that anyone filled in the intake.
+export const INTAKE_SIGNAL_KEYS = [
+  'fullName', 'ageLocation', 'whatTryingToFix', 'energyState',
+  'sleepQuality', 'trainingFrequency', 'selfPerception', 'currentWeight',
+];
+
+export function hasIntakeData(d: Record<string, unknown> | undefined | null): boolean {
+  if (!d) return false;
+  return INTAKE_SIGNAL_KEYS.some(k => {
+    const v = d[k];
+    return typeof v === 'string' ? v.trim().length > 0 : v != null;
+  });
+}

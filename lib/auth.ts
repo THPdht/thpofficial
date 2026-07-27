@@ -60,7 +60,7 @@ export type ClientProtocol = {
   stage: number;
   notionPageId?: string;
   title: string;
-  source?: 'generated' | 'imported';
+  source?: 'generated' | 'imported' | 'custom';
   content?: { sections: { heading: string; text: string }[]; todos: string[]; speaking_notes?: Record<string, unknown> };
   createdAt: string;
   published?: boolean;
@@ -156,6 +156,8 @@ export type StoredUser = {
   longestStreak: number;
   lastCheckIn?: string;
   lastLogin?: string;
+  coachingSummary?: string;
+  coachingSummaryUpdatedAt?: string;
   joinedAt: string;
   diagnosticData?: DiagnosticData;
   referralCode?: string;
@@ -188,6 +190,8 @@ export function rowToUser(row: any): StoredUser {
     longestStreak: row.longest_streak ?? 0,
     lastCheckIn: row.last_check_in ?? undefined,
     lastLogin: row.last_login ?? undefined,
+    coachingSummary: row.coaching_summary ?? undefined,
+    coachingSummaryUpdatedAt: row.coaching_summary_updated_at ?? undefined,
     joinedAt: row.joined_at,
     diagnosticData: diagData,
     referralCode: row.referral_code ?? undefined,
@@ -291,6 +295,22 @@ export async function updateUser(email: string, updates: Partial<StoredUser>): P
 
 export async function submitDiagnostic(email: string, data: DiagnosticData): Promise<void> {
   await updateUser(email, { status: 'pending', diagnosticData: data });
+}
+
+// THP's private summary of a client's coaching history — the data protocols get
+// built from for clients who never filled in the intake form. Admin-only: the
+// column is revoked from anon/authenticated at the database level.
+export async function saveCoachingSummary(email: string, summary: string): Promise<{ updatedAt: string } | null> {
+  const updatedAt = new Date().toISOString();
+  const res = await adminFetch('/api/admin/users', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      email,
+      fields: { coaching_summary: summary, coaching_summary_updated_at: updatedAt },
+    }),
+  });
+  if (!res.ok) return null;
+  return { updatedAt };
 }
 
 export async function linkNotionPage(email: string, notionPageId: string): Promise<void> {

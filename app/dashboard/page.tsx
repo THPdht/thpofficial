@@ -898,7 +898,7 @@ function ProtocolTab({ user, protocol, notionPageId }: { user: StoredUser; proto
           stage: row.stage,
           notionPageId: row.notion_page_id ?? undefined,
           title: row.title,
-          source: (row.source as 'generated' | 'imported') ?? 'generated',
+          source: (row.source as 'generated' | 'imported' | 'custom') ?? 'generated',
           content: row.content ?? undefined,
           createdAt: row.created_at,
         }));
@@ -948,7 +948,13 @@ function ProtocolTab({ user, protocol, notionPageId }: { user: StoredUser; proto
             return stages.map((s, i) => {
               const isImported = s.source === 'imported';
               if (isImported) importIdx++;
-              const label = isImported ? `Imported ${importIdx}` : `Stage ${s.stage}`;
+              // One-off protocols are about a subject, not a stage in the programme,
+              // so they go by their own title.
+              const label = isImported
+                ? `Imported ${importIdx}`
+                : s.source === 'custom'
+                  ? s.title
+                  : `Stage ${s.stage}`;
               return (
                 <button key={s.id} onClick={() => setSelectedIdx(i)}
                   style={{
