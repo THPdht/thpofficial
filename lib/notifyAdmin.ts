@@ -12,9 +12,6 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
  * written, or the feed would start losing events whenever a device goes stale.
  */
 
-/** Reserved user_email for THP's own push subscriptions. Not a real client row. */
-export const ADMIN_PUSH_EMAIL = 'admin';
-
 export type AdminAlarmType =
   | 'new_application'
   | 'new_referral'
@@ -51,7 +48,7 @@ async function pushToAdmin(title: string, body: string): Promise<void> {
   const { data: subs } = await supabaseAdmin
     .from('push_subscriptions')
     .select('subscription, endpoint')
-    .eq('user_email', ADMIN_PUSH_EMAIL);
+    .eq('is_admin', true);
   if (!subs?.length) return;
 
   webpush.setVapidDetails('mailto:hello@thpofficial.com', publicKey, privateKey);

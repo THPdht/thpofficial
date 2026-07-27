@@ -1,6 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { isAdmin } from '@/lib/apiAuth';
-import { ADMIN_PUSH_EMAIL } from '@/lib/notifyAdmin';
 
 async function verifyUser(email: string, password: string): Promise<boolean> {
   const { data } = await supabaseAdmin
@@ -15,12 +14,12 @@ export async function POST(req: Request) {
   const { subscription, userEmail, password, admin } = await req.json().catch(() => ({}));
   if (!subscription) return Response.json({ error: 'subscription required' }, { status: 400 });
 
-  // THP has no row in users, so admin authenticates with the admin password and
-  // the subscription is filed under the reserved ADMIN_PUSH_EMAIL.
-  let owner: string;
+  // THP has no row in users, and user_email carries a foreign key to it, so an
+  // admin subscription is stored with a null owner and the is_admin flag instead.
+  let owner: string | null;
   if (admin) {
     if (!isAdmin(req)) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    owner = ADMIN_PUSH_EMAIL;
+    owner = null;
   } else {
     if (!userEmail || !password) {
       return Response.json({ error: 'subscription, userEmail and password required' }, { status: 400 });
@@ -34,7 +33,7 @@ export async function POST(req: Request) {
   const endpoint = subscription.endpoint;
   const { error } = await supabaseAdmin
     .from('push_subscriptions')
-    .upsert({ user_email: owner, subscription, endpoint }, { onConflict: 'endpoint' });
+    .upsert({ user_email: owner, subscription, endpoint, is_admin: !!admin }, { onConflict: 'endpoint' });
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
   return Response.json({ ok: true });
