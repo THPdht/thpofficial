@@ -256,6 +256,8 @@ export default function ApplyPage() {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [errors, setErrors] = useState<string[]>([]);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+  const [emailTaken, setEmailTaken] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -324,8 +326,33 @@ export default function ApplyPage() {
     return e.length === 0;
   }
 
-  function next() {
+  async function next() {
     if (!validate()) return;
+
+    // Stop existing clients at the email step. Without this they only find out at
+    // step 15, after filling in the whole form, when register() 409s.
+    if (step === 13) {
+      setCheckingEmail(true);
+      try {
+        const res = await fetch("/api/auth/check-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: form.email.trim() }),
+        });
+        const { exists } = await res.json();
+        if (exists) {
+          setEmailTaken(true);
+          setErrors(["You already have a THP account with this email."]);
+          return;
+        }
+      } catch {
+        // Network failure — let them through; register() still blocks duplicates.
+      } finally {
+        setCheckingEmail(false);
+      }
+    }
+
+    setEmailTaken(false);
     setErrors([]);
     setStep(s => s + 1);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -333,6 +360,7 @@ export default function ApplyPage() {
 
   function back() {
     setErrors([]);
+    setEmailTaken(false);
     setStep(s => s - 1);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -458,6 +486,13 @@ export default function ApplyPage() {
         {errors.length > 0 && (
           <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "8px", padding: "0.75rem 1rem", marginBottom: "1.5rem" }}>
             {errors.map((e, i) => <p key={i} style={{ color: "#ef4444", fontSize: "0.82rem", fontFamily: "var(--font-body), sans-serif" }}>{e}</p>)}
+            {emailTaken && (
+              <p style={{ color: "#ef4444", fontSize: "0.82rem", marginTop: "0.4rem", fontFamily: "var(--font-body), sans-serif" }}>
+                No need to apply again —{" "}
+                <a href="/login" style={{ color: "#ef4444", fontWeight: 600, textDecoration: "underline" }}>sign in here</a>.
+                Forgot your password? Ask THP to send you a new access link.
+              </p>
+            )}
           </div>
         )}
 
@@ -720,8 +755,8 @@ export default function ApplyPage() {
             </button>
           )}
           {step < STEP_TITLES.length - 1 ? (
-            <button onClick={next} style={{ flex: 2, padding: "0.875rem", background: primary, color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body), sans-serif" }}>
-              Continue
+            <button onClick={next} disabled={checkingEmail} style={{ flex: 2, padding: "0.875rem", background: primary, color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, cursor: checkingEmail ? "not-allowed" : "pointer", opacity: checkingEmail ? 0.7 : 1, fontFamily: "var(--font-body), sans-serif" }}>
+              {checkingEmail ? "Checking..." : "Continue"}
             </button>
           ) : (
             <button onClick={handleSubmit} disabled={submitting} style={{ flex: 2, padding: "0.875rem", background: primary, color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1, fontFamily: "var(--font-body), sans-serif" }}>

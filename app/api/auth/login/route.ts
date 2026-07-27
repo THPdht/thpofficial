@@ -21,5 +21,14 @@ export async function POST(req: Request) {
   const { error: authError } = await syncAuthPassword(norm, password);
   if (authError) console.error('[auth/login] auth sync', authError);
 
-  return Response.json({ success: true, user: data });
+  // Stamp the sign-in here rather than relying on /dashboard reporting it, so admin
+  // can trust "never signed in" as the signal for who still needs an invite link.
+  const now = new Date().toISOString();
+  const { error: stampError } = await supabaseAdmin
+    .from('users')
+    .update({ last_login: now })
+    .eq('email', norm);
+  if (stampError) console.error('[auth/login] last_login', stampError);
+
+  return Response.json({ success: true, user: { ...data, last_login: now } });
 }

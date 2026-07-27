@@ -155,6 +155,7 @@ export type StoredUser = {
   streak: number;
   longestStreak: number;
   lastCheckIn?: string;
+  lastLogin?: string;
   joinedAt: string;
   diagnosticData?: DiagnosticData;
   referralCode?: string;
@@ -186,6 +187,7 @@ export function rowToUser(row: any): StoredUser {
     streak: row.streak ?? 0,
     longestStreak: row.longest_streak ?? 0,
     lastCheckIn: row.last_check_in ?? undefined,
+    lastLogin: row.last_login ?? undefined,
     joinedAt: row.joined_at,
     diagnosticData: diagData,
     referralCode: row.referral_code ?? undefined,

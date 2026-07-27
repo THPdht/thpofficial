@@ -1454,12 +1454,21 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
   const [sendingProtocolId, setSendingProtocolId] = useState<string | null>(null);
   const [applicationData, setApplicationData] = useState<Record<string, unknown> | null>(null);
 
+  // Portal access
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+
   useEffect(() => {
     // Reset profile-panel state on client change
     setTrackerSummary(null);
     setGenError("");
     setDiagGenError("");
     setApplicationData(null);
+    setInviteUrl(null);
+    setInviteCopied(false);
+    setInviteError("");
 
     // Tracker analysis — via API (bypasses RLS)
     fetch(`/api/tracker-analysis?email=${encodeURIComponent(client.email)}&limit=20`)
@@ -1641,6 +1650,34 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
     setGenerating(false);
   }
 
+  async function handleGenerateInvite() {
+    setInviteLoading(true);
+    setInviteError("");
+    try {
+      const res = await fetch('/api/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD },
+        body: JSON.stringify({ email: client.email }),
+      });
+      const data = await res.json();
+      if (data.url) setInviteUrl(data.url);
+      else setInviteError(data.error ?? 'Could not create invite link.');
+    } catch {
+      setInviteError('Network error. Try again.');
+    }
+    setInviteLoading(false);
+  }
+
+  function copyInviteUrl() {
+    if (!inviteUrl) return;
+    navigator.clipboard.writeText(inviteUrl).then(() => {
+      setInviteCopied(true);
+      setTimeout(() => setInviteCopied(false), 2000);
+    });
+  }
+
+  const hasSignedIn = !!userData?.last_login;
+
   const displayName = client.nickname || client.name;
   const firstName = displayName.split(' ')[0];
 
@@ -1726,6 +1763,50 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
           </div>
         </div>
         <span style={{ padding: "0.25rem 0.625rem", borderRadius: "20px", fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", background: client.status === "active" ? "oklch(0.25 0.08 145)" : "var(--surface)", color: client.status === "active" ? "oklch(0.65 0.15 145)" : "var(--dim)", border: "1px solid", borderColor: client.status === "active" ? "oklch(0.4 0.12 145)" : "var(--border)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{client.status}</span>
+      </div>
+
+      {/* Portal access — invite link. Sits up top because "has this client actually
+          got into the portal yet?" is the first thing THP needs on an imported client. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem", padding: "0.875rem 1rem", background: hasSignedIn ? "var(--surface)" : "oklch(0.65 0.14 65 / 0.08)", border: "1px solid", borderColor: hasSignedIn ? "var(--border-subtle)" : "oklch(0.65 0.14 65 / 0.35)", borderRadius: "10px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: hasSignedIn ? "oklch(0.7 0.15 145)" : "oklch(0.75 0.14 65)", flexShrink: 0 }} />
+            <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+              {hasSignedIn
+                ? `Portal active — last signed in ${new Date(userData!.last_login!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
+                : "Never signed in — send this client an access link"}
+            </p>
+          </div>
+          {!inviteUrl && (
+            <button
+              onClick={handleGenerateInvite}
+              disabled={inviteLoading}
+              style={{ height: "32px", padding: "0 0.875rem", background: hasSignedIn ? "var(--surface-2)" : "var(--primary)", border: hasSignedIn ? "1px solid var(--border)" : "none", borderRadius: "7px", color: hasSignedIn ? "var(--muted)" : "#ffffff", fontSize: "0.75rem", fontWeight: 600, cursor: inviteLoading ? "default" : "pointer", opacity: inviteLoading ? 0.6 : 1, fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+              {inviteLoading ? "Generating…" : hasSignedIn ? "New access link" : "Generate access link"}
+            </button>
+          )}
+        </div>
+
+        {inviteUrl && (
+          <>
+            <div style={{ display: "flex", gap: "0.375rem" }}>
+              <input readOnly value={inviteUrl}
+                onFocus={e => e.currentTarget.select()}
+                style={{ flex: 1, minWidth: 0, height: "34px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.625rem", fontSize: "0.75rem", color: "var(--dim)", fontFamily: "var(--font-mono), monospace", outline: "none" }} />
+              <button onClick={copyInviteUrl}
+                style={{ height: "34px", padding: "0 0.75rem", background: inviteCopied ? "oklch(0.60 0.18 165 / 0.12)" : "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "7px", color: inviteCopied ? "var(--primary)" : "var(--muted)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+                {inviteCopied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+              Valid 7 days. {firstName} sets their own password and lands straight in the portal — do not send them the apply link.
+            </p>
+          </>
+        )}
+
+        {inviteError && (
+          <p style={{ fontSize: "0.7rem", color: "var(--danger)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{inviteError}</p>
+        )}
       </div>
 
       {/* Quick stats strip — collapsible */}
@@ -2642,9 +2723,18 @@ function ClientRow({ u, selected, unreadCounts, onSelect }: { u: StoredUser; sel
               {u.nickname || (u.name && !u.name.includes('undefined') ? u.name : u.email.split('@')[0])}
             </p>
           </div>
-          {unread > 0 && (
-            <span style={{ width: "17px", height: "17px", borderRadius: "50%", background: "var(--primary)", color: "#ffffff", fontSize: "0.625rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{unread}</span>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", flexShrink: 0 }}>
+            {!u.lastLogin && (
+              <span
+                title="Never signed in — needs an access link"
+                style={{ padding: "0.0625rem 0.375rem", borderRadius: "20px", background: "oklch(0.65 0.14 65 / 0.12)", border: "1px solid oklch(0.65 0.14 65 / 0.35)", color: "oklch(0.78 0.13 65)", fontSize: "0.5625rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap" }}>
+                No access
+              </span>
+            )}
+            {unread > 0 && (
+              <span style={{ width: "17px", height: "17px", borderRadius: "50%", background: "var(--primary)", color: "#ffffff", fontSize: "0.625rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{unread}</span>
+            )}
+          </div>
         </div>
       </div>
     </button>
