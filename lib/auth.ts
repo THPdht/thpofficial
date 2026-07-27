@@ -405,8 +405,14 @@ export async function getClientProtocols(email: string): Promise<ClientProtocol[
 // Used by admin — returns ALL protocols including unpublished drafts (uses server API to bypass RLS)
 export async function getAdminProtocols(email: string): Promise<ClientProtocol[]> {
   try {
-    const res = await fetch(`/api/protocols?email=${encodeURIComponent(email)}&all=1`);
-    if (!res.ok) return [];
+    // adminFetch, not fetch: all=1 returns drafts and is admin-gated.
+    const res = await adminFetch(`/api/protocols?email=${encodeURIComponent(email)}&all=1`);
+    if (!res.ok) {
+      // Returning [] on an auth failure renders as "No protocol yet", which reads
+      // as data loss rather than a permissions problem. Say so.
+      console.error('[getAdminProtocols]', res.status, await res.text().catch(() => ''));
+      return [];
+    }
     const { protocols } = await res.json();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (protocols ?? []).map((row: any) => ({

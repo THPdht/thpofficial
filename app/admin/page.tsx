@@ -17,6 +17,15 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceA
 const ADMIN_EMAIL = "info.shopzul@gmail.com";
 const ADMIN_PASSWORD = "Fikri!";
 
+// Admin reads of client data. These endpoints are gated to the client themselves or
+// admin, so the password header has to travel with every one of them.
+function adminApiFetch(url: string, opts?: RequestInit): Promise<Response> {
+  return fetch(url, {
+    ...opts,
+    headers: { "x-admin-password": ADMIN_PASSWORD, ...(opts?.headers ?? {}) },
+  });
+}
+
 const MARKER_DEFAULTS: Record<string, { label: string; unit: string }> = {
   total_t:      { label: "Total T",       unit: "ng/dL" },
   free_t:       { label: "Free T",        unit: "pg/mL" },
@@ -1492,7 +1501,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
     setSummarySaving(false);
 
     // Tracker analysis — via API (bypasses RLS)
-    fetch(`/api/tracker-analysis?email=${encodeURIComponent(client.email)}&limit=20`)
+    adminApiFetch(`/api/tracker-analysis?email=${encodeURIComponent(client.email)}&limit=20`)
       .then(r => r.json())
       .then(d => {
         const map: Record<string, { date: string; talking_points: string[]; flags: string[] }> = {};
@@ -1502,13 +1511,13 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
       .catch(() => {});
 
     // Last 10 trackers — via API (bypasses RLS)
-    fetch(`/api/tracker-history?email=${encodeURIComponent(client.email)}&limit=10`)
+    adminApiFetch(`/api/tracker-history?email=${encodeURIComponent(client.email)}&limit=10`)
       .then(r => r.json())
       .then(d => setTrackers((d.trackers ?? []) as typeof trackers))
       .catch(() => {});
 
     // Blood work entries — via API (bypasses RLS)
-    fetch(`/api/blood-work-history?email=${encodeURIComponent(client.email)}`)
+    adminApiFetch(`/api/blood-work-history?email=${encodeURIComponent(client.email)}`)
       .then(r => r.json())
       .then(d => setBloodWorkEntries((d.entries ?? []) as typeof bloodWorkEntries))
       .catch(() => {});
@@ -2907,7 +2916,7 @@ function TodoProgress({ protocolId, userEmail, total }: { protocolId: string; us
   const [doneCount, setDoneCount] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch(`/api/protocol-todos?email=${encodeURIComponent(userEmail)}&protocol_id=${protocolId}`)
+    adminApiFetch(`/api/protocol-todos?email=${encodeURIComponent(userEmail)}&protocol_id=${protocolId}`)
       .then(r => r.json())
       .then(data => { if (Array.isArray(data.checked)) setDoneCount(data.checked.length); })
       .catch(() => {});
