@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { isAdmin, requireAdmin, requireSelfOrAdmin } from '@/lib/apiAuth';
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -7,13 +8,20 @@ export async function GET(req: Request) {
 
   if (!email) return Response.json({ error: 'Missing email' }, { status: 400 });
 
+  const denied = await requireSelfOrAdmin(req, email);
+  if (denied) return denied;
+
+  // Drafts are THP's working copies. A client asking for all=1 gets sent protocols
+  // only — the flag is not a way for them to read what has not been sent yet.
+  const includeDrafts = all && isAdmin(req);
+
   let query = supabaseAdmin
     .from('protocols')
     .select('*')
     .eq('user_email', email)
     .order('stage', { ascending: true });
 
-  if (!all) {
+  if (!includeDrafts) {
     query = query.eq('status', 'sent');
   }
 
@@ -26,9 +34,8 @@ export async function GET(req: Request) {
 // DELETE — discard a draft protocol. Drafts only: once a protocol is sent the client
 // can see it in their portal, and pulling it out from under them is not a delete.
 export async function DELETE(req: Request) {
-  if (req.headers.get('x-admin-password') !== process.env.ADMIN_PASSWORD) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const denied = requireAdmin(req);
+  if (denied) return denied;
 
   const { protocolId } = await req.json();
   if (!protocolId) return Response.json({ error: 'Missing protocolId' }, { status: 400 });

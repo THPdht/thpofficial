@@ -1,7 +1,11 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { requireAdmin } from '@/lib/apiAuth';
 
 export async function POST(req: Request) {
   try {
+    const denied = requireAdmin(req);
+    if (denied) return denied;
+
     const { protocolId } = await req.json();
     if (!protocolId) return Response.json({ error: 'Missing protocolId' }, { status: 400 });
 

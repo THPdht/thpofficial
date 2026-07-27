@@ -8,6 +8,7 @@ import type { ClientProtocol, ClientDiagnostic } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import type { StoredUser } from "@/lib/auth";
 import type { Protocol } from "@/lib/protocols";
+import { authedFetch } from "@/lib/authedFetch";
 import ProtocolDocumentComponent from "@/components/portal/ProtocolDocument";
 import DiagnosticDocumentComponent from "@/components/portal/DiagnosticDocument";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
@@ -66,7 +67,7 @@ export default function Dashboard() {
       try {
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
         if (tz) {
-          fetch('/api/activity-log', {
+          authedFetch('/api/activity-log', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: u.email, event: 'login' }),
@@ -889,7 +890,7 @@ function ProtocolTab({ user, protocol, notionPageId }: { user: StoredUser; proto
   const [showUpload, setShowUpload] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/protocols?email=${encodeURIComponent(user.email)}`)
+    authedFetch(`/api/protocols?email=${encodeURIComponent(user.email)}`)
       .then(r => r.json())
       .then(d => {
         const protocols: ClientProtocol[] = (d.protocols ?? []).map((row: Record<string, unknown>) => ({
@@ -1206,7 +1207,7 @@ function BloodWorkTab({ user }: { user: StoredUser }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    fetch(`/api/blood-work-history?email=${encodeURIComponent(user.email)}`)
+    authedFetch(`/api/blood-work-history?email=${encodeURIComponent(user.email)}`)
       .then(r => r.json())
       .then(d => { setEntries((d.entries ?? []) as BloodWorkEntry[]); setLoading(false); })
       .catch(() => setLoading(false));
@@ -1230,14 +1231,14 @@ function BloodWorkTab({ user }: { user: StoredUser }) {
     const form = new FormData();
     form.append('file', file);
     form.append('userEmail', user.email);
-    const res = await fetch('/api/blood-work-upload', { method: 'POST', body: form }).then(r => r.json()).catch(() => null);
+    const res = await authedFetch('/api/blood-work-upload', { method: 'POST', body: form }).then(r => r.json()).catch(() => null);
     if (res?.uploadId) {
       setAnalysing(true);
       // Poll for markers to appear (Edge Function runs async)
       let attempts = 0;
       const poll = setInterval(async () => {
         attempts++;
-        const d = await fetch(`/api/blood-work-history?email=${encodeURIComponent(user.email)}`).then(r => r.json()).catch(() => null);
+        const d = await authedFetch(`/api/blood-work-history?email=${encodeURIComponent(user.email)}`).then(r => r.json()).catch(() => null);
         const fresh = (d?.entries ?? []).find((e: BloodWorkEntry) => e.id === res.uploadId);
         if (fresh?.markers || attempts > 20) {
           clearInterval(poll);
@@ -1561,7 +1562,7 @@ function ReferralsTab({ user }: { user: StoredUser }) {
 
   const load = () => {
     setLoading(true);
-    fetch(`/api/referrals?email=${encodeURIComponent(user.email)}`)
+    authedFetch(`/api/referrals?email=${encodeURIComponent(user.email)}`)
       .then(r => r.json()).then(d => setReferrals(d.referrals ?? [])).catch(() => {}).finally(() => setLoading(false));
   };
 
@@ -1572,7 +1573,7 @@ function ReferralsTab({ user }: { user: StoredUser }) {
   const handleSubmit = async () => {
     if (!name.trim() || !email.trim()) { setError("Name and email are required."); return; }
     setSubmitting(true); setError("");
-    const res = await fetch('/api/referrals', {
+    const res = await authedFetch('/api/referrals', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ referrerEmail: user.email, referredName: name.trim(), referredEmail: email.trim(), referredPhone: phone.trim() || undefined }),
@@ -1685,7 +1686,7 @@ function TrackerHistoryTab({ user }: { user: StoredUser }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/tracker-history?email=${encodeURIComponent(user.email)}&limit=60`)
+    authedFetch(`/api/tracker-history?email=${encodeURIComponent(user.email)}&limit=60`)
       .then(r => r.json())
       .then(d => { setEntries((d.trackers ?? []) as TrackerEntry[]); setLoading(false); })
       .catch(() => setLoading(false));

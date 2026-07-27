@@ -682,7 +682,7 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
     try {
       const res = await fetch("/api/generate-protocol", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-admin-password": ADMIN_PASSWORD },
         body: JSON.stringify({
           clientEmail: client.email,
           clientName: client.name,
@@ -1177,7 +1177,7 @@ function ProfilePanel({ client, diagnosticOpen, onToggleDiagnostic, onActivate, 
             try {
               const res = await fetch("/api/generate-protocol", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", "x-admin-password": ADMIN_PASSWORD },
                 body: JSON.stringify({
                   clientEmail: client.email,
                   clientName: client.name,
@@ -1669,7 +1669,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
     setGenerating(true); setGenError("");
     try {
       const protocolFormat = getEffectiveProtocolFormat();
-      const res = await fetch("/api/generate-protocol", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientEmail: client.email, clientName: client.name, diagnosticData: client.diagnosticData ?? null, phase1Mode: true, protocolFormat }) });
+      const res = await fetch("/api/generate-protocol", { method: "POST", headers: { "Content-Type": "application/json", "x-admin-password": ADMIN_PASSWORD }, body: JSON.stringify({ clientEmail: client.email, clientName: client.name, diagnosticData: client.diagnosticData ?? null, phase1Mode: true, protocolFormat }) });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || "Generation failed");
       const updated = await getAdminProtocols(client.email);
@@ -2265,7 +2265,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
                 <button
                   onClick={async () => {
                     setSendingProtocolId(proto.id);
-                    await fetch('/api/protocol-send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ protocolId: proto.id }) });
+                    await fetch('/api/protocol-send', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD }, body: JSON.stringify({ protocolId: proto.id }) });
                     setClientProtocols(prev => prev.map(p => p.id === proto.id ? { ...p, published: true } : p));
                     setSendingProtocolId(null);
                   }}
@@ -2694,7 +2694,7 @@ function ToolsPanel({ clients, onClientCreated }: { clients: StoredUser[]; onCli
     try {
       const res = await fetch("/api/generate-protocol", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-admin-password": ADMIN_PASSWORD },
         body: JSON.stringify({
           clientEmail: clientData.email,
           clientName: clientData.name,
@@ -2985,7 +2985,7 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
       await supabase.from('protocols').update({ content: { text: editText } }).eq('id', id);
       setEditingProtocol(null);
     }
-    await fetch('/api/protocol-send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ protocolId: id }) });
+    await fetch('/api/protocol-send', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD }, body: JSON.stringify({ protocolId: id }) });
     setPendingProtocols(prev => prev.filter(p => p.id !== id));
     setSending(null);
   };

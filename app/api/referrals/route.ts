@@ -1,10 +1,14 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { requireSelfOrAdmin } from '@/lib/apiAuth';
 
 // GET /api/referrals?email=... — fetch referral list for a client
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const email = searchParams.get('email');
   if (!email) return Response.json({ error: 'Missing email' }, { status: 400 });
+
+  const denied = await requireSelfOrAdmin(req, email);
+  if (denied) return denied;
 
   const { data, error } = await supabaseAdmin
     .from('referrals')

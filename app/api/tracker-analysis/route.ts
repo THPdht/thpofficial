@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { requireSelfOrAdmin } from '@/lib/apiAuth';
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -6,6 +7,9 @@ export async function GET(req: Request) {
   const limit = parseInt(searchParams.get('limit') ?? '20', 10);
 
   if (!email) return Response.json({ error: 'Missing email' }, { status: 400 });
+
+  const denied = await requireSelfOrAdmin(req, email);
+  if (denied) return denied;
 
   const { data, error } = await supabaseAdmin
     .from('tracker_analysis')

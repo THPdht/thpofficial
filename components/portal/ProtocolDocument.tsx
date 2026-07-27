@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import { authedFetch } from "@/lib/authedFetch";
 
 export type ProtocolSection = { heading: string; text: string };
 
@@ -240,7 +241,7 @@ function TodoList({ items, protocolId, userEmail }: TodoListProps) {
   // Load persisted state on mount
   useEffect(() => {
     if (!protocolId || !userEmail) { setLoaded(true); return; }
-    fetch(`/api/protocol-todos?email=${encodeURIComponent(userEmail)}&protocol_id=${protocolId}`)
+    authedFetch(`/api/protocol-todos?email=${encodeURIComponent(userEmail)}&protocol_id=${protocolId}`)
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data.checked)) setChecked(new Set(data.checked as number[]));
@@ -257,7 +258,7 @@ function TodoList({ items, protocolId, userEmail }: TodoListProps) {
       return next;
     });
     if (protocolId && userEmail) {
-      fetch('/api/protocol-todos', {
+      authedFetch('/api/protocol-todos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: userEmail, protocol_id: protocolId, item_idx: i, checked: isNowChecked }),

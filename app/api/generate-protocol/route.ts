@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
 import { IDENTITY, VOICE_RULES, METHODOLOGY, TONE } from "./prompt";
 import { hasIntakeData } from "@/lib/protocols";
+import { requireAdmin } from "@/lib/apiAuth";
 
 const MASTER_PROMPT = `${IDENTITY}
 
@@ -304,6 +305,9 @@ function buildNotionBlocks(sections: { heading: string; text: string }[], todos:
 
 export async function POST(req: Request) {
   try {
+    const denied = requireAdmin(req);
+    if (denied) return denied;
+
     const { clientEmail, clientName, createNotion, phase1Mode, trackerSummary, protocolFormat: requestedFormat } = await req.json();
     if (!clientEmail) return Response.json({ error: 'Missing clientEmail' }, { status: 400 });
 

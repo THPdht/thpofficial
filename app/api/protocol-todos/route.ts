@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { requireSelfOrAdmin } from '@/lib/apiAuth';
 
 // GET /api/protocol-todos?email=&protocol_id=
 export async function GET(req: Request) {
@@ -9,6 +10,9 @@ export async function GET(req: Request) {
   if (!email || !protocolId) {
     return Response.json({ error: 'Missing email or protocol_id' }, { status: 400 });
   }
+
+  const denied = await requireSelfOrAdmin(req, email);
+  if (denied) return denied;
 
   const { data, error } = await supabaseAdmin
     .from('protocol_todos')
@@ -39,6 +43,9 @@ export async function POST(req: Request) {
   if (!email || !protocol_id || item_idx === undefined || checked === undefined) {
     return Response.json({ error: 'Missing fields' }, { status: 400 });
   }
+
+  const denied = await requireSelfOrAdmin(req, email);
+  if (denied) return denied;
 
   const { error } = await supabaseAdmin
     .from('protocol_todos')

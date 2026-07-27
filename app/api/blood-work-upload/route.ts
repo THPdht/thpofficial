@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { requireSelfOrAdmin } from '@/lib/apiAuth';
 
 export async function POST(req: Request) {
   try {
@@ -9,6 +10,9 @@ export async function POST(req: Request) {
     if (!file || !userEmail) {
       return Response.json({ error: 'Missing file or userEmail' }, { status: 400 });
     }
+
+    const denied = await requireSelfOrAdmin(req, userEmail);
+    if (denied) return denied;
 
     const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
     const fileName = `${userEmail}/${Date.now()}.${ext}`;

@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { requireSelfOrAdmin } from '@/lib/apiAuth';
 
 type ActivityEvent = 'login' | 'protocol_opened' | 'diagnosis_viewed';
 
@@ -14,6 +15,9 @@ export async function POST(req: Request) {
     if (!email || !event || !EVENT_COLUMN[event]) {
       return Response.json({ error: 'Missing email or valid event' }, { status: 400 });
     }
+
+    const denied = await requireSelfOrAdmin(req, email);
+    if (denied) return denied;
 
     await supabaseAdmin
       .from('users')
