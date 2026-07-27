@@ -141,14 +141,14 @@ export function Hero() {
             className="font-body font-extrabold text-white leading-[0.9] tracking-tight mb-5"
             style={{ fontSize: "clamp(1.6rem, 4.5vw, 3.25rem)" }}
           >
-            YOU ALREADY KNOW<br />
-            YOUR LIFE ISN&apos;T<br />
-            WHAT IT USED<br />
-            TO BE.
+            LOW TESTOSTERONE.<br />
+            LOW DRIVE.<br />
+            LOW SEX LIFE.<br />
+            HIGH STRESS.
           </h1>
 
           <p className="font-body mb-8 leading-relaxed" style={{ fontSize: "clamp(0.875rem, 2vw, 1rem)", color: "rgba(255,255,255,0.55)", maxWidth: "38ch" }}>
-            Tired all day even after coffee. A gut that won&apos;t go away no matter what you do. Barely any drive left in the bedroom, and you keep telling yourself it&apos;s just a phase. That&apos;s not a phase. That&apos;s low testosterone. And you already know it.
+            All the symptoms of a slow death. Becoming high testosterone does not mean eating more steak. It&apos;s 90% psychological. If you understand mind &gt; matter, then welcome to THP.
           </p>
 
           <a
