@@ -255,7 +255,7 @@ function OnboardingInner() {
       const res = await fetch("/api/generate-onboarding-protocol", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: user.email, formData: form, token: tokenParam || undefined }),
+        body: JSON.stringify({ email: user.email, password: user.password, formData: form, token: tokenParam || undefined }),
       });
 
       if (!res.ok) {
@@ -307,7 +307,7 @@ function OnboardingInner() {
       const res = await fetch("/api/generate-onboarding-protocol", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: finalUser.email, formData: form, token: tokenParam || undefined }),
+        body: JSON.stringify({ email: finalUser.email, password: finalUser.password, formData: form, token: tokenParam || undefined }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
