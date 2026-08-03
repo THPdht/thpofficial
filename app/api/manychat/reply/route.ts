@@ -124,17 +124,32 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const subscriberId = String(body.subscriber_id ?? '').trim();
+  // Accept the field names ManyChat uses in a hand-built request body and the
+  // ones it sends by itself from a Dynamic Block or "Add Full Contact Data".
+  // Guessing wrong here means the bot answers the wrong person, or nobody.
+  const raw = body as Record<string, unknown>;
+  const pick = (...keys: string[]): string | null => {
+    for (const k of keys) {
+      const v = raw[k];
+      if (typeof v === 'string' || typeof v === 'number') {
+        const s = String(v).trim();
+        if (s) return s;
+      }
+    }
+    return null;
+  };
+
+  const subscriberId = pick('subscriber_id', 'id', 'key', 'user_ns') ?? '';
   if (!subscriberId) {
     return Response.json({ error: 'subscriber_id required' }, { status: 400 });
   }
 
   // Anything that still looks like a ManyChat token is not real input. Trusting
   // these is what let the bot answer people with nonsense and mute itself.
-  const message = realValue(body.message) ?? '';
-  const igUsername = realValue((body.ig_username ?? '').replace(/^@/, ''));
-  const firstName = realValue(body.first_name);
-  const keyword = realValue(body.keyword);
+  const message = realValue(pick('message', 'last_input_text', 'last_text_input', 'text')) ?? '';
+  const igUsername = realValue((pick('ig_username', 'username', 'user_name') ?? '').replace(/^@/, ''));
+  const firstName = realValue(pick('first_name', 'name'));
+  const keyword = realValue(pick('keyword'));
 
   try {
     const reply = await handle({ subscriberId, message, igUsername, firstName, keyword, body });
