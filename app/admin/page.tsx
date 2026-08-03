@@ -76,7 +76,7 @@ export default function AdminPage() {
   const [diagnosticOpen, setDiagnosticOpen] = useState(false);
   const [appOpen, setAppOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [adminView, setAdminView] = useState<'overview' | 'clients' | 'tools'>('overview');
+  const [adminView, setAdminView] = useState<'overview' | 'clients' | 'tools' | 'instagram'>('overview');
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -192,6 +192,13 @@ export default function AdminPage() {
       localStorage.setItem("mn_admin", "1");
       initAdmin(ADMIN_PASSWORD);
       setAuthed(true);
+      // Register the worker on this path too, not only on the already-signed-in
+      // mount. An installed iOS app gets its own storage, so opening it always
+      // lands here — and without a registration, subscribing to push awaits
+      // serviceWorker.ready forever, silently, and THP never gets notified.
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("/sw.js").catch(() => { /* ignore */ });
+      }
       loadData();
     } else {
       setPwError("Incorrect email or password.");
@@ -379,12 +386,12 @@ export default function AdminPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/images/thprebrandlogo2.png" alt="THP" style={{ height: "24px", width: "auto", filter: "brightness(0) invert(1)", flexShrink: 0 }} />
           <div style={{ display: "flex", gap: "0.25rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", padding: "3px", flexShrink: 0 }}>
-            {(['overview', 'clients', 'tools'] as const).map(v => (
+            {(['overview', 'clients', 'tools', 'instagram'] as const).map(v => (
               <button key={v} onClick={() => { setAdminView(v); if (v === 'overview') setSelected(null); }}
                 style={{ height: "26px", padding: isMobile ? "0 0.5rem" : "0 0.75rem", borderRadius: "6px", border: "none", fontSize: isMobile ? "0.7rem" : "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "background 150ms, color 150ms",
                   background: adminView === v ? "var(--primary)" : "transparent",
                   color: adminView === v ? "#fff" : "var(--dim)" }}>
-                {v === 'overview' ? (isMobile ? 'Home' : 'Dashboard') : v === 'clients' ? 'Clients' : 'Tools'}
+                {v === 'overview' ? (isMobile ? 'Home' : 'Dashboard') : v === 'clients' ? 'Clients' : v === 'tools' ? 'Tools' : (isMobile ? 'IG' : 'Instagram')}
               </button>
             ))}
           </div>
@@ -468,6 +475,10 @@ export default function AdminPage() {
             ) : adminView === 'tools' ? (
               <motion.div key="tools" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ flex: 1, overflowY: "auto", padding: "1.5rem 1.75rem" }}>
                 <ToolsPanel clients={clients} onClientCreated={refreshClients} />
+              </motion.div>
+            ) : adminView === 'instagram' ? (
+              <motion.div key="instagram" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ flex: 1, overflowY: "auto", padding: "1.5rem 1.75rem" }}>
+                <InstagramPanel />
               </motion.div>
             ) : !selected ? (
               // On mobile in Clients view, the sidebar takes full width — no "empty" panel needed
@@ -3014,8 +3025,13 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "2rem", maxWidth: "860px", margin: "0 auto" }}>
 
-      {/* Push for THP's own phone. Hides itself once this device is registered. */}
-      <NotificationToggle mode="admin" adminPassword={ADMIN_PASSWORD} hideWhenGranted />
+      {/* Push for THP's own phone.
+          This used to hide itself once the browser reported permission granted,
+          which meant that when the subscription never actually reached the
+          database there was no control left to retry with and no sign anything
+          was wrong. It stays visible, next to a button that proves it end to end. */}
+      <NotificationToggle mode="admin" adminPassword={ADMIN_PASSWORD} />
+      <TestPushButton />
 
       {/* Top stats — collapsible */}
       <div>
@@ -3223,3 +3239,410 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
   );
 }
 
+
+/**
+ * Instagram — the ManyChat bot's control panel.
+ *
+ * Campaigns are the only thing that changes per post. Add the keyword here, point
+ * the ManyChat comment trigger at the same keyword, and the flow behind it is
+ * unchanged. Nothing here requires a deploy.
+ */
+type IgCampaign = { id: string; keyword: string; post_url: string | null; resource_url: string; dm_copy: string; active: boolean };
+type IgContact = { subscriber_id: string; ig_username: string | null; first_name: string | null; email: string | null; keyword: string | null; stage: string; bot_paused: boolean; updated_at: string };
+type IgMessage = { id: number; role: 'user' | 'bot'; content: string; intent: string | null; created_at: string };
+type IgCopy = { opener_copy: string; apply_copy: string; not_a_fit_copy: string; holding_copy: string };
+
+/** What the bot says at each point. Blank means fall back to the built-in wording. */
+const IG_COPY_FIELDS: { key: keyof IgCopy; label: string; note: string; placeholder: string }[] = [
+  { key: "opener_copy", label: "Opening DM", note: "Sent when someone comments a keyword that has no campaign of its own.", placeholder: "Tell me what's going on with you right now..." },
+  { key: "apply_copy", label: "Application pitch", note: "Sent when they describe symptoms or say they want to optimize. Write {link} where the application link should go.", placeholder: "Sounds like something I can help you with... {link}" },
+  { key: "not_a_fit_copy", label: "Not looking for help", note: "Sent when they have no symptoms and are just here for the content. Put the YouTube link in here.", placeholder: "Appreciate the love. Most of what I put out lives on my YouTube..." },
+  { key: "holding_copy", label: "Handing over to you", note: "Sent when the bot stops and you take over. Also used while the bot is switched off.", placeholder: "Give me a bit and I'll get back to you here." },
+];
+
+const IG_STAGE_LABEL: Record<string, string> = {
+  new: "New",
+  link_sent: "Link sent",
+  lead: "Lead",
+  applied: "Already applied",
+  client: "Existing client",
+  closed: "Closed",
+  organic: "Messaged directly",
+};
+
+function InstagramPanel() {
+  const [botEnabled, setBotEnabled] = useState(true);
+  const [campaigns, setCampaigns] = useState<IgCampaign[]>([]);
+  const [contacts, setContacts] = useState<IgContact[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState("");
+
+  const [keyword, setKeyword] = useState("");
+  const [resourceUrl, setResourceUrl] = useState("");
+  const [postUrl, setPostUrl] = useState("");
+  const [dmCopy, setDmCopy] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const [thread, setThread] = useState<IgContact | null>(null);
+  const [messages, setMessages] = useState<IgMessage[]>([]);
+
+  const [copy, setCopy] = useState<IgCopy>({ opener_copy: "", apply_copy: "", not_a_fit_copy: "", holding_copy: "" });
+  const [copySaving, setCopySaving] = useState(false);
+  const [copySaved, setCopySaved] = useState(false);
+
+  const [testMode, setTestMode] = useState(true);
+  const [testUsernames, setTestUsernames] = useState("");
+  const [testSaving, setTestSaving] = useState(false);
+
+  async function load() {
+    try {
+      const res = await adminApiFetch('/api/manychat/admin');
+      if (!res.ok) { setError("Could not load Instagram data."); setLoaded(true); return; }
+      const data = await res.json();
+      setBotEnabled(data.botEnabled);
+      setCopy(data.messages ?? { opener_copy: "", apply_copy: "", not_a_fit_copy: "", holding_copy: "" });
+      setTestMode(data.testMode !== false);
+      setTestUsernames(data.testUsernames ?? "");
+      setCampaigns(data.campaigns ?? []);
+      setContacts(data.contacts ?? []);
+      setError("");
+    } catch { setError("Network error."); }
+    setLoaded(true);
+  }
+
+  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+
+  async function openThread(c: IgContact) {
+    setThread(c);
+    setMessages([]);
+    const res = await adminApiFetch(`/api/manychat/admin?thread=${encodeURIComponent(c.subscriber_id)}`);
+    if (res.ok) setMessages((await res.json()).messages ?? []);
+  }
+
+  async function toggleBot() {
+    const next = !botEnabled;
+    setBotEnabled(next);
+    await adminApiFetch('/api/manychat/admin', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ botEnabled: next }),
+    });
+  }
+
+  async function togglePause(c: IgContact) {
+    const next = !c.bot_paused;
+    setContacts(prev => prev.map(x => x.subscriber_id === c.subscriber_id ? { ...x, bot_paused: next } : x));
+    if (thread?.subscriber_id === c.subscriber_id) setThread({ ...thread, bot_paused: next });
+    const res = await adminApiFetch('/api/manychat/admin', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscriberId: c.subscriber_id, botPaused: next }),
+    });
+    if (!res.ok) {
+      // Roll back rather than show "paused" over a bot that is still replying.
+      setContacts(prev => prev.map(x => x.subscriber_id === c.subscriber_id ? { ...x, bot_paused: !next } : x));
+      if (thread?.subscriber_id === c.subscriber_id) setThread({ ...thread, bot_paused: !next });
+      setError("Could not change that. Try again.");
+    }
+  }
+
+  async function saveTestMode(nextMode: boolean, nextList: string) {
+    setTestSaving(true);
+    setTestMode(nextMode);
+    setTestUsernames(nextList);
+    const res = await adminApiFetch('/api/manychat/admin', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ testMode: nextMode, testUsernames: nextList }),
+    });
+    if (!res.ok) setError("Could not save test mode.");
+    setTestSaving(false);
+  }
+
+  async function saveCopy() {
+    setCopySaving(true);
+    const res = await adminApiFetch('/api/manychat/admin', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: copy }),
+    });
+    if (res.ok) { setCopySaved(true); setTimeout(() => setCopySaved(false), 2000); }
+    else setError("Could not save the messages.");
+    setCopySaving(false);
+  }
+
+  function editCampaign(c: IgCampaign) {
+    setKeyword(c.keyword);
+    setResourceUrl(c.resource_url);
+    setPostUrl(c.post_url ?? "");
+    setDmCopy(c.dm_copy);
+  }
+
+  async function saveCampaign() {
+    if (!keyword.trim() || !dmCopy.trim()) return;
+    setSaving(true);
+    setError("");
+    const res = await adminApiFetch('/api/manychat/admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keyword: keyword.trim(), resource_url: resourceUrl.trim(), post_url: postUrl.trim(), dm_copy: dmCopy.trim() }),
+    });
+    if (res.ok) {
+      setKeyword(""); setResourceUrl(""); setPostUrl(""); setDmCopy("");
+      await load();
+    } else {
+      setError((await res.json().catch(() => ({}))).error ?? "Could not save.");
+    }
+    setSaving(false);
+  }
+
+  async function deleteCampaign(c: IgCampaign) {
+    if (!confirm(`Delete the "${c.keyword}" campaign? The ManyChat trigger will stop sending a link.`)) return;
+    await adminApiFetch(`/api/manychat/admin?id=${encodeURIComponent(c.id)}`, { method: 'DELETE' });
+    await load();
+  }
+
+  const card: React.CSSProperties = { padding: "1.5rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", display: "flex", flexDirection: "column", gap: "1rem" };
+  const labelStyle: React.CSSProperties = { display: "block", fontSize: "0.7rem", color: "var(--dim)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" };
+  const inputStyle: React.CSSProperties = { width: "100%", height: "36px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0 0.75rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", outline: "none", boxSizing: "border-box" };
+
+  const leads = contacts.filter(c => c.email);
+
+  if (thread) {
+    return (
+      <div style={{ maxWidth: "640px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "1rem" }}>
+        <button onClick={() => setThread(null)} style={{ alignSelf: "flex-start", background: "none", border: "none", color: "var(--dim)", fontSize: "0.8125rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", padding: 0 }}>
+          ← Instagram
+        </button>
+        <div style={{ ...card, gap: "0.5rem" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
+            <div>
+              <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>@{thread.ig_username ?? thread.subscriber_id}</p>
+              <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                {IG_STAGE_LABEL[thread.stage] ?? thread.stage}{thread.email ? ` · ${thread.email}` : ""}{thread.keyword ? ` · ${thread.keyword}` : ""}
+              </p>
+            </div>
+            <button onClick={() => togglePause(thread)}
+              style={{ height: "30px", padding: "0 0.75rem", borderRadius: "7px", border: "1px solid var(--border)", background: thread.bot_paused ? "var(--surface)" : "oklch(0.62 0.20 25 / 0.12)", color: thread.bot_paused ? "var(--muted)" : "var(--danger)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+              {thread.bot_paused ? "Bot paused · resume" : "Bot active · pause"}
+            </button>
+          </div>
+        </div>
+        <div style={{ ...card }}>
+          {messages.length === 0 && <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>No messages recorded.</p>}
+          {messages.map(m => (
+            <div key={m.id} style={{ display: "flex", justifyContent: m.role === 'bot' ? "flex-end" : "flex-start" }}>
+              <div style={{ maxWidth: "80%", padding: "0.5rem 0.75rem", borderRadius: "10px", background: m.role === 'bot' ? "var(--primary)" : "var(--bg)", border: m.role === 'bot' ? "none" : "1px solid var(--border)", color: m.role === 'bot' ? "#fff" : "var(--ink)", fontSize: "0.8125rem", whiteSpace: "pre-wrap", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                {m.content}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: "540px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Instagram</p>
+        <button onClick={toggleBot}
+          style={{ height: "28px", padding: "0 0.75rem", borderRadius: "7px", border: "1px solid var(--border)", background: botEnabled ? "oklch(0.60 0.18 165 / 0.12)" : "oklch(0.62 0.20 25 / 0.12)", color: botEnabled ? "var(--primary)" : "var(--danger)", fontSize: "0.75rem", fontWeight: 500, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+          {botEnabled ? "Bot on" : "Bot off"}
+        </button>
+      </div>
+
+      {error && <p style={{ fontSize: "0.75rem", color: "var(--danger)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{error}</p>}
+      {!loaded && <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Loading…</p>}
+
+      {/* Test mode */}
+      <div style={{ ...card, borderColor: testMode ? "oklch(0.75 0.15 80 / 0.5)" : "var(--border)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
+          <div>
+            <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--ink)", marginBottom: "0.25rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Test mode</p>
+            <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+              {testMode
+                ? "On. Only the accounts below get replies. Everyone else gets total silence."
+                : "Off. The bot replies to real followers."}
+            </p>
+          </div>
+          <button onClick={() => saveTestMode(!testMode, testUsernames)} disabled={testSaving}
+            style={{ height: "30px", padding: "0 0.75rem", borderRadius: "7px", border: "1px solid var(--border)", background: testMode ? "oklch(0.75 0.15 80 / 0.15)" : "var(--surface)", color: testMode ? "oklch(0.75 0.15 80)" : "var(--muted)", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>
+            {testMode ? "Testing" : "Live"}
+          </button>
+        </div>
+        <div>
+          <label style={labelStyle}>Instagram handles that may receive replies</label>
+          <input value={testUsernames} onChange={e => setTestUsernames(e.target.value)} onBlur={() => saveTestMode(testMode, testUsernames)}
+            placeholder="tazimanian, thp.dht" style={inputStyle}
+            onFocus={e => (e.target.style.borderColor = "var(--primary)")} />
+          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+            Comma separated, no @ needed. Anyone not on this list is ignored completely while test mode is on.
+          </p>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div style={card}>
+        <div>
+          <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--ink)", marginBottom: "0.25rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Messages</p>
+          <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Everything the bot says, in your words. Takes effect on the next DM. Leave a box empty to use the default.</p>
+        </div>
+
+        {IG_COPY_FIELDS.map(f => (
+          <div key={f.key}>
+            <label style={labelStyle}>{f.label}</label>
+            <textarea
+              value={copy[f.key]}
+              onChange={e => setCopy({ ...copy, [f.key]: e.target.value })}
+              rows={3}
+              placeholder={f.placeholder}
+              style={{ ...inputStyle, height: "auto", padding: "0.5rem 0.75rem", resize: "vertical" }}
+              onFocus={e => (e.target.style.borderColor = "var(--primary)")}
+              onBlur={e => (e.target.style.borderColor = "var(--border)")}
+            />
+            <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{f.note}</p>
+          </div>
+        ))}
+
+        <button onClick={saveCopy} disabled={copySaving}
+          style={{ height: "36px", background: copySaved ? "oklch(0.60 0.18 165 / 0.15)" : "var(--primary)", border: "none", borderRadius: "7px", color: copySaved ? "var(--primary)" : "#fff", fontSize: "0.8125rem", fontWeight: 500, cursor: copySaving ? "default" : "pointer", opacity: copySaving ? 0.5 : 1, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+          {copySaving ? "Saving…" : copySaved ? "Saved" : "Save messages"}
+        </button>
+      </div>
+
+      {/* Campaigns */}
+      <div style={card}>
+        <div>
+          <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--ink)", marginBottom: "0.25rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Campaigns</p>
+          <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>One per post. Use the same keyword here as on the ManyChat comment trigger.</p>
+        </div>
+
+        {campaigns.map(c => {
+          const captured = contacts.filter(x => x.keyword?.toLowerCase() === c.keyword.toLowerCase());
+          return (
+            <div key={c.id} style={{ padding: "0.75rem", background: "var(--bg)", border: "1px solid var(--border-subtle)", borderRadius: "9px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--ink)", fontFamily: "var(--font-mono), monospace" }}>{c.keyword.toUpperCase()}</p>
+                <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                  {captured.length} contacted · {captured.filter(x => x.email).length} gave an email
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: "0.375rem", flexShrink: 0 }}>
+                <button onClick={() => editCampaign(c)} style={{ height: "28px", padding: "0 0.625rem", borderRadius: "6px", border: "1px solid var(--border)", background: "none", color: "var(--muted)", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Edit</button>
+                <button onClick={() => deleteCampaign(c)} style={{ height: "28px", padding: "0 0.625rem", borderRadius: "6px", border: "1px solid var(--border)", background: "none", color: "var(--danger)", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Delete</button>
+              </div>
+            </div>
+          );
+        })}
+
+        <div>
+          <label style={labelStyle}>Keyword</label>
+          <input value={keyword} onChange={e => setKeyword(e.target.value)} placeholder="PROTOCOL" style={inputStyle}
+            onFocus={e => (e.target.style.borderColor = "var(--primary)")} onBlur={e => (e.target.style.borderColor = "var(--border)")} />
+        </div>
+        <div>
+          <label style={labelStyle}>Link to send (optional)</label>
+          <input value={resourceUrl} onChange={e => setResourceUrl(e.target.value)} placeholder="leave empty for a conversation opener" style={inputStyle}
+            onFocus={e => (e.target.style.borderColor = "var(--primary)")} onBlur={e => (e.target.style.borderColor = "var(--border)")} />
+        </div>
+        <div>
+          <label style={labelStyle}>Post URL (optional)</label>
+          <input value={postUrl} onChange={e => setPostUrl(e.target.value)} placeholder="https://instagram.com/p/…" style={inputStyle}
+            onFocus={e => (e.target.style.borderColor = "var(--primary)")} onBlur={e => (e.target.style.borderColor = "var(--border)")} />
+        </div>
+        <div>
+          <label style={labelStyle}>First DM</label>
+          <textarea value={dmCopy} onChange={e => setDmCopy(e.target.value)} rows={3}
+            placeholder="Here you go. {link}"
+            style={{ ...inputStyle, height: "auto", padding: "0.5rem 0.75rem", resize: "vertical" }}
+            onFocus={e => (e.target.style.borderColor = "var(--primary)")} onBlur={e => (e.target.style.borderColor = "var(--border)")} />
+          <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+            Write {"{link}"} where the link should go. Leave it out and the link is added on its own line at the end.
+          </p>
+        </div>
+        <button onClick={saveCampaign} disabled={saving || !keyword.trim() || !dmCopy.trim()}
+          style={{ height: "36px", background: "var(--primary)", border: "none", borderRadius: "7px", color: "#fff", fontSize: "0.8125rem", fontWeight: 500, cursor: saving ? "default" : "pointer", opacity: saving || !keyword.trim() || !dmCopy.trim() ? 0.5 : 1, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+          {saving ? "Saving…" : "Save campaign"}
+        </button>
+      </div>
+
+      {/* Leads */}
+      <div style={card}>
+        <div>
+          <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--ink)", marginBottom: "0.25rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Leads</p>
+          <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Instagram contacts who gave an email.</p>
+        </div>
+        {leads.length === 0 && <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>No leads yet.</p>}
+        {leads.map(c => (
+          <button key={c.subscriber_id} onClick={() => openThread(c)}
+            style={{ textAlign: "left", padding: "0.625rem 0.75rem", background: "var(--bg)", border: "1px solid var(--border-subtle)", borderRadius: "9px", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+            <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)" }}>@{c.ig_username ?? c.subscriber_id}</p>
+            <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300 }}>{c.email} · {IG_STAGE_LABEL[c.stage] ?? c.stage}{c.keyword ? ` · ${c.keyword}` : ""}</p>
+          </button>
+        ))}
+      </div>
+
+      {/* Inbox */}
+      <div style={card}>
+        <div>
+          <p style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--ink)", marginBottom: "0.25rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Inbox</p>
+          <p style={{ fontSize: "0.75rem", color: "var(--dim)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Every conversation. Paused threads are waiting on a reply from you in ManyChat.</p>
+        </div>
+        {contacts.length === 0 && loaded && <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Nothing yet.</p>}
+        {contacts.map(c => (
+          <div key={c.subscriber_id} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <button onClick={() => openThread(c)}
+              style={{ flex: 1, textAlign: "left", padding: "0.625rem 0.75rem", background: "var(--bg)", border: "1px solid var(--border-subtle)", borderRadius: "9px", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", minWidth: 0 }}>
+              <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)" }}>@{c.ig_username ?? c.subscriber_id}</p>
+              <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300 }}>
+                {IG_STAGE_LABEL[c.stage] ?? c.stage}{c.keyword ? ` · ${c.keyword}` : ""}{c.bot_paused ? " · needs you" : ""}
+              </p>
+            </button>
+            <button onClick={() => togglePause(c)} title={c.bot_paused ? "Bot is paused — click to resume" : "Bot is active — click to pause"}
+              style={{ width: "30px", height: "30px", borderRadius: "6px", border: "1px solid var(--border)", background: "none", color: c.bot_paused ? "var(--danger)" : "var(--dim)", fontSize: "0.8rem", cursor: "pointer", flexShrink: 0 }}>
+              {c.bot_paused ? "▸" : "❚❚"}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Proves push works, rather than leaving THP to find out from a missed lead.
+ * Reports the number of registered admin devices, so "no notifications" becomes
+ * a number instead of a guess.
+ */
+function TestPushButton() {
+  const [state, setState] = useState<"idle" | "sending">("idle");
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  async function send() {
+    setState("sending");
+    setResult(null);
+    try {
+      const res = await adminApiFetch('/api/push-test', { method: 'POST' });
+      const data = await res.json();
+      setResult({ ok: !!data.ok, message: data.message ?? "Could not send." });
+    } catch {
+      setResult({ ok: false, message: "Network error. Try again." });
+    }
+    setState("idle");
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+      <button onClick={send} disabled={state === "sending"}
+        style={{ height: "32px", padding: "0 0.875rem", borderRadius: "7px", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--muted)", fontSize: "0.8125rem", fontWeight: 500, cursor: state === "sending" ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+        {state === "sending" ? "Sending…" : "Send test notification"}
+      </button>
+      {result && (
+        <span style={{ fontSize: "0.75rem", fontWeight: 300, color: result.ok ? "oklch(0.7 0.15 145)" : "var(--danger)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+          {result.message}
+        </span>
+      )}
+    </div>
+  );
+}

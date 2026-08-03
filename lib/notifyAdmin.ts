@@ -40,6 +40,22 @@ const TITLES: Record<AdminAlarmType, string> = {
   payment_received: 'Payment received',
 };
 
+/**
+ * Push to THP's phone without raising an alarm.
+ *
+ * alarms.user_email is a foreign key onto users.email, so the alarm feed can only
+ * ever describe an existing client. Events about someone who is not a client yet
+ * (an Instagram lead, say) would fail that constraint and silently notify nobody.
+ * Those callers use this and keep their own record elsewhere.
+ */
+export async function pushAdmin(title: string, body: string): Promise<void> {
+  try {
+    await pushToAdmin(title, body);
+  } catch (err) {
+    console.error('[pushAdmin] push failed:', err);
+  }
+}
+
 async function pushToAdmin(title: string, body: string): Promise<void> {
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;

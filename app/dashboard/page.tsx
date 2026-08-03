@@ -504,14 +504,10 @@ export default function Dashboard() {
 
         {/* Tab content */}
         <main className="dash-content">
-          {/* Also in the menu, but few clients open a menu to find this. Prompting
-              in the content is what actually gets notifications turned on. Hidden
-              while the menu is open so the two copies are never both on screen. */}
-          {!menuOpen && (
-            <div style={{ marginBottom: "1.25rem" }}>
-              <NotificationToggle mode="client" email={user.email} password={user.password} hideWhenGranted />
-            </div>
-          )}
+          {/* One prompt rather than two. Asks for whatever is still missing and
+              disappears for good once there is nothing left to ask. Hidden while
+              the menu is open so both copies are never on screen at once. */}
+          {!menuOpen && <SetupPrompt user={user} />}
           {dashTab === 'today' && (['pending', 'new'] as string[]).includes(user.status) && (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "4rem 2rem", textAlign: "center", gap: "1rem" }}>
               <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "var(--primary)", animation: "pulse 2s ease infinite" }} />
@@ -1992,5 +1988,104 @@ function Spinner() {
       <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" strokeOpacity="0.25" />
       <path d="M8 2a6 6 0 0 1 6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
+  );
+}
+
+/**
+ * Asks a client for the couple of things the portal can't work out on its own.
+ *
+ * Instagram handle: the Instagram bot uses it to tell an existing client apart
+ * from a stranger who commented a keyword. Without it a paying client can be
+ * sent the sales pitch for the coaching they already pay for. Only 2 of 43
+ * accounts had a handle on file, and chasing them by hand was never realistic.
+ *
+ * Notifications: most clients never had them on, so protocol updates and THP's
+ * messages went unseen.
+ *
+ * Shows only what is still missing, and stops appearing once nothing is.
+ */
+function SetupPrompt({ user }: { user: StoredUser }) {
+  const saved = (user.diagnosticData?.instagramHandle ?? "").trim();
+
+  const [handle, setHandle] = useState("");
+  const [savedHandle, setSavedHandle] = useState(saved);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [dismissed, setDismissed] = useState(true);
+
+  useEffect(() => {
+    setDismissed(localStorage.getItem(`thp_setup_done_${user.email}`) === "1");
+  }, [user.email]);
+
+  async function save() {
+    const clean = handle.trim().replace(/^@+/, "");
+    if (!clean) return;
+    setSaving(true);
+    setError("");
+    try {
+      const res = await authedFetch('/api/my-profile', {
+        method: 'PATCH',
+        body: JSON.stringify({ email: user.email, instagramHandle: clean }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? "Could not save that."); }
+      else { setSavedHandle(data.instagramHandle || clean); }
+    } catch {
+      setError("Network error. Try again.");
+    }
+    setSaving(false);
+  }
+
+  function dismiss() {
+    localStorage.setItem(`thp_setup_done_${user.email}`, "1");
+    setDismissed(true);
+  }
+
+  if (dismissed) return null;
+
+  // Handle already on file, so only notifications might still be worth asking
+  // about. The toggle hides itself once they're on, leaving nothing behind.
+  if (savedHandle) {
+    return (
+      <div style={{ marginBottom: "1.25rem" }}>
+        <NotificationToggle mode="client" email={user.email} password={user.password} hideWhenGranted />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginBottom: "1.25rem", padding: "1rem 1.125rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "12px", display: "flex", flexDirection: "column", gap: "0.875rem" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem" }}>
+        <div>
+          <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--ink)", marginBottom: "0.25rem" }}>Two quick things</p>
+          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, lineHeight: 1.6 }}>
+            Add your Instagram so I know it&apos;s you if you message me there, and turn on notifications so you hear
+            when a new protocol lands.
+          </p>
+        </div>
+        <button onClick={dismiss} aria-label="Dismiss"
+          style={{ background: "none", border: "none", color: "var(--dim)", fontSize: "1.125rem", lineHeight: 1, cursor: "pointer", padding: "0 0.25rem", flexShrink: 0 }}>
+          ×
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+        <span style={{ fontSize: "0.875rem", color: "var(--dim)", flexShrink: 0 }}>@</span>
+        <input
+          value={handle}
+          onChange={e => setHandle(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") save(); }}
+          placeholder="your instagram handle"
+          style={{ flex: 1, height: "38px", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "8px", padding: "0 0.75rem", fontSize: "0.875rem", color: "var(--ink)", outline: "none", minWidth: 0 }}
+        />
+        <button onClick={save} disabled={saving || !handle.trim()}
+          style={{ height: "38px", padding: "0 0.875rem", background: "var(--primary)", border: "none", borderRadius: "8px", color: "#fff", fontSize: "0.8125rem", fontWeight: 600, cursor: saving || !handle.trim() ? "default" : "pointer", opacity: saving || !handle.trim() ? 0.5 : 1, flexShrink: 0 }}>
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+      {error && <p style={{ fontSize: "0.75rem", color: "var(--danger)" }}>{error}</p>}
+
+      <NotificationToggle mode="client" email={user.email} password={user.password} hideWhenGranted />
+    </div>
   );
 }

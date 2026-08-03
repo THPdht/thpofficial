@@ -46,13 +46,20 @@ export default function NotificationToggle(
         setState(permission === "denied" ? "denied" : "default");
         return;
       }
-      const ok = props.mode === "admin"
-        ? await subscribeAdminToPush(props.adminPassword)
-        : await subscribeToPush(props.email, props.password);
-      if (!ok) { setError("Could not register this device. Try again."); return; }
+      // Registering can hang rather than fail: awaiting serviceWorker.ready never
+      // resolves when no worker was registered in this session, so without a
+      // timeout the button sits on "Turning on…" forever and looks like it worked.
+      const subscribe = props.mode === "admin"
+        ? subscribeAdminToPush(props.adminPassword)
+        : subscribeToPush(props.email, props.password);
+      const ok = await Promise.race([
+        subscribe,
+        new Promise<false>(resolve => setTimeout(() => resolve(false), 10000)),
+      ]);
+      if (!ok) { setError("Could not register this device. Reload the page and try again."); return; }
       setState("granted");
     } catch {
-      setError("Could not register this device. Try again.");
+      setError("Could not register this device. Reload the page and try again.");
     } finally {
       setBusy(false);
     }
@@ -92,6 +99,12 @@ export default function NotificationToggle(
             Tap Share at the bottom of Safari, then <strong>Add to Home Screen</strong>. Open THP
             from the new icon and turn notifications on there.
           </p>
+          {props.mode === "admin" && (
+            <p style={{ ...body, color: "var(--dim)" }}>
+              Do this from this page, not the client dashboard. The icon it creates opens
+              straight back here, which is the only place that can register you.
+            </p>
+          )}
         </>
       )}
 

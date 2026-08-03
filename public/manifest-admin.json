@@ -1,0 +1,19 @@
+{
+  "name": "THP Admin",
+  "short_name": "THP Admin",
+  "description": "The Hormone Prophet command center",
+  "start_url": "/admin",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/images/thprebrandlogo2.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

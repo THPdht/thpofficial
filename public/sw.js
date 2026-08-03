@@ -13,7 +13,9 @@ self.addEventListener('push', e => {
       body: data.body,
       icon: data.icon,
       badge: data.icon,
-      tag: 'thp-notification',
+      // A shared tag collapses every alert into one entry, so a burst of leads
+      // looks like a single notification, or like none arrived at all.
+      tag: data.tag ?? `thp-${Date.now()}`,
       renotify: true,
       data: { url: data.url },
     })

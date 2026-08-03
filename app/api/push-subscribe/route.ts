@@ -31,9 +31,24 @@ export async function POST(req: Request) {
   }
 
   const endpoint = subscription.endpoint;
+
+  // A browser hands out one endpoint per origin. If THP also opens /dashboard as
+  // a client, that page re-subscribes on mount and would overwrite this row with
+  // is_admin false, quietly cutting off his own notifications. Admin wins.
+  const { data: existing } = await supabaseAdmin
+    .from('push_subscriptions')
+    .select('is_admin')
+    .eq('endpoint', endpoint)
+    .maybeSingle();
+
+  const isAdminRow = !!admin || !!existing?.is_admin;
+
   const { error } = await supabaseAdmin
     .from('push_subscriptions')
-    .upsert({ user_email: owner, subscription, endpoint, is_admin: !!admin }, { onConflict: 'endpoint' });
+    .upsert(
+      { user_email: isAdminRow ? null : owner, subscription, endpoint, is_admin: isAdminRow },
+      { onConflict: 'endpoint' },
+    );
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
   return Response.json({ ok: true });

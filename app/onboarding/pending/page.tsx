@@ -17,6 +17,14 @@ export default function PendingPage() {
     if (!u) { router.replace("/login"); return; }
     if (u.status === "active" || u.status === "alumni") { router.replace("/dashboard"); return; }
     setUser(u);
+
+    // Newly onboarded clients sit on this page until THP activates them, and it
+    // was the only signed-in page that never registered the worker. Subscribing
+    // to push later then hangs forever on serviceWorker.ready, which is part of
+    // why so few clients ever had notifications working.
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => { /* ignore */ });
+    }
   }, [router]);
 
   const handleSignOut = () => { signOut(); router.push("/"); };
