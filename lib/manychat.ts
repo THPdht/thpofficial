@@ -52,12 +52,25 @@ export function block(texts: string[], actions: ManyChatAction[] = []): ManyChat
     .slice(0, 10)
     .map(text => ({ type: 'text' as const, text }));
 
+  const reply = messages.map(m => m.text).join('\n\n');
+
+  // Overwrite thp_reply on every single response, including the empty ones.
+  //
+  // ManyChat's response mapping does not clear a custom field when the mapped
+  // value is empty: it leaves the previous value in place. The flow then sends
+  // that stale value, so a contact was re-sent an opener from the day before
+  // while the site had answered with silence and the bot was switched off. Our
+  // silence cannot silence ManyChat unless we explicitly blank the field it
+  // sends from, so this action is not optional and goes first.
+  const all: ManyChatAction[] = [
+    { action: 'set_field_value', field_name: 'thp_reply', value: reply },
+    ...actions,
+  ];
+
   return {
     version: 'v2',
-    content: actions.length > 0
-      ? { messages, actions: actions.slice(0, 5) }
-      : { messages },
-    reply: messages.map(m => m.text).join('\n\n'),
+    content: { messages, actions: all.slice(0, 5) },
+    reply,
   };
 }
 
