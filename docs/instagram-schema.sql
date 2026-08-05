@@ -98,3 +98,35 @@ alter table public.ig_settings add column if not exists holding_copy    text;
 
 alter table public.ig_settings add column if not exists test_mode      boolean not null default true;
 alter table public.ig_settings add column if not exists test_usernames text;
+
+-- ---------------------------------------------------------------------------
+-- 2026-08-05: the qualifier log.
+--
+-- ManyChat now owns the conversation and calls /api/manychat/qualify at exactly
+-- one fork: a working person from a high-income country goes to Ali's Telegram
+-- for a call, everyone else goes to the course. That endpoint holds no state,
+-- so this table is the only record of why anyone was routed where.
+--
+-- No foreign key to ig_contacts on purpose: the External Request may be sent
+-- without a subscriber_id, and a missing contact row must never cost us a log.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.ig_qualifications (
+  id            bigint generated always as identity primary key,
+  subscriber_id text,
+  ig_username   text,
+  raw_text      text,
+  age           text,
+  work_status   text,
+  country       text,
+  country_tier  text,
+  status        text not null,
+  marital       text,
+  reason        text,
+  created_at    timestamptz not null default now()
+);
+
+create index if not exists ig_qualifications_created_idx
+  on public.ig_qualifications (created_at desc);
+
+alter table public.ig_qualifications enable row level security;
