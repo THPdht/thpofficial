@@ -62,9 +62,23 @@ Split in two because Instagram will not let a comment-triggered flow run a whole
    second run. Observed 2026-08-05: the opener sent, the reply arrived (`last_input_text` updated),
    and AI Step 1 never ran — `thp_reply` still held the previous conversation's answer.
 
-**The fix:** end `THP-Qualify-Opener` with a **Go To Flow** action pointing at
-`THP-Qualify-Full-Step`, and remove the Default Reply trigger from flow 2. Chaining becomes
-deterministic and only keyword commenters ever enter it.
+**Why it is built this way.** Meta allows exactly one Private Reply in response to a comment, and
+nothing may follow it — no send, no Go To Flow. Setting the node to 24-hour messaging lets you
+attach a next step in the editor, but publishing fails ("must be a private message"), and switching
+back deletes the connection. So the conversation *has* to restart on a separate trigger once the
+person replies, which opens the 24-hour window. The split is correct; Default Reply as the join
+is what needs guarding.
+
+**The fix — a tag gate, not a different trigger:**
+
+1. In `THP-Qualify-Opener`, **before** the Send Message (actions are allowed there, sends are not),
+   add **Add Tag → `qualify-open`**.
+2. In `THP-Qualify-Full-Step`, keep the Default Reply trigger, but make the **first step a
+   Condition: has tag `qualify-open`**. No tag → exit, do nothing at all.
+3. At the end of every branch of flow 2, **Remove Tag → `qualify-open`**.
+
+Default Reply still catches every DM, but only someone who commented a keyword carries the tag, so
+only they continue. Friends, clients and story replies fall out at step one and are never touched.
 
 **Stale fields.** Custom fields follow the contact forever, across flows and conversations. A
 returning contact starts with the previous run's `thp_reply`, `thp_classification`,
