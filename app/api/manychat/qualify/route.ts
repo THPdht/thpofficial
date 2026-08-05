@@ -67,15 +67,49 @@ export async function POST(req: Request) {
   }
 }
 
-async function handle(req: Request): Promise<Response> {
-  let body: unknown = {};
+/**
+ * Read the body whatever shape it turns up in.
+ *
+ * A rebuilt External Request block that lost its Content-Type header sends
+ * form-encoded rather than JSON. req.json() throws on that, and the whole
+ * request then looked identical to one carrying no body at all — a real lead
+ * was routed to the course and the log could not tell us which had happened.
+ * Returns the parsed fields plus the raw text, so a failure can name itself.
+ */
+async function readBody(req: Request): Promise<{ fields: Record<string, unknown>; rawBody: string }> {
+  let rawBody = '';
   try {
-    body = await req.json();
+    rawBody = await req.text();
   } catch {
-    // A malformed body is not a reason to 400 at ManyChat. Answer safely.
+    return { fields: {}, rawBody: '' };
   }
 
-  const raw = (body ?? {}) as Record<string, unknown>;
+  const trimmed = rawBody.trim();
+  if (!trimmed) return { fields: {}, rawBody };
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === 'object') return { fields: parsed as Record<string, unknown>, rawBody };
+  } catch {
+    // Not JSON. Fall through to form encoding.
+  }
+
+  try {
+    const params = new URLSearchParams(trimmed);
+    const fields: Record<string, unknown> = {};
+    for (const [k, v] of params) fields[k] = v;
+    if (Object.keys(fields).length > 0) return { fields, rawBody };
+  } catch {
+    // Not form-encoded either.
+  }
+
+  return { fields: {}, rawBody };
+}
+
+async function handle(req: Request): Promise<Response> {
+  const { fields, rawBody } = await readBody(req);
+
+  const raw = fields;
   const pick = (...keys: string[]): string | null => {
     for (const key of keys) {
       const v = raw[key];
@@ -92,7 +126,13 @@ async function handle(req: Request): Promise<Response> {
   const igUsername = realValue((pick('ig_username', 'username', 'user_name') ?? '').replace(/^@+/, ''));
 
   if (!text) {
-    return await answer('not_qualified', 'empty input', UNKNOWN, null, subscriberId, igUsername);
+    // Say what actually arrived. "empty input" alone could mean ManyChat sent
+    // nothing, sent an unfilled {{token}}, or sent a body we could not read,
+    // and those need three different fixes in three different places.
+    const seen = rawBody.trim()
+      ? `body: ${rawBody.trim().slice(0, 200)}`
+      : 'no body at all';
+    return await answer('not_qualified', `empty input · ${seen}`, UNKNOWN, null, subscriberId, igUsername);
   }
 
   const input = text.slice(0, MAX_INPUT);
