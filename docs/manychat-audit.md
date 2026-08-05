@@ -59,7 +59,7 @@ The two older automations no longer exist. There is one hand-built flow and it i
 | `thp_classification` | AI Step 1 | Condition (contains `ENGAGED`) |
 | `thp_demographics` | AI Step 2 | External Request body |
 | `thp_qualification` | External Request response mapping (`$.status`) | Condition #1 (`is qualified`) |
-| `thp_reply` | **nothing** | **nothing** — leftover from the retired bot, safe to delete |
+| `thp_reply` | **AI Step 1** — stores the raw symptom reply | nothing reads it. **Do not delete** — the AI Step writes to it |
 
 ---
 
@@ -121,16 +121,54 @@ cannot drift.
 
 ---
 
-## Not covered by this audit
+## The trigger — `Post or Reel Comments #2`
 
-Read from ManyChat's API and from the flow editor's header. The flow canvas would not render for
-automated reading, so the following come from screenshots and are **not** verified word for word:
+- **Scope:** All Posts or Reels
+- **Match:** *Comments **include** these Keywords* — `Brain`, `Ego`, `Balls`, `Dome`
+- **Public comment reply**, rotated: "sup boss! check your dm" / "bossman check your dm" /
+  "just texted you on dm" / "brotha check your dm"
 
-- The **trigger keyword(s)** — unknown. The trigger is a Post/Reel comment trigger; which keywords
-  arm it has not been confirmed.
-- The **exact wording** of the six Send Message blocks.
-- The **full prompts** of both AI Steps, and confirmation of which field each writes to.
-- Whether the trigger is scoped to specific posts or to all posts.
+**`include` is substring matching, not whole-word.** The comment only has to *contain* the keyword:
+
+| keyword | also fires on |
+|---|---|
+| `Ego` | Di**ego**, L**ego**, cat**ego**ry, ju**ego**, lu**ego** |
+| `Dome` | **dome**stic, **Dome**nic |
+| `Balls` | foot**balls**, basket**balls** |
+| `Brain` | **brain**s, **brain**y, no-**brain**er (harmless — same intent) |
+
+This is a milder version of the failure where the keyword `T` matched every comment containing
+"great" or "thanks". `Diego` is the realistic one — someone tagging a friend by name gets pulled
+into the funnel. ManyChat offers exact matching per keyword, which costs nothing in workflow but
+means `Brain 🔥` no longer fires. Trade-off, not a bug — decide per keyword.
+
+## The AI Steps
+
+**AI Step 1 — classify the symptom reply**
+
+> Goal: Wait for the person's reply about their symptoms/goals. Classify their reply as ENGAGED if
+> they mention symptoms or wanting to optimize (e.g. testosterone, energy, health goals), or FAN if
+> they are just a fan/not actually interested. Branch the conversation based on this classification.
+
+- Task 1 — wait and capture, send nothing → **saves `thp_reply`**
+- Task 2 — classify strictly `ENGAGED` or `FAN`, send nothing → **saves `thp_classification`**
+- Context: names it an Instagram comment-to-DM funnel about testosterone/health optimisation.
+
+**AI Step 2 — capture the demographic answer**
+
+> Goal: Wait for the person's reply to the demographic question. Save whatever response they type
+> directly to custom fields. Do NOT generate or send any text response yourself under any
+> circumstances.
+
+- One task — wait, save verbatim, never prompt for missing details → **saves `thp_demographics`**
+
+Both steps are configured to write only, never to speak. That matters: the site's qualifier reads
+`thp_demographics` raw, and an AI Step that "helpfully" rewrote the answer would change what gets
+judged.
+
+## Not verified word for word
+
+- The exact wording of Send Message #1, #2, #3 and #4 (read from canvas screenshots, truncated).
 
 ---
 
@@ -143,7 +181,13 @@ automated reading, so the following come from screenshots and are **not** verifi
 3. **Send Message #4** (fan branch) still contains a `REPLACE_WITH_YOUR_YOUTUBE` placeholder.
 4. Fan branch and not-qualified branch both need the YouTube **and** Skool
    (`skool.com/theorder/classroom`) links, in their own wording.
-5. `thp_reply` can be deleted once the flow is confirmed not to reference it.
+5. **Blank `thp_qualification` before the External Request.** ManyChat does not clear a mapped
+   field when a request fails outright — no response means no mapping, so the *previous* value
+   survives. A returning contact who qualified once would be sent to Telegram again on a failed
+   call. The site always answers with a status, so a reachable endpoint always overwrites; this
+   covers the case where the endpoint is unreachable (trial expired, network, rate limit). Add a
+   Set Custom Field action, `thp_qualification` → empty, immediately before the request.
+6. Keyword substring matching — see the trigger section above.
 
 ## Site-side state as of this audit
 
