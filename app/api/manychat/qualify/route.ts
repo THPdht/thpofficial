@@ -14,9 +14,10 @@
  * no stages, no pushes, no messages. It is deliberately not the bot in
  * ../reply/route.ts and shares none of its state.
  *
- * Sending the wrong person to Ali's personal Telegram costs far more than
- * sending a good lead to YouTube, so every unknown, outage, timeout and bad
- * parse resolves to not_qualified. The only non-200 response is a 401.
+ * An outage, timeout, bad parse or empty body resolves to not_qualified — if we
+ * never read the person we must not act on them. But a person we did read and
+ * who simply left a question unanswered now qualifies: see decide(). The only
+ * non-200 response is a 401.
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -138,21 +139,43 @@ async function handle(req: Request): Promise<Response> {
   const input = text.slice(0, MAX_INPUT);
   const facts = await extract(input);
 
+  // An extraction failure is not a person who told us nothing — we simply did
+  // not read them. Guessing either way is wrong, so it goes to the course.
+  if (!facts) {
+    return await answer('not_qualified', 'extraction unavailable', UNKNOWN, input, subscriberId, igUsername);
+  }
+
   // The rule lives here, in code, and not in a prompt: the model reports what
   // the person said, this line decides what it means. Age and marital status
   // are recorded for review and deliberately do not affect the outcome.
-  const qualified = facts.work_status === 'working' && facts.country_tier === 'high_income';
-  const status: Status = qualified ? 'qualified' : 'not_qualified';
+  return await answer(decide(facts), reasonFor(facts), facts, input, subscriberId, igUsername);
+}
 
-  return await answer(status, reasonFor(facts), facts, input, subscriberId, igUsername);
+/**
+ * Reject only on what the person actually said.
+ *
+ * Asking "how old, working or student, married, where from" gets three of four
+ * answers from most people, and requiring all of them sent a working 47-year-old
+ * to the course because he never named his country. So silence is no longer a
+ * rejection: only a stated student, or a stated country outside the paying
+ * tiers, goes to YouTube. Everyone else reaches Ali, who is a human and can
+ * disqualify in one glance — a wasted glance is cheaper than a lost customer.
+ */
+function decide(facts: Facts): Status {
+  if (facts.work_status === 'student') return 'not_qualified';
+  if (facts.country_tier === 'other') return 'not_qualified';
+  return 'qualified';
 }
 
 /** One short, skimmable string explaining the decision in the log. */
 function reasonFor(facts: Facts): string {
-  if (facts.work_status === 'unknown' && facts.country_tier === 'unknown') return 'nothing determinable';
-  if (facts.work_status !== 'working') return `work: ${facts.work_status}`;
-  if (facts.country_tier !== 'high_income') return `country: ${facts.country} (${facts.country_tier})`;
-  return 'working + high_income';
+  if (facts.work_status === 'student') return 'work: student';
+  if (facts.country_tier === 'other') return `country: ${facts.country} (other)`;
+  const noted = [
+    `work: ${facts.work_status}`,
+    `country: ${facts.country}`,
+  ].join(' · ');
+  return `no stated disqualifier (${noted})`;
 }
 
 /* ---------- Claude: extraction only ---------- */
@@ -164,13 +187,16 @@ function reasonFor(facts: Facts): string {
  * The model is never asked whether someone qualifies. It only reports what was
  * said, and says unknown for anything it has to guess at — an invented country
  * would put a stranger in Ali's Telegram.
+ *
+ * Returns null if we could not read the reply at all. Since decide() now treats
+ * an unknown fact as harmless, an outage that returned all-unknowns would send
+ * every single person to Ali. Failure has to be distinguishable from silence.
  */
-async function extract(message: string): Promise<Facts> {
+async function extract(message: string): Promise<Facts | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  // No key is not a reason to guess. Unknown facts fail the rule on their own.
   if (!apiKey) {
     console.error('[manychat/qualify] ANTHROPIC_API_KEY is not set');
-    return UNKNOWN;
+    return null;
   }
 
   try {
@@ -234,7 +260,7 @@ async function extract(message: string): Promise<Facts> {
     );
 
     const tool = response.content.find(c => c.type === 'tool_use');
-    if (!tool || tool.type !== 'tool_use') return UNKNOWN;
+    if (!tool || tool.type !== 'tool_use') return null;
 
     const out = tool.input as Partial<Record<keyof Facts, unknown>>;
     const oneOf = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T =>
@@ -252,7 +278,7 @@ async function extract(message: string): Promise<Facts> {
   } catch (err) {
     // A model outage must never promote someone to a call.
     console.error('[manychat/qualify] extraction failed:', err);
-    return { ...UNKNOWN, age: 'unknown', country: 'llm_error' };
+    return null;
   }
 }
 
