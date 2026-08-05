@@ -44,13 +44,31 @@ Pulled from the ManyChat API with `MANYCHAT_API_KEY`. Reproduce with:
 
 ### Flows
 
-| Flow | Namespace | Status |
-|---|---|---|
-| `THP-Qualify.V1` | `content20260804130600_646697` | **DRAFT — not live** |
-| Subscribe to Instagram | `system_ig_subscribe` | ManyChat's own |
-| Unsubscribe from Instagram | `system_ig_unsubscribe` | ManyChat's own |
+Split in two because Instagram will not let a comment-triggered flow run a whole conversation.
 
-The two older automations no longer exist. There is one hand-built flow and it is not running.
+| Flow | Trigger | Status |
+|---|---|---|
+| `THP-Qualify-Opener` | User comments on Post or Reel (`Post or Reel Comments #2 copy`) | LIVE |
+| `THP-Qualify-Full-Step` | **User sends a Direct Message — Default Reply** | LIVE |
+| `THP-Qualify.V1` | none — superseded by the two above | DRAFT |
+
+**The Default Reply trigger is the problem.** Two consequences, both seen live:
+
+1. **It catches everyone.** Default Reply fires on *any* DM from *anyone* — a friend, a existing
+   client, someone replying to a story. All of them get pulled into the qualification funnel. The
+   whole point of the keyword trigger was that automation only ever touches people who comment a
+   keyword; Default Reply quietly undoes that.
+2. **It does not reliably re-fire.** A contact who has already been through it gets silence on a
+   second run. Observed 2026-08-05: the opener sent, the reply arrived (`last_input_text` updated),
+   and AI Step 1 never ran — `thp_reply` still held the previous conversation's answer.
+
+**The fix:** end `THP-Qualify-Opener` with a **Go To Flow** action pointing at
+`THP-Qualify-Full-Step`, and remove the Default Reply trigger from flow 2. Chaining becomes
+deterministic and only keyword commenters ever enter it.
+
+**Stale fields.** Custom fields follow the contact forever, across flows and conversations. A
+returning contact starts with the previous run's `thp_reply`, `thp_classification`,
+`thp_demographics` and `thp_qualification` still populated. Blank all four at the start of flow 2.
 
 ### Custom fields
 
