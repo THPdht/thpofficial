@@ -1,6 +1,6 @@
 # ManyChat audit — THP Instagram automation
 
-Audited 2026-08-05. Supersedes `instagram-manychat-handoff.md`, which stays as history.
+Audited 2026-08-05, repaired and verified end to end 2026-08-06. Supersedes `instagram-manychat-handoff.md`, which stays as history.
 
 ---
 
@@ -39,7 +39,7 @@ Pulled from the ManyChat API with `MANYCHAT_API_KEY`. Reproduce with:
 | Account | `Thehormoneprophet` (id `fb5357501`) |
 | Plan | Pro — **on the trial**, the badge in the sidebar reads `TRIAL` |
 | Timezone | Africa/Casablanca |
-| Tags | **none** |
+| Tags | `qualify-open` (93522505) · `qualify-busy` (93587383) |
 | Growth tools | **none** |
 
 ### Flows
@@ -49,40 +49,52 @@ Split in two because Instagram will not let a comment-triggered flow run a whole
 | Flow | Trigger | Status |
 |---|---|---|
 | `THP-Qualify-Opener` | User comments on Post or Reel (`Post or Reel Comments #2 copy`) | LIVE |
-| `THP-Qualify-Full-Step` | **User sends a Direct Message — Default Reply** | LIVE |
+| `THP-Qualify-Full-Step` | **User sends a Direct Message — Default Reply**, every time | LIVE |
 | `THP-Qualify.V1` | none — superseded by the two above | DRAFT |
-
-**The Default Reply trigger is the problem.** Two consequences, both seen live:
-
-1. **It catches everyone.** Default Reply fires on *any* DM from *anyone* — a friend, a existing
-   client, someone replying to a story. All of them get pulled into the qualification funnel. The
-   whole point of the keyword trigger was that automation only ever touches people who comment a
-   keyword; Default Reply quietly undoes that.
-2. **It does not reliably re-fire.** A contact who has already been through it gets silence on a
-   second run. Observed 2026-08-05: the opener sent, the reply arrived (`last_input_text` updated),
-   and AI Step 1 never ran — `thp_reply` still held the previous conversation's answer.
 
 **Why it is built this way.** Meta allows exactly one Private Reply in response to a comment, and
 nothing may follow it — no send, no Go To Flow. Setting the node to 24-hour messaging lets you
 attach a next step in the editor, but publishing fails ("must be a private message"), and switching
 back deletes the connection. So the conversation *has* to restart on a separate trigger once the
-person replies, which opens the 24-hour window. The split is correct; Default Reply as the join
-is what needs guarding.
+person replies, which opens the 24-hour window. The split is correct; Default Reply as the join is
+what needs guarding.
 
-**The fix — a tag gate, not a different trigger:**
+### Two tags do the guarding — implemented and verified 2026-08-06
 
-1. In `THP-Qualify-Opener`, **before** the Send Message (actions are allowed there, sends are not),
-   add **Add Tag → `qualify-open`**.
-2. In `THP-Qualify-Full-Step`, keep the Default Reply trigger, but make the **first step a
-   Condition: has tag `qualify-open`**. No tag → exit, do nothing at all.
-3. At the end of every branch of flow 2, **Remove Tag → `qualify-open`**.
+Default Reply fires on *any* DM from *anyone*. Two tags keep the funnel from touching people it
+shouldn't, and from running twice on people it should.
 
-Default Reply still catches every DM, but only someone who commented a keyword carries the tag, so
-only they continue. Friends, clients and story replies fall out at step one and are never touched.
+| Tag | Added by | Removed by | Purpose |
+|---|---|---|---|
+| `qualify-open` | Opener, before the Private Reply | all three terminal branches of flow 2 | proves this person commented a keyword |
+| `qualify-busy` | flow 2, Actions #1 | all three terminal branches, **and the Opener on entry** | blocks re-entry while a conversation is in progress |
 
-**Stale fields.** Custom fields follow the contact forever, across flows and conversations. A
-returning contact starts with the previous run's `thp_reply`, `thp_classification`,
-`thp_demographics` and `thp_qualification` still populated. Blank all four at the start of flow 2.
+Condition #2, the first step after the trigger, requires **`qualify-open` AND NOT `qualify-busy`**.
+Friends, clients and story replies carry neither tag and fall out silently.
+
+**Why `qualify-busy` exists.** AI Step 2 waits inside the flow for the demographic answer. Without
+the guard, that answer *also* re-triggers Default Reply from the top, re-entering the flow and
+blanking all four fields mid-conversation — two instances racing over the same state.
+
+**Why the Opener removes it.** Someone who abandons mid-conversation would otherwise keep
+`qualify-busy` forever and never be able to enter again. The Opener clears it, so commenting a
+keyword again always gets them back in. No timer, nothing to drift.
+
+### The bug this replaced — worth understanding before changing anything
+
+Until 2026-08-06 AI Step 1's first task said *"wait for the person's reply about their symptoms."*
+But that reply is what triggers flow 2 — it is consumed as the trigger event, so the step waited for
+a message that had already arrived and parked forever.
+
+Observed live: a lead wrote *"I got libido problems and I want to optimise it"* and got nothing. He
+later sent "Hello"; the parked step woke on **that**, classified him FAN, and sent him the fan
+message. A qualified lead dismissed with "appreciate you supporting boss."
+
+The fix: Actions #1 writes `Last Text Input` into `thp_reply`, and AI Step 1 classifies that field
+instead of waiting. **Anything that reintroduces a wait into AI Step 1 reintroduces this bug.**
+
+**Stale fields.** Custom fields follow the contact forever, across flows and conversations. Actions
+#1 blanks all four on entry, before writing `thp_reply`. Order matters — clear first, then write.
 
 ### Custom fields
 
@@ -91,33 +103,51 @@ returning contact starts with the previous run's `thp_reply`, `thp_classificatio
 | `thp_classification` | AI Step 1 | Condition (contains `ENGAGED`) |
 | `thp_demographics` | AI Step 2 | External Request body |
 | `thp_qualification` | External Request response mapping (`$.status`) | Condition #1 (`is qualified`) |
-| `thp_reply` | **AI Step 1** — stores the raw symptom reply | nothing reads it. **Do not delete** — the AI Step writes to it |
+| `thp_reply` | **Actions #1** — `Set User Field` from `{{Last Text Input}}` | **AI Step 1** classifies it |
 
 ---
 
 ## The flow
 
 ```
-User comments on Post or Reel  (trigger: "Post or Reel Comments #2")
+FLOW 1 — THP-Qualify-Opener   (trigger: comment on any Post or Reel contains a keyword)
+  └─ Actions ... Add Tag qualify-open · Remove Tag qualify-busy
+       └─ Send Message (PRIVATE REPLY) ... asks for symptoms / optimisation goal
+          nothing may follow a Private Reply — the flow ends here by Meta's rule
+
+FLOW 2 — THP-Qualify-Full-Step   (trigger: Default Reply, every time)
   │
-  ├─ Send Message ......... asks for symptoms / optimisation goal
-  │
-  ├─ AI Step .............. classifies the reply → thp_classification
-  │
-  └─ Condition: thp_classification contains ENGAGED
+  └─ Condition #2: has qualify-open AND NOT qualify-busy      ──no──► exit, silent
        │
-       ├─ YES → Send Message #1 ... asks age / country / work / student / married
-       │          │
-       │          ├─ AI Step ...... saves the answer → thp_demographics
-       │          │
-       │          ├─ Actions ...... External Request → the site   ◄── the only site call
-       │          │
-       │          └─ Condition #1: thp_qualification is qualified
-       │               ├─ YES → Send Message #2 ... Telegram, book a call (t.me/THPprotocol)
-       │               └─ NO  → Send Message #3 ... the course
+       ├─ Actions #1 ... blank all four fields
+       │                 → Add Tag qualify-busy
+       │                 → Set thp_reply = {{Last Text Input}}   ◄── the symptom reply
        │
-       └─ NO  → Send Message #4 ... fan branch: thanks, here's the content
+       ├─ AI Step 1 .... classifies thp_reply → thp_classification   (never waits, never sends)
+       │
+       └─ Condition: thp_classification contains ENGAGED
+            │
+            ├─ YES → Send Message #1 ... asks age / country / work / student / married
+            │          │
+            │          ├─ AI Step 2 .... waits for the answer → thp_demographics
+            │          │
+            │          ├─ Actions ...... blank thp_qualification → External Request → the site
+            │          │                 ◄── the only site call
+            │          │
+            │          └─ Condition #1: thp_qualification is qualified
+            │               ├─ YES → Send Message #2 (Telegram, t.me/THPprotocol)
+            │               │          └─ Actions #3 ... remove both tags
+            │               │                            assign to Ali · Notify Assignees (e-mail)
+            │               └─ NO  → Send Message #3 (the course)
+            │                          └─ Actions #4 ... remove both tags
+            │
+            └─ NO  → Send Message #4 (fan: YouTube @THPDIGITAL + Skool)
+                       └─ Actions #2 ... remove both tags
 ```
+
+**Ali is notified only on the qualified branch.** Actions #3 assigns the conversation to Ali Filali
+and fires `Notify Assignees` by e-mail: *"QUALIFIED lead on Instagram: {{Username}}"*, with the
+View-in-Inbox button on. Nothing notifies him on the other two branches, by design.
 
 ### The one call to the site
 
@@ -176,17 +206,20 @@ means `Brain 🔥` no longer fires. Trade-off, not a bug — decide per keyword.
 
 ## The AI Steps
 
-**AI Step 1 — classify the symptom reply**
+**AI Step 1 — classify the symptom reply** (rewritten 2026-08-06 — it must never wait)
 
-> Goal: Wait for the person's reply about their symptoms/goals. Classify their reply as ENGAGED if
-> they mention symptoms or wanting to optimize (e.g. testosterone, energy, health goals), or FAN if
-> they are just a fan/not actually interested. Branch the conversation based on this classification.
+> Goal: Classify text that has already been received. Do not wait for a new message. Never send a
+> message.
 
-- Task 1 — wait and capture, send nothing → **saves `thp_reply`**
-- Task 2 — classify strictly `ENGAGED` or `FAN`, send nothing → **saves `thp_classification`**
+- One task — classify strictly `ENGAGED` or `FAN` → **saves `thp_classification`**. The task text
+  ends: *"The text to classify is already stored in the field thp_reply. Do not wait for any
+  input."*
+- The old Task 1 (wait for and capture the reply into `thp_reply`) was **deleted**. `thp_reply` is
+  now filled by Actions #1 instead. Do not put a waiting task back into this step.
 - Context: names it an Instagram comment-to-DM funnel about testosterone/health optimisation.
 
-**AI Step 2 — capture the demographic answer**
+**AI Step 2 — capture the demographic answer** (unchanged; it is correct to wait here, because
+`qualify-busy` stops the answer re-triggering the flow)
 
 > Goal: Wait for the person's reply to the demographic question. Save whatever response they type
 > directly to custom fields. Do NOT generate or send any text response yourself under any
@@ -204,22 +237,58 @@ judged.
 
 ---
 
+## Proven end to end — 2026-08-06
+
+Two real conversations, both from a first-reply symptom sentence, both logged with a real
+`subscriber_id` in `ig_qualifications`:
+
+| Contact | What they typed | Result |
+|---|---|---|
+| `luko.only` | "I'm from Florida and I'm 36, I work with life insurance and I'm happily married" | `qualified` — no stated disqualifier |
+| `edwin_baggens` | "I am 20 years from Malaysia and I am single but i train everyday" | `not_qualified` — country: Malaysia (other) |
+
+Both finished with **no tags left on the contact**, so both exits fired cleanly and both accounts
+were immediately reusable.
+
+## Resetting a test account
+
+A contact is "used" only by its two tags and four custom fields. Wipe both and the funnel treats
+them as new — no fresh Instagram account needed. Needs `MANYCHAT_API_KEY` from `.env.local`.
+
+```bash
+SID=<subscriber_id>
+H="Authorization: Bearer $MANYCHAT_API_KEY"; J="Content-Type: application/json"
+# tags: qualify-open=93522505  qualify-busy=93587383
+for TAG in 93522505 93587383; do
+  curl -s -X POST https://api.manychat.com/fb/subscriber/removeTag -H "$H" -H "$J" \
+    -d "{\"subscriber_id\":$SID,\"tag_id\":$TAG}"; done
+# fields: thp_reply thp_classification thp_demographics thp_qualification
+for F in 14833057 14840025 14840104 14840127; do
+  curl -s -X POST https://api.manychat.com/fb/subscriber/setCustomField -H "$H" -H "$J" \
+    -d "{\"subscriber_id\":$SID,\"field_id\":$F,\"field_value\":null}"; done
+```
+
+Known subscriber ids: `luko.only` 590456933 · `edwin_baggens` 184188618 · `tazimanian` 912071791.
+`findByName` is broken for Instagram contacts — it returns 0 results even for a contact that reads
+fine by id. Get new ids from the Audience tab URL.
+
 ## Open items
 
-1. **The flow is DRAFT.** Nothing runs until Set Live.
-2. **The account is on the Pro trial.** External Request and the AI Steps are Pro features — when
-   the trial ends they stop, and `thp_qualification` will be left empty, which falls to the course
-   branch.
-3. **Send Message #4** (fan branch) still contains a `REPLACE_WITH_YOUR_YOUTUBE` placeholder.
-4. Fan branch and not-qualified branch both need the YouTube **and** Skool
-   (`skool.com/theorder/classroom`) links, in their own wording.
-5. **Blank `thp_qualification` before the External Request.** ManyChat does not clear a mapped
-   field when a request fails outright — no response means no mapping, so the *previous* value
-   survives. A returning contact who qualified once would be sent to Telegram again on a failed
-   call. The site always answers with a status, so a reachable endpoint always overwrites; this
-   covers the case where the endpoint is unreachable (trial expired, network, rate limit). Add a
-   Set Custom Field action, `thp_qualification` → empty, immediately before the request.
-6. Keyword substring matching — see the trigger section above.
+1. **Keyword substring matching.** `include` matches substrings: `Ego` fires on **Diego**, Lego,
+   category; `Dome` on domestic. Someone tagging a friend named Diego gets pulled into the funnel.
+   Exact matching is available per keyword but would stop `Brain 🔥` firing. **Decision 2026-08-06:
+   keep the keywords as they are.** Revisit if it misfires at real volume.
+2. **The account is on the Pro trial**, card on file, set to auto-upgrade. External Request and both
+   AI Steps are Pro features. If that charge ever fails they stop silently, `thp_qualification`
+   stays empty, and every lead falls to the course branch with no error.
+3. **The fan branch has not been retested since the AI Step 1 rewrite.** Qualified and not-qualified
+   both pass. A pure-fan reply is the untested path — and it is the one that misfired on the client.
+4. **A reply arriving more than 24 hours after the opener** cannot be answered; Instagram closes the
+   messaging window and flow 2 can send nothing.
+5. **The endpoint fails closed.** Timeout, model outage, unreachable host — all answer
+   `not_qualified`, so a good lead gets the course instead of Ali's Telegram. Deliberate: a stranger
+   in Ali's personal Telegram costs more than a good lead getting the course. Visible in the log —
+   the `reason` column shows the failure rather than a real country.
 
 ## Site-side state as of this audit
 
