@@ -263,18 +263,29 @@ judged.
 
 ---
 
-## Proven end to end — 2026-08-06
+## Proven end to end — 2026-08-06, all four paths
 
-Two real conversations, both from a first-reply symptom sentence, both logged with a real
-`subscriber_id` in `ig_qualifications`:
+Three real conversations, run back to back, every row logged with a real `subscriber_id`.
 
-| Contact | What they typed | Result |
-|---|---|---|
-| `luko.only` | "I'm from Florida and I'm 36, I work with life insurance and I'm happily married" | `qualified` — no stated disqualifier |
-| `edwin_baggens` | "I am 20 years from Malaysia and I am single but i train everyday" | `not_qualified` — country: Malaysia (other) |
+| Account | Classified | Demographics | Outcome |
+|---|---|---|---|
+| `luko.only` | ENGAGED — "low testosterone complaint, bad diet" | "I'm 17, don't work yet, still in school" | `not_qualified` — work: student → the course |
+| `edwin_baggens` | ENGAGED — "goal to optimize testosterone" | "married, work at my business, I'm 47" | `qualified` → Telegram + Ali notified |
+| `tazimanian` | FAN — "greeting only" | — | fan branch |
 
-Both finished with **no tags left on the contact**, so both exits fired cleanly and both accounts
-were immediately reusable.
+All three finished carrying **only** `qualify-done`, so every terminal branch ran and cleared its
+tags. Nobody was left stuck mid-flow.
+
+**The follow-up path fired three times.** Edwin sent two messages 13 seconds apart — *"I don't want
+to do it on telegram"* and *"Can we do it here on instagram instead?"* — and both were captured as
+separate rows. Then the **fan** account came back with *"Nice… how do u help people?"*, which also
+reached Ali. A person the funnel had written off asking the question that matters is exactly what
+the fourth path exists for, and it caught one on the first day.
+
+**One quirk to know.** Edwin's qualification reads `country: unknown` — he named the US in his
+*symptom* message, and the qualifier only ever sees the demographics answer. He qualified anyway
+because the rule rejects only on a *stated* disqualifier. If leads routinely volunteer their country
+in the first message, pass `thp_reply` to the qualifier alongside `thp_demographics`.
 
 ## Resetting a test account
 
