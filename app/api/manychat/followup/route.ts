@@ -60,31 +60,56 @@ async function handle(req: Request): Promise<Response> {
   const igUsername = realValue((pick('ig_username', 'username', 'user_name') ?? '').replace(/^@+/, ''));
   const message = realValue(pick('message', 'last_input_text', 'text'))?.slice(0, MAX_MESSAGE) ?? null;
 
+  // 'during_delay' means the bot owes them a reply and a Smart Delay is still
+  // counting down. Those get recorded and deliberately do not wake Ali — the
+  // answer is seconds away, and a push for every "?" is how someone learns to
+  // ignore pushes, which costs the qualified-lead alert that actually matters.
+  const kind = pick('kind') === 'during_delay' ? 'during_delay' : 'followup';
+
   const who = igUsername ? `@${igUsername}` : 'Someone';
 
-  console.log(`[manychat/followup] ${who} :: ${JSON.stringify(message ?? '')}`);
+  console.log(`[manychat/followup] ${kind} ${who} :: ${JSON.stringify(message ?? '')}`);
 
   // The record comes first. If the push fails Ali can still find them in the
   // panel; if the row fails there is nothing to find them by later.
+  await record({ subscriber_id: subscriberId, ig_username: igUsername, message }, kind);
+
+  if (kind === 'followup') {
+    // Awaited, not fired and forgotten: the function can be frozen as soon as
+    // it responds, which would drop the notification some of the time.
+    await pushAdmin(
+      'Instagram lead wrote back',
+      message ? `${who}: “${message.slice(0, 120)}”` : `${who} sent something — open the DM`,
+    );
+  }
+
+  return Response.json({ ok: true });
+}
+
+/**
+ * Write the row, with or without the `kind` column.
+ *
+ * The column arrives in a migration that is run by hand, so for a while the
+ * code and the table disagree. Losing every follow-up in that gap would be a
+ * far worse outcome than losing the label, so a failure that names the column
+ * is retried without it.
+ */
+async function record(row: Record<string, unknown>, kind: string): Promise<void> {
   try {
-    const { error } = await supabaseAdmin.from('ig_followups').insert({
-      subscriber_id: subscriberId,
-      ig_username: igUsername,
-      message,
-    });
-    if (error) console.error('[manychat/followup] insert failed:', error.message, error.code ?? '');
+    const { error } = await supabaseAdmin.from('ig_followups').insert({ ...row, kind });
+    if (!error) return;
+
+    if (error.message?.includes('kind')) {
+      const { error: retry } = await supabaseAdmin.from('ig_followups').insert(row);
+      if (retry) console.error('[manychat/followup] insert failed:', retry.message, retry.code ?? '');
+      else console.warn('[manychat/followup] logged without kind — run the ig_followups migration');
+      return;
+    }
+
+    console.error('[manychat/followup] insert failed:', error.message, error.code ?? '');
   } catch (err) {
     console.error('[manychat/followup] insert threw:', err);
   }
-
-  // Awaited, not fired and forgotten: the function can be frozen as soon as it
-  // responds, which would drop the notification some of the time.
-  await pushAdmin(
-    'Instagram lead wrote back',
-    message ? `${who}: “${message.slice(0, 120)}”` : `${who} sent something — open the DM`,
-  );
-
-  return Response.json({ ok: true });
 }
 
 /**

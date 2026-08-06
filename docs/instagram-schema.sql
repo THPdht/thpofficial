@@ -185,3 +185,22 @@ create index if not exists ig_classifications_created_idx
   on public.ig_classifications (created_at desc);
 
 alter table public.ig_classifications enable row level security;
+
+-- ---------------------------------------------------------------------------
+-- 2026-08-06: tell a follow-up apart from an impatient nudge.
+--
+-- Send Message steps now sit behind a Smart Delay, so there is a window where
+-- the bot owes someone a reply and has not sent it yet. Anything they type in
+-- that window used to vanish: the contact still carries qualify-busy, so the
+-- tag gate drops it, and they have no qualify-done yet, so the follow-up path
+-- never sees it either.
+--
+-- Those messages are now recorded like any other, but with kind='during_delay',
+-- and they deliberately do NOT push Ali — the automation is seconds away from
+-- replying, and buzzing him for every "?" is how notifications stop being read.
+-- They still show in /admin so the rate is visible: a lot of them means the
+-- delays are too long.
+-- ---------------------------------------------------------------------------
+
+alter table public.ig_followups
+  add column if not exists kind text not null default 'followup';

@@ -3339,6 +3339,8 @@ type IgFollowup = {
   ig_username: string | null;
   message: string | null;
   handled: boolean;
+  /** 'followup' needs Ali. 'during_delay' is someone nudging while the bot's timer runs. */
+  kind?: string | null;
   created_at: string;
 };
 
@@ -3381,6 +3383,11 @@ function InstagramPanel() {
 
   const qualified = decisions.filter(d => d.status === 'qualified').length;
 
+  // A row written before the `kind` migration has no kind and was, by definition,
+  // a real follow-up — the nudge path did not exist yet.
+  const nudges = followups.filter(f => f.kind === 'during_delay');
+  const waitingOnYou = followups.filter(f => f.kind !== 'during_delay');
+
   const labelStyle: React.CSSProperties = { fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "var(--font-ui), system-ui, sans-serif" };
   const cardStyle: React.CSSProperties = { background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "12px", padding: "1rem 1.125rem" };
 
@@ -3406,7 +3413,7 @@ function InstagramPanel() {
         <p style={{ fontSize: "0.8125rem", color: "var(--danger)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{error}</p>
       )}
 
-      {followups.length > 0 && (
+      {waitingOnYou.length > 0 && (
         <div>
           <p style={{ ...labelStyle, color: "var(--primary)" }}>Waiting on you</p>
           <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.4rem", marginBottom: "0.75rem", lineHeight: 1.6, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
@@ -3414,7 +3421,7 @@ function InstagramPanel() {
             deliberately said nothing — answer them yourself in Instagram DMs.
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            {followups.map(f => (
+            {waitingOnYou.map(f => (
               <div key={f.id} style={{ ...cardStyle, borderLeft: "3px solid var(--primary)" }}>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
                   <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
@@ -3426,6 +3433,36 @@ function InstagramPanel() {
                 </div>
                 {f.message && (
                   <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, marginTop: "0.4rem", lineHeight: 1.55, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                    “{f.message}”
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {nudges.length > 0 && (
+        <div>
+          <p style={labelStyle}>Sent while waiting</p>
+          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.4rem", marginBottom: "0.75rem", lineHeight: 1.6, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+            Typed while the automation was mid-pause, before its reply went out. No action needed —
+            they were answered seconds later. Shown because a lot of these means the delays are
+            too long.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            {nudges.map(f => (
+              <div key={f.id} style={{ ...cardStyle, opacity: 0.72 }}>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+                  <p style={{ fontSize: "0.8125rem", fontWeight: 400, color: "var(--muted)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                    @{f.ig_username ?? "unknown"}
+                  </p>
+                  <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                    {igWhen(f.created_at)}
+                  </p>
+                </div>
+                {f.message && (
+                  <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.4rem", lineHeight: 1.55, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
                     “{f.message}”
                   </p>
                 )}
