@@ -39,7 +39,7 @@ Pulled from the ManyChat API with `MANYCHAT_API_KEY`. Reproduce with:
 | Account | `Thehormoneprophet` (id `fb5357501`) |
 | Plan | Pro — **on the trial**, the badge in the sidebar reads `TRIAL` |
 | Timezone | Africa/Casablanca |
-| Tags | `qualify-open` (93522505) · `qualify-busy` (93587383) |
+| Tags | `qualify-open` (93522505) · `qualify-busy` (93587383) · `qualify-done` (93591201) |
 | Growth tools | **none** |
 
 ### Flows
@@ -59,15 +59,16 @@ back deletes the connection. So the conversation *has* to restart on a separate 
 person replies, which opens the 24-hour window. The split is correct; Default Reply as the join is
 what needs guarding.
 
-### Two tags do the guarding — implemented and verified 2026-08-06
+### Three tags do the guarding — implemented and verified 2026-08-06
 
-Default Reply fires on *any* DM from *anyone*. Two tags keep the funnel from touching people it
+Default Reply fires on *any* DM from *anyone*. Three tags keep the funnel from touching people it
 shouldn't, and from running twice on people it should.
 
 | Tag | Added by | Removed by | Purpose |
 |---|---|---|---|
 | `qualify-open` | Opener, before the Private Reply | all three terminal branches of flow 2 | proves this person commented a keyword |
 | `qualify-busy` | flow 2, Actions #1 | all three terminal branches, **and the Opener on entry** | blocks re-entry while a conversation is in progress |
+| `qualify-done` | all three terminal branches | never | marks a person the funnel has finished with, so a later DM reaches Ali instead of vanishing |
 
 Condition #2, the first step after the trigger, requires **`qualify-open` AND NOT `qualify-busy`**.
 Friends, clients and story replies carry neither tag and fall out silently.
@@ -117,7 +118,11 @@ FLOW 1 — THP-Qualify-Opener   (trigger: comment on any Post or Reel contains a
 
 FLOW 2 — THP-Qualify-Full-Step   (trigger: Default Reply, every time)
   │
-  └─ Condition #2: has qualify-open AND NOT qualify-busy      ──no──► exit, silent
+  └─ Condition #2: has qualify-open AND NOT qualify-busy
+       │                                    ──no──► has qualify-done?
+       │                                              ├─ YES → Actions #5 → /api/manychat/followup
+       │                                              │         (sends nothing · pushes Ali)
+       │                                              └─ NO  → exit, silent
        │
        ├─ Actions #1 ... blank all four fields
        │                 → Add Tag qualify-busy
@@ -136,18 +141,39 @@ FLOW 2 — THP-Qualify-Full-Step   (trigger: Default Reply, every time)
             │          │
             │          └─ Condition #1: thp_qualification is qualified
             │               ├─ YES → Send Message #2 (Telegram, t.me/THPprotocol)
-            │               │          └─ Actions #3 ... remove both tags
+            │               │          └─ Actions #3 ... remove both tags · add qualify-done
             │               │                            assign to Ali · Notify Assignees (e-mail)
             │               └─ NO  → Send Message #3 (the course)
-            │                          └─ Actions #4 ... remove both tags
+            │                          └─ Actions #4 ... remove both tags · add qualify-done
             │
             └─ NO  → Send Message #4 (fan: YouTube @THPDIGITAL + Skool)
-                       └─ Actions #2 ... remove both tags
+                       └─ Actions #2 ... remove both tags · add qualify-done
 ```
 
 **Ali is notified only on the qualified branch.** Actions #3 assigns the conversation to Ali Filali
 and fires `Notify Assignees` by e-mail: *"QUALIFIED lead on Instagram: {{Username}}"*, with the
-View-in-Inbox button on. Nothing notifies him on the other two branches, by design.
+View-in-Inbox button on. The site pushes him too — see below. Nothing notifies him on the
+not-qualified or fan branches, by design.
+
+### The fourth path: they wrote back afterwards
+
+All three exits also **Add Tag `qualify-done`**. That tag is what distinguishes "the automation has
+finished with this person" from "this person never entered".
+
+```
+Condition #2 ──no──► Condition: has tag qualify-done
+                       ├─ YES → Actions #5 ... External Request → /api/manychat/followup
+                       │          sends the person NOTHING · records the line · pushes Ali
+                       └─ NO  → exit, silent   (a friend, a client, a story reply)
+```
+
+Before this, a lead who got the Telegram message and then replied *"I don't want Telegram"* failed
+the tag gate and the flow exited in silence. The silence is correct — the bot must never answer a
+question in Ali's voice — but nobody was told, so the message went unanswered by anyone. Now Ali is
+told and answers by hand.
+
+The request carries `subscriber_id`, `ig_username` and `message` ({{Last Text Input}}), the same
+headers as the qualifier, and has **no response mapping** — it changes nothing about the flow.
 
 ### The one call to the site
 
@@ -293,7 +319,9 @@ fine by id. Get new ids from the Audience tab URL.
 ## Site-side state as of this audit
 
 - `/api/manychat/qualify` — live, verified against production.
-- `/api/manychat/log` — admin-only GET, feeds the panel.
+- `/api/manychat/followup` — live. Records a follow-up and pushes Ali. Sends nothing, decides
+  nothing, always answers 200.
+- `/api/manychat/log` — admin-only GET, feeds the panel with both decisions and follow-ups.
 - `/api/manychat/reply` and `/api/manychat/admin` — **deleted.** They served the retired bot and
   could still have sent DMs to real followers.
 - `ig_campaigns`, `ig_contacts`, `ig_conversations` — tables kept; they hold real leads and
