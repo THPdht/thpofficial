@@ -6,7 +6,7 @@ import {
   getAllUsers, updateUser, linkNotionPage, setProtocolStatus,
   setAccountStatus, setClientType, addPayment, removePayment, removeClient, createClient,
   setSuspended, updatePresence, getAdminProtocols, getAdminDiagnostics, publishDiagnosis, initAdmin,
-  saveCoachingSummary,
+  saveCoachingSummary, getApplicantNotes, saveApplicantNotes,
 } from "@/lib/auth";
 import type { StoredUser, ClientStatus, ProtocolStatus, AccountStatus, Payment, ClientProtocol, ClientDiagnostic } from "@/lib/auth";
 import type { ProtocolId } from "@/lib/protocols";
@@ -14,6 +14,8 @@ import { hasIntakeData } from "@/lib/protocols";
 import { supabase } from "@/lib/supabase";
 import NotificationToggle from "@/components/portal/NotificationToggle";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
+
+const notesDraftKey = (email: string) => `thp:notes-draft:${email.toLowerCase()}`;
 
 const ADMIN_EMAIL = "info.shopzul@gmail.com";
 const ADMIN_PASSWORD = "Fikri!";
@@ -1442,6 +1444,8 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
   const [showReferralModal, setShowReferralModal] = useState(false);
   const [notes, setNotes] = useState("");
   const [notesSaving, setNotesSaving] = useState(false);
+  const [notesError, setNotesError] = useState<string | null>(null);
+  const [notesSavedAt, setNotesSavedAt] = useState<string | null>(null);
   const [telegramUsername, setTelegramUsername] = useState("");
   const [pushMsg, setPushMsg] = useState("");
   const [pushSending, setPushSending] = useState(false);
@@ -1558,9 +1562,16 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
       })
       .catch(() => {});
 
-    // Private notes
-    supabase.from('applicant_notes').select('notes').eq('user_email', client.email).maybeSingle()
-      .then(({ data }) => setNotes(data?.notes ?? ''));
+    // Private notes — a local draft always wins over the server copy, so an
+    // unsaved edit survives a reload instead of being overwritten by the
+    // last-saved text.
+    getApplicantNotes(client.email)
+      .then(saved => {
+        const draft = localStorage.getItem(notesDraftKey(client.email));
+        setNotes(draft !== null && draft !== saved ? draft : saved);
+        setNotesError(draft !== null && draft !== saved ? 'Unsaved draft restored — edit to retry saving' : null);
+      })
+      .catch(() => setNotesError('Could not load notes'));
 
     // Application form answers — use admin API to bypass RLS
     fetch(`/api/admin/application-form?email=${encodeURIComponent(client.email)}&pw=${encodeURIComponent(ADMIN_PASSWORD)}`)
@@ -1574,11 +1585,22 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
   }, [client.email]);
 
   const saveNotes = (val: string) => {
+    // Mirror every keystroke to localStorage first: if the save fails, the tab
+    // closes, or the browser reloads, the text is still recoverable.
+    localStorage.setItem(notesDraftKey(client.email), val);
     if (notesTimer.current) clearTimeout(notesTimer.current);
     notesTimer.current = setTimeout(async () => {
       setNotesSaving(true);
-      await supabase.from('applicant_notes').upsert({ user_email: client.email, notes: val, updated_at: new Date().toISOString() });
-      setNotesSaving(false);
+      try {
+        await saveApplicantNotes(client.email, val);
+        localStorage.removeItem(notesDraftKey(client.email));
+        setNotesError(null);
+        setNotesSavedAt(new Date().toISOString());
+      } catch (e) {
+        setNotesError(e instanceof Error ? e.message : 'Not saved');
+      } finally {
+        setNotesSaving(false);
+      }
     }, 800);
   };
 
@@ -2159,7 +2181,12 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
 
       {/* Private notes */}
       <div>
-        {sectionLabel(`Private notes${notesSaving ? ' · saving…' : ''}`)}
+        {sectionLabel(`Private notes${notesSaving ? ' · saving…' : notesSavedAt ? ' · saved' : ''}`)}
+        {notesError && (
+          <p style={{ fontSize: "0.7rem", color: "var(--primary)", fontWeight: 500, marginBottom: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+            {notesError} — your text is kept in this browser until it saves.
+          </p>
+        )}
         <textarea value={notes}
           onChange={e => { setNotes(e.target.value); saveNotes(e.target.value); }} rows={4}
           placeholder={`Notes about ${firstName} — only you see this`}

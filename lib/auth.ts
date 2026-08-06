@@ -314,6 +314,27 @@ export async function saveCoachingSummary(email: string, summary: string): Promi
   return { updatedAt };
 }
 
+// THP's private notes on an applicant. RLS denies anon on applicant_notes, so
+// these must go through the service-role API — a direct anon write fails
+// silently and the notes are lost.
+export async function getApplicantNotes(email: string): Promise<string> {
+  const res = await adminFetch(`/api/admin/notes?email=${encodeURIComponent(email)}`);
+  if (!res.ok) throw new Error(`Could not load notes (${res.status})`);
+  const { notes } = await res.json() as { notes: string };
+  return notes ?? '';
+}
+
+export async function saveApplicantNotes(email: string, notes: string): Promise<void> {
+  const res = await adminFetch('/api/admin/notes', {
+    method: 'POST',
+    body: JSON.stringify({ email, notes }),
+  });
+  if (!res.ok) {
+    const { error } = await res.json().catch(() => ({ error: '' })) as { error?: string };
+    throw new Error(error || `Save failed (${res.status})`);
+  }
+}
+
 export async function linkNotionPage(email: string, notionPageId: string): Promise<void> {
   await adminFetch('/api/admin/users', {
     method: 'PATCH',
