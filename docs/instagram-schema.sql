@@ -160,3 +160,28 @@ create index if not exists ig_followups_created_idx
   on public.ig_followups (created_at desc);
 
 alter table public.ig_followups enable row level security;
+
+-- ---------------------------------------------------------------------------
+-- 2026-08-06: the classification log.
+--
+-- AI Step 1 used to decide ENGAGED vs FAN inside ManyChat, where its answer was
+-- invisible until someone read a contact's custom fields. It called a message
+-- naming three symptoms a FAN, and nobody would have known. /api/manychat/classify
+-- replaces it and writes every call down here, so a wrong judgement is a row
+-- Ali can see rather than a lead that quietly went away.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.ig_classifications (
+  id             bigint generated always as identity primary key,
+  subscriber_id  text,
+  ig_username    text,
+  raw_text       text,
+  classification text not null,
+  reason         text,
+  created_at     timestamptz not null default now()
+);
+
+create index if not exists ig_classifications_created_idx
+  on public.ig_classifications (created_at desc);
+
+alter table public.ig_classifications enable row level security;
