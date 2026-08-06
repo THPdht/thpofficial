@@ -314,6 +314,59 @@ export async function saveCoachingSummary(email: string, summary: string): Promi
   return { updatedAt };
 }
 
+export async function saveTelegramUsername(email: string, telegramUsername: string): Promise<void> {
+  const res = await adminFetch('/api/admin/users', {
+    method: 'PATCH',
+    body: JSON.stringify({ email, fields: { telegram_username: telegramUsername } }),
+  });
+  if (!res.ok) throw new Error(`Could not save Telegram username (${res.status})`);
+}
+
+export async function applyFreeMonthEarned(email: string): Promise<void> {
+  const res = await adminFetch('/api/admin/users', {
+    method: 'PATCH',
+    body: JSON.stringify({ email, diagnostic_merge: { freeMonthEarned: true } }),
+  });
+  if (!res.ok) throw new Error(`Could not apply free month (${res.status})`);
+}
+
+export type ProtocolSection = { heading: string; text: string };
+
+// The panel edits a protocol as plain text, with each section introduced by a
+// "## HEADING" line. These two functions are inverses; keep them in step.
+export function sectionsToText(sections: ProtocolSection[]): string {
+  return sections.map(s => `## ${s.heading}\n\n${s.text}`).join('\n\n');
+}
+
+export function textToSections(text: string): ProtocolSection[] {
+  const sections: ProtocolSection[] = [];
+  let current: ProtocolSection | null = null;
+  for (const line of text.split('\n')) {
+    const heading = line.match(/^##\s+(.*)$/);
+    if (heading) {
+      if (current) sections.push({ ...current, text: current.text.trim() });
+      current = { heading: heading[1].trim(), text: '' };
+    } else if (current) {
+      current.text += line + '\n';
+    }
+    // Text before the first heading is dropped — the editor is always seeded
+    // from sectionsToText, so it can only appear if a heading was deleted.
+  }
+  if (current) sections.push({ ...current, text: current.text.trim() });
+  return sections.filter(s => s.heading || s.text);
+}
+
+export async function saveProtocolSections(id: string, sections: ProtocolSection[]): Promise<void> {
+  const res = await adminFetch('/api/admin/protocols', {
+    method: 'PATCH',
+    body: JSON.stringify({ id, sections }),
+  });
+  if (!res.ok) {
+    const { error } = await res.json().catch(() => ({ error: '' })) as { error?: string };
+    throw new Error(error || `Could not save protocol (${res.status})`);
+  }
+}
+
 // THP's private notes on an applicant. RLS denies anon on applicant_notes, so
 // these must go through the service-role API — a direct anon write fails
 // silently and the notes are lost.

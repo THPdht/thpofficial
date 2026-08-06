@@ -7,6 +7,8 @@ import {
   setAccountStatus, setClientType, addPayment, removePayment, removeClient, createClient,
   setSuspended, updatePresence, getAdminProtocols, getAdminDiagnostics, publishDiagnosis, initAdmin,
   saveCoachingSummary, getApplicantNotes, saveApplicantNotes,
+  saveTelegramUsername, applyFreeMonthEarned, saveProtocolSections,
+  sectionsToText, textToSections,
 } from "@/lib/auth";
 import type { StoredUser, ClientStatus, ProtocolStatus, AccountStatus, Payment, ClientProtocol, ClientDiagnostic } from "@/lib/auth";
 import type { ProtocolId } from "@/lib/protocols";
@@ -1445,6 +1447,8 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
   const [notes, setNotes] = useState("");
   const [notesSaving, setNotesSaving] = useState(false);
   const [notesError, setNotesError] = useState<string | null>(null);
+  const [telegramError, setTelegramError] = useState<string | null>(null);
+  const [freeMonthError, setFreeMonthError] = useState<string | null>(null);
   const [notesSavedAt, setNotesSavedAt] = useState<string | null>(null);
   const [telegramUsername, setTelegramUsername] = useState("");
   const [pushMsg, setPushMsg] = useState("");
@@ -1615,8 +1619,14 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
   };
 
   const saveTelegram = async () => {
-    const { error } = await supabase.from('users').update({ telegram_username: telegramUsername }).eq('email', client.email);
-    if (!error) { setSavedField('telegram'); setTimeout(() => setSavedField(null), 2000); }
+    try {
+      await saveTelegramUsername(client.email, telegramUsername);
+      setTelegramError(null);
+      setSavedField('telegram');
+      setTimeout(() => setSavedField(null), 2000);
+    } catch (e) {
+      setTelegramError(e instanceof Error ? e.message : 'Not saved');
+    }
   };
 
   const sendPush = async () => {
@@ -1642,7 +1652,12 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
 
   const applyFreeMonth = async () => {
     setApplyingFreeMonth(true);
-    await supabase.from('users').update({ diagnostic_data: { ...(client.diagnosticData ?? {}), freeMonthEarned: true } }).eq('email', client.email);
+    try {
+      await applyFreeMonthEarned(client.email);
+      setFreeMonthError(null);
+    } catch (e) {
+      setFreeMonthError(e instanceof Error ? e.message : 'Not saved');
+    }
     setApplyingFreeMonth(false);
   };
 
@@ -1862,6 +1877,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
                 <a href={`https://t.me/${telegramUsername}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--dim)", textDecoration: "none", fontSize: "0.7rem", opacity: 0.6 }}>↗</a>
               )}
               {savedField === 'telegram' && <span style={{ fontSize: "0.65rem", color: "oklch(0.7 0.15 145)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Saved ✓</span>}
+              {telegramError && <span style={{ fontSize: "0.65rem", color: "var(--primary)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Not saved</span>}
             </div>
             <span style={{ color: "var(--border)", fontSize: "0.7rem" }}>·</span>
             {/* Email */}
@@ -2610,6 +2626,9 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
             {client.diagnosticData?.freeMonthEarned ? 'Free Month Applied' : 'Apply Free Month'}
           </button>
         )}
+        {freeMonthError && (
+          <p style={{ fontSize: "0.7rem", color: "var(--primary)", fontWeight: 500, marginTop: "0.375rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{freeMonthError}</p>
+        )}
       </div>
 
       {/* Referral modal */}
@@ -2998,10 +3017,11 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
   const paying1on1 = active.filter(c => c.diagnosticData?.clientType !== 'skool');
 
   const [alarms, setAlarms] = useState<{ id: string; user_email: string; type: string; message: string; created_at: string }[]>([]);
-  const [pendingProtocols, setPendingProtocols] = useState<{ id: string; user_email: string; title: string; tracker_count: number | null; month_start: string | null; content?: { text?: string } }[]>([]);
+  const [pendingProtocols, setPendingProtocols] = useState<{ id: string; user_email: string; title: string; tracker_count: number | null; month_start: string | null; content?: { sections?: { heading: string; text: string }[] } }[]>([]);
   const [editingProtocol, setEditingProtocol] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [sending, setSending] = useState<string | null>(null);
+  const [protocolError, setProtocolError] = useState<string | null>(null);
   const [revenue, setRevenue] = useState<{ mrr: number; totalRevenue: number } | null>(null);
   const [showOverviewStats, setShowOverviewStats] = useState(false);
 
@@ -3033,8 +3053,16 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
   const sendProtocol = async (id: string) => {
     setSending(id);
     if (editingProtocol === id) {
-      // Save edits first
-      await supabase.from('protocols').update({ content: { text: editText } }).eq('id', id);
+      // Save edits first — and abort the send if that fails, otherwise the
+      // client receives the unedited protocol.
+      try {
+        await saveProtocolSections(id, textToSections(editText));
+      } catch (e) {
+        setProtocolError(e instanceof Error ? e.message : 'Could not save edits — not sent');
+        setSending(null);
+        return;
+      }
+      setProtocolError(null);
       setEditingProtocol(null);
     }
     await fetch('/api/protocol-send', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD }, body: JSON.stringify({ protocolId: id }) });
@@ -3217,7 +3245,7 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
                       </p>
                     </div>
                     <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
-                      <button onClick={() => { setEditingProtocol(isEditing ? null : p.id); setEditText(p.content?.text ?? ''); }}
+                      <button onClick={() => { setEditingProtocol(isEditing ? null : p.id); setEditText(sectionsToText(p.content?.sections ?? [])); setProtocolError(null); }}
                         style={{ height: "32px", padding: "0 0.75rem", background: "none", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--muted)", fontSize: "0.75rem", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
                         {isEditing ? 'Collapse' : 'Review'}
                       </button>
@@ -3227,6 +3255,9 @@ function OverviewPanel({ clients, onSelect }: { clients: StoredUser[]; onSelect:
                       </button>
                     </div>
                   </div>
+                  {protocolError && sending === null && (
+                    <p style={{ fontSize: "0.7rem", color: "var(--primary)", fontWeight: 500, marginBottom: "0.5rem", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{protocolError}</p>
+                  )}
                   {isEditing && (
                     <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={12}
                       style={{ width: "100%", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: "7px", padding: "0.75rem 0.875rem", fontSize: "0.875rem", color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif", fontWeight: 300, outline: "none", resize: "vertical", lineHeight: 1.7, boxSizing: "border-box" }} />

@@ -67,7 +67,7 @@ export async function PATCH(req: Request) {
 
   // Direct field update
   if (body.fields) {
-    const allowed = ['name', 'nickname', 'status', 'streak', 'longest_streak', 'last_check_in', 'referral_code', 'timezone', 'diagnostic_data', 'client_type', 'coaching_summary', 'coaching_summary_updated_at'];
+    const allowed = ['name', 'nickname', 'status', 'streak', 'longest_streak', 'last_check_in', 'referral_code', 'timezone', 'diagnostic_data', 'client_type', 'coaching_summary', 'coaching_summary_updated_at', 'telegram_username'];
     const dbUpdates: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(body.fields as Record<string, unknown>)) {
       if (allowed.includes(k)) dbUpdates[k] = v;
