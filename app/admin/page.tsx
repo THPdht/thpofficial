@@ -3269,6 +3269,21 @@ type IgDecision = {
   created_at: string;
 };
 
+/**
+ * A person the automation has finished with who wrote back afterwards.
+ *
+ * They get no reply from the flow, on purpose — the bot must never answer a
+ * question in Ali's voice. So these are the only rows on this screen that are
+ * waiting on a human, which is why they sit above the decision log.
+ */
+type IgFollowup = {
+  id: number;
+  ig_username: string | null;
+  message: string | null;
+  handled: boolean;
+  created_at: string;
+};
+
 const IG_WORK_LABEL: Record<string, string> = {
   working: "Working",
   student: "Student",
@@ -3287,6 +3302,7 @@ function igWhen(iso: string): string {
 
 function InstagramPanel() {
   const [decisions, setDecisions] = useState<IgDecision[]>([]);
+  const [followups, setFollowups] = useState<IgFollowup[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
 
@@ -3296,6 +3312,7 @@ function InstagramPanel() {
       if (!res.ok) { setError("Could not load the decision log."); setLoaded(true); return; }
       const data = await res.json();
       setDecisions(data.decisions ?? []);
+      setFollowups(data.followups ?? []);
     } catch {
       setError("Could not load the decision log.");
     }
@@ -3329,6 +3346,35 @@ function InstagramPanel() {
 
       {error && (
         <p style={{ fontSize: "0.8125rem", color: "var(--danger)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{error}</p>
+      )}
+
+      {followups.length > 0 && (
+        <div>
+          <p style={{ ...labelStyle, color: "var(--primary)" }}>Waiting on you</p>
+          <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, marginTop: "0.4rem", marginBottom: "0.75rem", lineHeight: 1.6, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+            These people already went through the funnel and then wrote back. The automation
+            deliberately said nothing — answer them yourself in Instagram DMs.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            {followups.map(f => (
+              <div key={f.id} style={{ ...cardStyle, borderLeft: "3px solid var(--primary)" }}>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+                  <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                    @{f.ig_username ?? "unknown"}
+                  </p>
+                  <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                    {igWhen(f.created_at)}
+                  </p>
+                </div>
+                {f.message && (
+                  <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, marginTop: "0.4rem", lineHeight: 1.55, fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+                    “{f.message}”
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {decisions.length > 0 && (

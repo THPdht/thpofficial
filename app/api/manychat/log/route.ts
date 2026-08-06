@@ -28,5 +28,18 @@ export async function GET(req: Request) {
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
-  return Response.json({ decisions: data ?? [] });
+  // Follow-ups are a separate list, not extra decisions: they are people the
+  // automation has finished with who wrote back, waiting on Ali rather than on
+  // the flow. A missing ig_followups table (the SQL not yet run) must not take
+  // the decision log down with it, so this failure is swallowed.
+  let followups: unknown[] = [];
+  const { data: fu, error: fuError } = await supabaseAdmin
+    .from('ig_followups')
+    .select('id, ig_username, message, handled, created_at')
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if (fuError) console.error('[manychat/log] followups unavailable:', fuError.message);
+  else followups = fu ?? [];
+
+  return Response.json({ decisions: data ?? [], followups });
 }

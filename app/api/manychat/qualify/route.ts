@@ -22,6 +22,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { realValue, secretMatches } from '@/lib/manychat';
+import { pushAdmin } from '@/lib/notifyAdmin';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 /** A DM sentence is short. Anything longer is noise or an attack. */
@@ -323,6 +324,20 @@ async function answer(
     if (error) console.error('[manychat/qualify] log insert failed:', error.message, error.code ?? '');
   } catch (err) {
     console.error('[manychat/qualify] log insert threw:', err);
+  }
+
+  // Ali is told about the ones worth his time and nothing else. A rejection is
+  // already visible in the log if he wants it; a push for every "sent to the
+  // course" would train him to ignore the ones that matter.
+  //
+  // pushAdmin swallows its own failures, but it is still awaited: a Vercel
+  // function can be frozen the moment it responds, and a floating promise would
+  // sometimes send and sometimes not.
+  if (status === 'qualified') {
+    await pushAdmin(
+      'Qualified lead on Instagram',
+      `@${igUsername ?? 'unknown'} — ${rawText ? `“${rawText.slice(0, 120)}”` : 'no details given'}`,
+    );
   }
 
   return Response.json({ status });

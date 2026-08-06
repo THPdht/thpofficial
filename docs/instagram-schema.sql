@@ -130,3 +130,33 @@ create index if not exists ig_qualifications_created_idx
   on public.ig_qualifications (created_at desc);
 
 alter table public.ig_qualifications enable row level security;
+
+-- ---------------------------------------------------------------------------
+-- 2026-08-06: follow-ups — someone who already finished the funnel wrote back.
+--
+-- The funnel ends by removing both tags, so a later DM from that person fails
+-- the tag gate and flow 2 exits in silence. That silence is correct — the bot
+-- must never answer a question in Ali's voice — but nobody was told, so a
+-- qualified lead replying "I don't want Telegram" simply went unanswered.
+--
+-- ManyChat now calls /api/manychat/followup on that path. It sends no message;
+-- it records the line here and pushes Ali, who answers by hand. One row per
+-- inbound message, so a person who writes three times appears three times.
+--
+-- No foreign key, for the same reason as ig_qualifications: a missing contact
+-- row must never cost us the record of a real person asking a real question.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.ig_followups (
+  id            bigint generated always as identity primary key,
+  subscriber_id text,
+  ig_username   text,
+  message       text,
+  handled       boolean not null default false,
+  created_at    timestamptz not null default now()
+);
+
+create index if not exists ig_followups_created_idx
+  on public.ig_followups (created_at desc);
+
+alter table public.ig_followups enable row level security;
