@@ -13,6 +13,8 @@ import {
 import type { StoredUser, ClientStatus, ProtocolStatus, AccountStatus, Payment, ClientProtocol, ClientDiagnostic } from "@/lib/auth";
 import type { ProtocolId } from "@/lib/protocols";
 import { hasIntakeData } from "@/lib/protocols";
+import { MARKER_DEFAULTS } from "@/lib/bloodMarkers";
+import type { BloodWorkEntry } from "@/lib/bloodMarkers";
 import { supabase } from "@/lib/supabase";
 import NotificationToggle from "@/components/portal/NotificationToggle";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
@@ -31,35 +33,6 @@ function adminApiFetch(url: string, opts?: RequestInit): Promise<Response> {
   });
 }
 
-const MARKER_DEFAULTS: Record<string, { label: string; unit: string }> = {
-  total_t:      { label: "Total T",       unit: "ng/dL" },
-  free_t:       { label: "Free T",        unit: "pg/mL" },
-  shbg:         { label: "SHBG",          unit: "nmol/L" },
-  estradiol:    { label: "Estradiol",     unit: "pg/mL" },
-  lh:           { label: "LH",           unit: "mIU/mL" },
-  fsh:          { label: "FSH",          unit: "mIU/mL" },
-  cortisol:     { label: "Cortisol",     unit: "μg/dL" },
-  hematocrit:   { label: "Hematocrit",   unit: "%" },
-  hemoglobin:   { label: "Hemoglobin",   unit: "g/dL" },
-  rbc:          { label: "RBC",          unit: "M/μL" },
-  psa:          { label: "PSA",          unit: "ng/mL" },
-  dhea_s:       { label: "DHEA-S",       unit: "μg/dL" },
-  igf1:         { label: "IGF-1",        unit: "ng/mL" },
-  tsh:          { label: "TSH",          unit: "mIU/L" },
-  t3_free:      { label: "Free T3",      unit: "pg/mL" },
-  t4_free:      { label: "Free T4",      unit: "ng/dL" },
-  vitamin_d:    { label: "Vitamin D",    unit: "ng/mL" },
-  ferritin:     { label: "Ferritin",     unit: "ng/mL" },
-  cholesterol:  { label: "Cholesterol",  unit: "mg/dL" },
-  hdl:          { label: "HDL",          unit: "mg/dL" },
-  ldl:          { label: "LDL",          unit: "mg/dL" },
-  triglycerides:{ label: "Triglycerides",unit: "mg/dL" },
-  glucose:      { label: "Glucose",      unit: "mg/dL" },
-  hba1c:        { label: "HbA1c",        unit: "%" },
-  creatinine:   { label: "Creatinine",   unit: "mg/dL" },
-  alt:          { label: "ALT",          unit: "U/L" },
-  ast:          { label: "AST",          unit: "U/L" },
-};
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
   active:  { bg: "oklch(0.60 0.18 165 / 0.15)", color: "var(--color-red)" },
@@ -1436,7 +1409,8 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
   const [expandedTracker, setExpandedTracker] = useState<string | null>(null);
   const [showAllTrackers, setShowAllTrackers] = useState(false);
   const [showStats, setShowStats] = useState(false);
-  const [bloodWorkEntries, setBloodWorkEntries] = useState<{ id: string; test_date: string | null; uploaded_at: string; markers: Record<string,{ value: number | null; unit: string; flag?: string | null }> | null }[]>([]);
+  // The history API returns no extraction_notes, so take the subset it does send.
+  const [bloodWorkEntries, setBloodWorkEntries] = useState<Pick<BloodWorkEntry, 'id' | 'test_date' | 'uploaded_at' | 'markers'>[]>([]);
   const [expandedBWMarker, setExpandedBWMarker] = useState<string | null>(null);
   const [selectedMarker, setSelectedMarker] = useState("total_t");
   const [userData, setUserData] = useState<{ deposit_paid: number | null; total_owed: number | null; telegram_username: string | null; last_login: string | null; last_tracker_date: string | null; agreed_monthly: number | null; last_monthly_paid: string | null; last_monthly_amount: number | null } | null>(null);

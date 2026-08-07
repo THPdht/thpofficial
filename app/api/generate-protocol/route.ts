@@ -48,7 +48,7 @@ SUPPLEMENTS
 Assign the core stack. Adjust based on their intake data, any bloodwork they have, any specific deficiencies they mentioned. Give exact doses and timing. Tell them nothing else until bloodwork.
 
 BLOODWORK
-List the full panel. Total and free testosterone, LH, FSH, estradiol, SHBG, full thyroid panel, morning fasted cortisol, full metabolic panel, vitamin D. Tell them this is required by end of month one.
+List the full panel. Total and free testosterone, LH, FSH, prolactin, estradiol, SHBG, full thyroid panel, morning fasted cortisol, full metabolic panel, vitamin D. Tell them this is required by end of month one.
 
 YOUR DAILY SYSTEM
 Map every protocol element to their exact existing daily schedule from the intake. This is their operating system. It must feel built around their real life not a template. Every time block from their day should appear here with a specific input assigned to it.

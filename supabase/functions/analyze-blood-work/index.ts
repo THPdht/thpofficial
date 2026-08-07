@@ -33,7 +33,7 @@ Return ONLY a JSON object with this structure:
   "notes": "anything unclear, unreadable, or that couldn't be extracted"
 }
 
-Use snake_case keys (e.g. total_t, free_t, shbg, estradiol, lh, fsh, cortisol, hematocrit, hemoglobin, rbc, psa, dhea_s, igf1, tsh, t3_free, t4_free, vitamin_d, ferritin, cholesterol, hdl, ldl, triglycerides, glucose, hba1c, creatinine, alt, ast).
+Use snake_case keys (e.g. total_t, free_t, shbg, estradiol, lh, fsh, prolactin, cortisol, hematocrit, hemoglobin, rbc, psa, dhea_s, igf1, tsh, t3_free, t4_free, vitamin_d, ferritin, cholesterol, hdl, ldl, triglycerides, glucose, hba1c, creatinine, alt, ast).
 For any additional markers not listed, include them with their actual name as key.
 If a value is not present, omit it entirely.
 JSON only, no markdown.`;
