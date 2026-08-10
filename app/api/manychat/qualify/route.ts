@@ -14,9 +14,14 @@
  * no stages, no pushes, no messages. It is deliberately not the bot in
  * ../reply/route.ts and shares none of its state.
  *
- * An outage, timeout, bad parse or empty body resolves to not_qualified — if we
- * never read the person we must not act on them. But a person we did read and
- * who simply left a question unanswered now qualifies: see decide(). The only
+ * An outage, timeout, bad parse or empty body resolves to qualified. This used
+ * to fail closed, on the reasoning that someone we never read must not be acted
+ * on. In practice ManyChat began sending the demographics field unresolved — a
+ * literal {{cuf_14840104}} rather than the answer — and fail-closed turned that
+ * into a rejection message sent to real leads: four in one day, including a man
+ * who had just given his bloodwork numbers. Being unreadable is ManyChat's
+ * failure, not the person's, so it now costs Ali a glance instead of costing us
+ * the lead. Only a *stated* disqualifier rejects: see decide(). The only
  * non-200 response is a 401.
  */
 
@@ -65,7 +70,7 @@ export async function POST(req: Request) {
     return await handle(req);
   } catch (err) {
     console.error('[manychat/qualify] unhandled:', err);
-    return Response.json({ status: 'not_qualified' satisfies Status });
+    return Response.json({ status: 'qualified' satisfies Status });
   }
 }
 
@@ -134,16 +139,16 @@ async function handle(req: Request): Promise<Response> {
     const seen = rawBody.trim()
       ? `body: ${rawBody.trim().slice(0, 200)}`
       : 'no body at all';
-    return await answer('not_qualified', `empty input · ${seen}`, UNKNOWN, null, subscriberId, igUsername);
+    return await answer('qualified', `empty input · ${seen}`, UNKNOWN, null, subscriberId, igUsername);
   }
 
   const input = text.slice(0, MAX_INPUT);
   const facts = await extract(input);
 
   // An extraction failure is not a person who told us nothing — we simply did
-  // not read them. Guessing either way is wrong, so it goes to the course.
+  // not read them. That is our fault, so they go to Ali rather than the course.
   if (!facts) {
-    return await answer('not_qualified', 'extraction unavailable', UNKNOWN, input, subscriberId, igUsername);
+    return await answer('qualified', 'extraction unavailable', UNKNOWN, input, subscriberId, igUsername);
   }
 
   // The rule lives here, in code, and not in a prompt: the model reports what
