@@ -34,11 +34,14 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Missing userEmail or date" }), { status: 400 });
     }
 
-    // Fetch last 5 trackers (most recent first)
+    // The 5 trackers up to and including `date` — not the 5 most recent overall.
+    // Anchoring to `date` keeps a re-run or a backfill reading the same history
+    // the client had on that day rather than today's.
     const { data: trackers } = await supabase
       .from("daily_trackers")
       .select("*")
       .eq("user_email", userEmail)
+      .lte("date", date)
       .order("date", { ascending: false })
       .limit(5);
 
@@ -56,11 +59,12 @@ Deno.serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    // Fetch previous analysis for pattern context
+    // Previous analysis for pattern context — again, only what preceded `date`.
     const { data: prevAnalysis } = await supabase
       .from("tracker_analysis")
       .select("date, talking_points, flags")
       .eq("user_email", userEmail)
+      .lt("date", date)
       .order("date", { ascending: false })
       .limit(4);
 
@@ -95,28 +99,53 @@ ${trackerText}
 
 Your job: give the coach 3 structured speaking notes — concise, clinical, ready to use in a call.
 
-Output as JSON with these keys:
-- "section1": 3-4 sentences on TODAY's tracker — what's notable, wins, drops, specific readings worth mentioning.
-- "section2": 3-4 sentences on PATTERNS across the last 5 trackers — trends, consistency, anything improving or declining.
-- "section3": 3-4 sentences tying this back to the CLIENT'S DIAGNOSIS — how today fits their clinical picture, what's on track, what's drifting.
-- "flags": array of 1-3 SHORT bullets for urgent follow-ups (broken habits, declining trends, missing data). Empty array if nothing critical.
+No fluff. No filler. Speak as if briefing the coach 10 seconds before the call.`;
 
-No fluff. No filler. Speak as if briefing the coach 10 seconds before the call.
-JSON only, no markdown.`;
-
+    // Forced tool use rather than "reply with JSON": the model fenced its JSON
+    // in every single response, JSON.parse failed every time, and the old catch
+    // wrote "Analysis unavailable" into every row since July. A tool call comes
+    // back already parsed, so there is no text to parse and nothing to strip.
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 600,
+      max_tokens: 2000,
+      tools: [{
+        name: "speaking_notes",
+        description: "Return the coach's three speaking notes and any flags.",
+        input_schema: {
+          type: "object",
+          properties: {
+            section1: { type: "string", description: "3-4 sentences on TODAY's tracker — what's notable, wins, drops, specific readings worth mentioning." },
+            section2: { type: "string", description: "3-4 sentences on PATTERNS across the last 5 trackers — trends, consistency, anything improving or declining." },
+            section3: { type: "string", description: "3-4 sentences tying this back to the CLIENT'S DIAGNOSIS — how today fits their clinical picture, what's on track, what's drifting." },
+            flags: {
+              type: "array",
+              items: { type: "string" },
+              description: "1-3 SHORT bullets for urgent follow-ups (broken habits, declining trends, missing data). Empty array if nothing critical.",
+            },
+          },
+          required: ["section1", "section2", "section3", "flags"],
+        },
+      }],
+      tool_choice: { type: "tool", name: "speaking_notes" },
       messages: [{ role: "user", content: prompt }],
     });
 
-    const raw = response.content[0].type === "text" ? response.content[0].text.trim() : "{}";
-    let parsed: { section1?: string; section2?: string; section3?: string; flags?: string[] };
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      parsed = { section1: "Analysis unavailable", section2: "", section3: "", flags: [] };
+    const toolUse = response.content.find((b) => b.type === "tool_use");
+    if (!toolUse) {
+      // Never write a placeholder over the row: a missing analysis is honest,
+      // a fake one reads as a real note. Surface it instead.
+      console.error("[analyze-tracker] no tool_use block", {
+        userEmail, date, stopReason: response.stop_reason,
+      });
+      return new Response(
+        JSON.stringify({ error: "Model did not return the speaking_notes tool call" }),
+        { status: 502, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } },
+      );
     }
+
+    const parsed = toolUse.input as {
+      section1?: string; section2?: string; section3?: string; flags?: string[];
+    };
 
     // Store sections as talking_points array (3 items) — compatible with existing schema
     const talkingPoints = [parsed.section1 ?? "", parsed.section2 ?? "", parsed.section3 ?? ""];
