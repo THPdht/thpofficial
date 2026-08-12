@@ -1388,12 +1388,8 @@ function PromoteButton({ client, onSetStatus, onClientTypeChange }: { client: St
 // what to ask about. Stepping between weeks is free; only the button generates.
 
 type BriefPayload = {
-  headline: string;
+  summary?: string[];
   adherence?: { logged_days: number; missed_dates: string[] };
-  wins?: string[];
-  concerns?: string[];
-  patterns?: string[];
-  ask_on_call?: string[];
 };
 
 type DayAnalysis = { date: string; talking_points: string[]; flags: string[] };
@@ -1437,18 +1433,6 @@ function scoreColor(v: unknown): string {
   if (n >= 7) return "oklch(0.72 0.15 160)";
   if (n >= 4) return "oklch(0.78 0.13 80)";
   return "var(--danger)";
-}
-
-function briefList(label: string, items: string[] | undefined, color: string) {
-  if (!items?.length) return null;
-  return (
-    <div style={{ marginBottom: "0.875rem" }}>
-      <p style={{ fontSize: "0.6rem", fontWeight: 600, letterSpacing: "0.1em", color, textTransform: "uppercase", marginBottom: "0.375rem", fontFamily: "var(--font-mono), monospace" }}>{label}</p>
-      {items.map((t, i) => (
-        <p key={i} style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.6, marginBottom: "0.2rem" }}>— {t}</p>
-      ))}
-    </div>
-  );
 }
 
 function WeeklyBriefSection({ email }: { email: string }) {
@@ -1530,23 +1514,9 @@ function WeeklyBriefSection({ email }: { email: string }) {
         <>
           {brief && (
             <div style={{ padding: "1rem", background: "oklch(0.08 0.01 0)", border: "1px solid var(--border-subtle)", borderRadius: "8px", marginBottom: "0.875rem" }}>
-              <p style={{ fontSize: "0.9375rem", color: "var(--ink)", fontWeight: 400, lineHeight: 1.5, marginBottom: "0.875rem" }}>{brief.headline}</p>
-
-              {brief.ask_on_call?.length ? (
-                <div style={{ padding: "0.75rem 0.875rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", marginBottom: "0.875rem" }}>
-                  <p style={{ fontSize: "0.6rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--primary)", textTransform: "uppercase", marginBottom: "0.5rem", fontFamily: "var(--font-mono), monospace" }}>Ask on the call</p>
-                  {brief.ask_on_call.map((q, i) => (
-                    <p key={i} style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 300, lineHeight: 1.6, marginBottom: "0.4rem", display: "flex", gap: "0.5rem" }}>
-                      <span style={{ color: "var(--primary)", fontWeight: 600 }}>{i + 1}.</span>{q}
-                    </p>
-                  ))}
-                </div>
-              ) : null}
-
-              {briefList("Concerns", brief.concerns, "oklch(0.75 0.12 65)")}
-              {briefList("Patterns", brief.patterns, "var(--dim)")}
-              {briefList("Wins", brief.wins, "oklch(0.72 0.15 160)")}
-
+              <p style={{ fontSize: "0.9375rem", color: "var(--ink)", fontWeight: 300, lineHeight: 1.65, marginBottom: "0.75rem" }}>
+                {(brief.summary ?? []).join(" ")}
+              </p>
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center", fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300 }}>
                 <span>{brief.adherence?.logged_days ?? data?.days.length}/7 logged</span>
                 {brief.adherence?.missed_dates?.length ? <span>· missed {brief.adherence.missed_dates.map(d => prettyDate(d)).join(", ")}</span> : null}
