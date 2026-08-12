@@ -1396,11 +1396,14 @@ type BriefPayload = {
   ask_on_call?: string[];
 };
 
+type DayAnalysis = { date: string; talking_points: string[]; flags: string[] };
+
 type WeeklyBriefResponse = {
   start: string;
   end: string;
   days: Record<string, unknown>[];
   allDates: string[];
+  analysis: DayAnalysis[];
   brief: BriefPayload | null;
   stale?: boolean;
   cached?: boolean;
@@ -1408,6 +1411,9 @@ type WeeklyBriefResponse = {
   reason?: string;
   error?: string | null;
 };
+
+// The three sections the analyze-tracker Edge Function writes, in order.
+const DAY_NOTE_LABELS = ["Today's tracker", "Last 5 sessions", "Diagnosis connection"];
 
 const isoToday = () => new Date().toISOString().slice(0, 10);
 
@@ -1484,6 +1490,8 @@ function WeeklyBriefSection({ email }: { email: string }) {
   const atCurrentWeek = weekEnd >= isoToday();
   const dayMap: Record<string, Record<string, unknown>> = {};
   for (const d of data?.days ?? []) dayMap[d.date as string] = d;
+  const analysisMap: Record<string, DayAnalysis> = {};
+  for (const a of data?.analysis ?? []) analysisMap[a.date] = a;
   const allDates = data?.allDates ?? Array.from({ length: 7 }, (_, i) => shiftIso(start, i));
   const brief = data?.brief ?? null;
 
@@ -1584,24 +1592,48 @@ function WeeklyBriefSection({ email }: { email: string }) {
                     <span style={{ fontSize: "0.75rem", color: "var(--dim)" }}>{String(nutrition.hydration_l ?? "–")}L</span>
                     <span style={{ fontSize: "0.7rem", color: "var(--dim)", marginLeft: "auto" }}>{open ? "▲" : "▼"}</span>
                   </button>
-                  {open && (
-                    <div style={{ padding: "0.875rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderTop: "none", borderRadius: "0 0 8px 8px", fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.7, fontFamily: "var(--font-mono), monospace" }}>
-                      {(['circadian','training','nutrition','vitals','psychological','business'] as const).map(sec => {
-                        const secData = t[sec] as Record<string, unknown> | undefined;
-                        if (!secData || Object.keys(secData).length === 0) return null;
-                        return (
-                          <div key={sec} style={{ marginBottom: "0.625rem" }}>
-                            <span style={{ color: "var(--primary)", fontWeight: 600, textTransform: "uppercase", fontSize: "0.65rem", letterSpacing: "0.08em" }}>{sec}</span>
-                            <div style={{ marginTop: "0.25rem" }}>
-                              {Object.entries(secData).map(([k, v]) => (
-                                <div key={k}><span style={{ color: "var(--dim)" }}>{k}:</span> {String(v)}</div>
-                              ))}
-                            </div>
+                  {open && (() => {
+                    const dayAnalysis = analysisMap[date];
+                    return (
+                      <div style={{ border: "1px solid var(--border-subtle)", borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden" }}>
+                        <div style={{ padding: "0.875rem", background: "var(--surface)", fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.7, fontFamily: "var(--font-mono), monospace", borderBottom: dayAnalysis ? "1px solid var(--border-subtle)" : "none" }}>
+                          {(['circadian','training','nutrition','vitals','psychological','business'] as const).map(sec => {
+                            const secData = t[sec] as Record<string, unknown> | undefined;
+                            if (!secData || Object.keys(secData).length === 0) return null;
+                            return (
+                              <div key={sec} style={{ marginBottom: "0.625rem" }}>
+                                <span style={{ color: "var(--primary)", fontWeight: 600, textTransform: "uppercase", fontSize: "0.65rem", letterSpacing: "0.08em" }}>{sec}</span>
+                                <div style={{ marginTop: "0.25rem" }}>
+                                  {Object.entries(secData).map(([k, v]) => (
+                                    <div key={k}><span style={{ color: "var(--dim)" }}>{k}:</span> {String(v)}</div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {dayAnalysis && (
+                          <div style={{ padding: "0.875rem", background: "oklch(0.08 0.01 0)" }}>
+                            <p style={{ fontSize: "0.6rem", fontWeight: 600, letterSpacing: "0.12em", color: "var(--primary)", textTransform: "uppercase", marginBottom: "0.75rem", fontFamily: "var(--font-mono), monospace" }}>Speaking notes</p>
+                            {dayAnalysis.talking_points.map((section, i) => section ? (
+                              <div key={i} style={{ marginBottom: i < 2 ? "0.875rem" : 0 }}>
+                                <p style={{ fontSize: "0.6rem", fontWeight: 600, letterSpacing: "0.08em", color: "var(--dim)", textTransform: "uppercase", marginBottom: "0.25rem", fontFamily: "var(--font-mono), monospace" }}>{DAY_NOTE_LABELS[i] ?? `Section ${i + 1}`}</p>
+                                <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.6 }}>{section}</p>
+                              </div>
+                            ) : null)}
+                            {dayAnalysis.flags?.length > 0 && (
+                              <div style={{ marginTop: "0.75rem", padding: "0.625rem 0.75rem", background: "oklch(0.65 0.14 65 / 0.08)", border: "1px solid oklch(0.65 0.14 65 / 0.2)", borderRadius: "7px" }}>
+                                <p style={{ fontSize: "0.6rem", fontWeight: 600, color: "oklch(0.75 0.12 65)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.375rem" }}>Flags</p>
+                                {dayAnalysis.flags.map((f, i) => (
+                                  <p key={i} style={{ fontSize: "0.8125rem", color: "oklch(0.75 0.12 65)", fontWeight: 300, lineHeight: 1.5, marginBottom: i < dayAnalysis.flags.length - 1 ? "0.2rem" : 0 }}>⚠ {f}</p>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -1633,10 +1665,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
   onAddPayment: (p: Omit<Payment, 'id'>) => void;
   onRemovePayment: (id: string) => void;
 }) {
-  const [analysisMap, setAnalysisMap] = useState<Record<string, { date: string; talking_points: string[]; flags: string[] }>>({});
-  const [trackers, setTrackers] = useState<{ date: string; vitals?: Record<string,unknown>; training?: Record<string,unknown>; circadian?: Record<string,unknown>; [k: string]: unknown }[]>([]);
-  const [expandedTracker, setExpandedTracker] = useState<string | null>(null);
-  const [showAllTrackers, setShowAllTrackers] = useState(false);
   const [showStats, setShowStats] = useState(false);
   // The history API returns no extraction_notes, so take the subset it does send.
   const [bloodWorkEntries, setBloodWorkEntries] = useState<Pick<BloodWorkEntry, 'id' | 'test_date' | 'uploaded_at' | 'markers'>[]>([]);
@@ -1727,21 +1755,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
     setSummarySavedAt(client.coachingSummaryUpdatedAt ?? null);
     setSummarySaving(false);
 
-    // Tracker analysis — via API (bypasses RLS)
-    adminApiFetch(`/api/tracker-analysis?email=${encodeURIComponent(client.email)}&limit=20`)
-      .then(r => r.json())
-      .then(d => {
-        const map: Record<string, { date: string; talking_points: string[]; flags: string[] }> = {};
-        (d.analysis ?? []).forEach((a: { date: string; talking_points: string[]; flags: string[] }) => { map[a.date] = a; });
-        setAnalysisMap(map);
-      })
-      .catch(() => {});
-
-    // Last 10 trackers — via API (bypasses RLS)
-    adminApiFetch(`/api/tracker-history?email=${encodeURIComponent(client.email)}&limit=10`)
-      .then(r => r.json())
-      .then(d => setTrackers((d.trackers ?? []) as typeof trackers))
-      .catch(() => {});
+    // Tracker entries and their per-day analysis now load inside WeeklyBriefSection.
 
     // Blood work entries — via API (bypasses RLS)
     adminApiFetch(`/api/blood-work-history?email=${encodeURIComponent(client.email)}`)
@@ -2171,7 +2185,7 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
               <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Application</p>
               <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: applicationData ? "var(--ink)" : "var(--dim)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{applicationData ? "View ↓" : "None"}</p>
             </div>
-            <div onClick={() => document.getElementById("crm-trackers")?.scrollIntoView({ behavior: "smooth" })}
+            <div onClick={() => document.getElementById("crm-weekly")?.scrollIntoView({ behavior: "smooth" })}
               style={{ padding: "0.625rem 0.75rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", cursor: "pointer" }}>
               <p style={{ fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300, marginBottom: "0.25rem", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Streak</p>
               <p style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--ink)", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>{client.streak > 0 ? `${client.streak >= 7 ? "🔥" : "⚡"} ${client.streak} days` : "0 days"}</p>
@@ -2595,85 +2609,6 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
         {/* Weekly brief — call prep */}
         <div id="crm-weekly" style={{ paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
           <WeeklyBriefSection email={client.email} />
-        </div>
-
-        {/* Recent trackers */}
-        <div id="crm-trackers" style={{ paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
-          {sectionLabel('Recent trackers')}
-          {trackers.length === 0 ? (
-            <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, fontStyle: "italic" }}>No trackers submitted yet.</p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
-              {(showAllTrackers ? trackers : trackers.slice(0, 3)).map(t => (
-                <div key={t.date as string}>
-                  <button onClick={() => setExpandedTracker(expandedTracker === t.date as string ? null : t.date as string)}
-                    style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.625rem 0.875rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "8px", cursor: "pointer", textAlign: "left", transition: "border-color 150ms", fontFamily: "var(--font-ui), system-ui, sans-serif" }}
-                    onMouseEnter={e => e.currentTarget.style.borderColor = "var(--border)"}
-                    onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border-subtle)"}>
-                    <span style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 400 }}>{t.date as string}</span>
-                    <span style={{ fontSize: "0.75rem", color: "var(--dim)" }}>{expandedTracker === t.date as string ? '▲' : '▼'}</span>
-                  </button>
-                  {expandedTracker === t.date as string && (() => {
-                    const dayAnalysis = analysisMap[t.date as string];
-                    const SECTION_LABELS = ["Today's tracker", "Last 5 sessions", "Diagnosis connection"];
-                    return (
-                      <div style={{ border: "1px solid var(--border-subtle)", borderTop: "none", borderRadius: "0 0 8px 8px", overflow: "hidden" }}>
-                        <div style={{ padding: "0.875rem", background: "var(--surface)", fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.7, fontFamily: "var(--font-mono), monospace", borderBottom: dayAnalysis ? "1px solid var(--border-subtle)" : "none" }}>
-                          {(['circadian','training','nutrition','vitals','psychological','business'] as const).map(sec => {
-                            const data = t[sec] as Record<string,unknown> | undefined;
-                            if (!data || Object.keys(data).length === 0) return null;
-                            return (
-                              <div key={sec} style={{ marginBottom: "0.625rem" }}>
-                                <span style={{ color: "var(--primary)", fontWeight: 600, textTransform: "uppercase", fontSize: "0.65rem", letterSpacing: "0.08em" }}>{sec}</span>
-                                <div style={{ marginTop: "0.25rem" }}>
-                                  {Object.entries(data).map(([k, v]) => (
-                                    <div key={k}><span style={{ color: "var(--dim)" }}>{k}:</span> {String(v)}</div>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        {dayAnalysis ? (
-                          <div style={{ padding: "0.875rem", background: "oklch(0.08 0.01 0)" }}>
-                            <p style={{ fontSize: "0.6rem", fontWeight: 600, letterSpacing: "0.12em", color: "var(--primary)", textTransform: "uppercase", marginBottom: "0.75rem", fontFamily: "var(--font-mono), monospace" }}>Speaking notes</p>
-                            {dayAnalysis.talking_points.map((section, i) => section ? (
-                              <div key={i} style={{ marginBottom: i < 2 ? "0.875rem" : 0 }}>
-                                <p style={{ fontSize: "0.6rem", fontWeight: 600, letterSpacing: "0.08em", color: "var(--dim)", textTransform: "uppercase", marginBottom: "0.25rem", fontFamily: "var(--font-mono), monospace" }}>{SECTION_LABELS[i] ?? `Section ${i + 1}`}</p>
-                                <p style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.6 }}>{section}</p>
-                              </div>
-                            ) : null)}
-                            {dayAnalysis.flags?.length > 0 && (
-                              <div style={{ marginTop: "0.75rem", padding: "0.625rem 0.75rem", background: "oklch(0.65 0.14 65 / 0.08)", border: "1px solid oklch(0.65 0.14 65 / 0.2)", borderRadius: "7px" }}>
-                                <p style={{ fontSize: "0.6rem", fontWeight: 600, color: "oklch(0.75 0.12 65)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.375rem" }}>Flags</p>
-                                {dayAnalysis.flags.map((f, i) => (
-                                  <p key={i} style={{ fontSize: "0.8125rem", color: "oklch(0.75 0.12 65)", fontWeight: 300, lineHeight: 1.5, marginBottom: i < dayAnalysis.flags.length - 1 ? "0.2rem" : 0 }}>⚠ {f}</p>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div style={{ padding: "0.75rem 0.875rem", background: "oklch(0.08 0.01 0)" }}>
-                            <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, fontStyle: "italic" }}>No AI analysis for this date yet.</p>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-              ))}
-              {trackers.length > 3 && (
-                <button
-                  onClick={() => setShowAllTrackers(v => !v)}
-                  style={{ marginTop: "0.25rem", background: "none", border: "1px solid var(--border-subtle)", borderRadius: "7px", padding: "0.5rem 0.875rem", fontSize: "0.75rem", color: "var(--dim)", cursor: "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif", transition: "border-color 150ms" }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = "var(--border)"}
-                  onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border-subtle)"}
-                >
-                  {showAllTrackers ? "▲ Show less" : `▼ Show ${trackers.length - 3} more`}
-                </button>
-              )}
-            </div>
-          )}
         </div>
 
       </div>
