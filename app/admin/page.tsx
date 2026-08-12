@@ -1383,6 +1383,235 @@ function PromoteButton({ client, onSetStatus, onClientTypeChange }: { client: St
 
 // ─── CRM PANEL (full-width when client selected) ──────────────────────────
 
+// ── WEEKLY BRIEF ─────────────────────────────────────────────────
+// Call prep: the last 7 days of tracker entries plus an AI brief telling THP
+// what to ask about. Stepping between weeks is free; only the button generates.
+
+type BriefPayload = {
+  headline: string;
+  adherence?: { logged_days: number; missed_dates: string[] };
+  wins?: string[];
+  concerns?: string[];
+  patterns?: string[];
+  ask_on_call?: string[];
+};
+
+type WeeklyBriefResponse = {
+  start: string;
+  end: string;
+  days: Record<string, unknown>[];
+  allDates: string[];
+  brief: BriefPayload | null;
+  stale?: boolean;
+  cached?: boolean;
+  generatedAt?: string | null;
+  reason?: string;
+  error?: string | null;
+};
+
+const isoToday = () => new Date().toISOString().slice(0, 10);
+
+function shiftIso(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function prettyDate(iso: string, withWeekday = false): string {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", {
+    ...(withWeekday ? { weekday: "short" as const } : {}),
+    day: "numeric", month: "short", timeZone: "UTC",
+  });
+}
+
+/** 1-10 self-scores: green above 7, amber in the middle, red at 3 and below. */
+function scoreColor(v: unknown): string {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return "var(--dim)";
+  if (n >= 7) return "oklch(0.72 0.15 160)";
+  if (n >= 4) return "oklch(0.78 0.13 80)";
+  return "var(--danger)";
+}
+
+function briefList(label: string, items: string[] | undefined, color: string) {
+  if (!items?.length) return null;
+  return (
+    <div style={{ marginBottom: "0.875rem" }}>
+      <p style={{ fontSize: "0.6rem", fontWeight: 600, letterSpacing: "0.1em", color, textTransform: "uppercase", marginBottom: "0.375rem", fontFamily: "var(--font-mono), monospace" }}>{label}</p>
+      {items.map((t, i) => (
+        <p key={i} style={{ fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.6, marginBottom: "0.2rem" }}>— {t}</p>
+      ))}
+    </div>
+  );
+}
+
+function WeeklyBriefSection({ email }: { email: string }) {
+  const [weekEnd, setWeekEnd] = useState(isoToday);
+  const [data, setData] = useState<WeeklyBriefResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const load = async (end: string, mode: "" | "gen" | "refresh") => {
+    const isGen = mode !== "";
+    if (isGen) setGenerating(true); else setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({ email, end });
+      if (mode === "gen") params.set("gen", "1");
+      if (mode === "refresh") params.set("refresh", "1");
+      const res = await adminApiFetch(`/api/admin/weekly-brief?${params}`);
+      const json: WeeklyBriefResponse = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to load week");
+      setData(json);
+      if (json.error) setError(json.error);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load week");
+    } finally {
+      setLoading(false);
+      setGenerating(false);
+    }
+  };
+
+  useEffect(() => {
+    setExpanded(null);
+    load(weekEnd, "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email, weekEnd]);
+
+  const start = shiftIso(weekEnd, -6);
+  const atCurrentWeek = weekEnd >= isoToday();
+  const dayMap: Record<string, Record<string, unknown>> = {};
+  for (const d of data?.days ?? []) dayMap[d.date as string] = d;
+  const allDates = data?.allDates ?? Array.from({ length: 7 }, (_, i) => shiftIso(start, i));
+  const brief = data?.brief ?? null;
+
+  const navBtn = (label: string, disabled: boolean, onClick: () => void) => (
+    <button onClick={onClick} disabled={disabled}
+      style={{ width: "28px", height: "28px", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: "7px", color: disabled ? "var(--border)" : "var(--dim)", cursor: disabled ? "default" : "pointer", fontSize: "0.75rem", lineHeight: 1 }}>
+      {label}
+    </button>
+  );
+
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+        <p style={{ fontSize: "0.65rem", fontWeight: 600, color: "var(--dim)", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>Weekly brief</p>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          {navBtn("◀", false, () => setWeekEnd(w => shiftIso(w, -7)))}
+          <span style={{ fontSize: "0.75rem", color: "var(--muted)", minWidth: "9.5rem", textAlign: "center", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+            {prettyDate(start)} – {prettyDate(weekEnd)}
+          </span>
+          {navBtn("▶", atCurrentWeek, () => setWeekEnd(w => (shiftIso(w, 7) > isoToday() ? isoToday() : shiftIso(w, 7))))}
+          <button onClick={() => load(weekEnd, brief ? "refresh" : "gen")}
+            disabled={generating || loading || (data?.days.length ?? 0) === 0}
+            style={{ height: "28px", padding: "0 0.875rem", marginLeft: "0.25rem", background: generating || (data?.days.length ?? 0) === 0 ? "var(--surface-2)" : "var(--primary)", border: "none", borderRadius: "7px", color: generating || (data?.days.length ?? 0) === 0 ? "var(--dim)" : "#fff", fontSize: "0.75rem", fontWeight: 600, cursor: generating || loading || (data?.days.length ?? 0) === 0 ? "default" : "pointer", fontFamily: "var(--font-ui), system-ui, sans-serif" }}>
+            {generating ? "Reading the week…" : brief ? "Regenerate" : "Get weekly brief"}
+          </button>
+        </div>
+      </div>
+
+      {error && <p style={{ fontSize: "0.75rem", color: "var(--danger)", fontWeight: 300, marginBottom: "0.625rem" }}>{error}</p>}
+
+      {loading ? (
+        <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, fontStyle: "italic" }}>Loading week…</p>
+      ) : (data?.days.length ?? 0) === 0 ? (
+        <p style={{ fontSize: "0.8125rem", color: "var(--dim)", fontWeight: 300, fontStyle: "italic" }}>Nothing logged this week.</p>
+      ) : (
+        <>
+          {brief && (
+            <div style={{ padding: "1rem", background: "oklch(0.08 0.01 0)", border: "1px solid var(--border-subtle)", borderRadius: "8px", marginBottom: "0.875rem" }}>
+              <p style={{ fontSize: "0.9375rem", color: "var(--ink)", fontWeight: 400, lineHeight: 1.5, marginBottom: "0.875rem" }}>{brief.headline}</p>
+
+              {brief.ask_on_call?.length ? (
+                <div style={{ padding: "0.75rem 0.875rem", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "7px", marginBottom: "0.875rem" }}>
+                  <p style={{ fontSize: "0.6rem", fontWeight: 600, letterSpacing: "0.1em", color: "var(--primary)", textTransform: "uppercase", marginBottom: "0.5rem", fontFamily: "var(--font-mono), monospace" }}>Ask on the call</p>
+                  {brief.ask_on_call.map((q, i) => (
+                    <p key={i} style={{ fontSize: "0.875rem", color: "var(--ink)", fontWeight: 300, lineHeight: 1.6, marginBottom: "0.4rem", display: "flex", gap: "0.5rem" }}>
+                      <span style={{ color: "var(--primary)", fontWeight: 600 }}>{i + 1}.</span>{q}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
+
+              {briefList("Concerns", brief.concerns, "oklch(0.75 0.12 65)")}
+              {briefList("Patterns", brief.patterns, "var(--dim)")}
+              {briefList("Wins", brief.wins, "oklch(0.72 0.15 160)")}
+
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center", fontSize: "0.7rem", color: "var(--dim)", fontWeight: 300 }}>
+                <span>{brief.adherence?.logged_days ?? data?.days.length}/7 logged</span>
+                {brief.adherence?.missed_dates?.length ? <span>· missed {brief.adherence.missed_dates.map(d => prettyDate(d)).join(", ")}</span> : null}
+                {data?.stale && <span style={{ color: "oklch(0.75 0.12 65)" }}>· new entries since this brief — regenerate</span>}
+              </div>
+            </div>
+          )}
+
+          {/* Day-by-day */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+            {allDates.map(date => {
+              const t = dayMap[date];
+              if (!t) {
+                return (
+                  <div key={date} style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.5rem 0.875rem", background: "var(--surface)", border: "1px dashed var(--border-subtle)", borderRadius: "8px", opacity: 0.5 }}>
+                    <span style={{ fontSize: "0.75rem", color: "var(--dim)", minWidth: "5.5rem", fontFamily: "var(--font-mono), monospace" }}>{prettyDate(date, true)}</span>
+                    <span style={{ fontSize: "0.75rem", color: "var(--dim)", fontStyle: "italic" }}>no entry</span>
+                  </div>
+                );
+              }
+              const vitals = (t.vitals ?? {}) as Record<string, unknown>;
+              const circadian = (t.circadian ?? {}) as Record<string, unknown>;
+              const training = (t.training ?? {}) as Record<string, unknown>;
+              const nutrition = (t.nutrition ?? {}) as Record<string, unknown>;
+              const trained = String(training.what_did ?? "").trim();
+              const didTrain = trained !== "" && !/^(na|n\/a|no|none|rest)$/i.test(trained);
+              const open = expanded === date;
+
+              return (
+                <div key={date}>
+                  <button onClick={() => setExpanded(open ? null : date)}
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", padding: "0.5rem 0.875rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderRadius: open ? "8px 8px 0 0" : "8px", cursor: "pointer", textAlign: "left", fontFamily: "var(--font-mono), monospace" }}>
+                    <span style={{ fontSize: "0.75rem", color: "var(--muted)", minWidth: "5.5rem" }}>{prettyDate(date, true)}</span>
+                    <span style={{ fontSize: "0.75rem", color: "var(--dim)" }}>{String(circadian.sleep_hours ?? "–")}h sleep</span>
+                    {(["energy", "mood", "focus", "libido", "drive"] as const).map(k => (
+                      <span key={k} style={{ fontSize: "0.75rem", color: "var(--dim)" }}>
+                        {k.slice(0, 3)} <span style={{ color: scoreColor(vitals[k]), fontWeight: 600 }}>{vitals[k] != null ? String(vitals[k]) : "–"}</span>
+                      </span>
+                    ))}
+                    <span style={{ fontSize: "0.75rem", color: didTrain ? "var(--muted)" : "var(--dim)" }}>
+                      {didTrain ? `trained · ${String(training.intensity ?? "?")}` : "no training"}
+                    </span>
+                    <span style={{ fontSize: "0.75rem", color: "var(--dim)" }}>{String(nutrition.hydration_l ?? "–")}L</span>
+                    <span style={{ fontSize: "0.7rem", color: "var(--dim)", marginLeft: "auto" }}>{open ? "▲" : "▼"}</span>
+                  </button>
+                  {open && (
+                    <div style={{ padding: "0.875rem", background: "var(--surface)", border: "1px solid var(--border-subtle)", borderTop: "none", borderRadius: "0 0 8px 8px", fontSize: "0.8125rem", color: "var(--muted)", fontWeight: 300, lineHeight: 1.7, fontFamily: "var(--font-mono), monospace" }}>
+                      {(['circadian','training','nutrition','vitals','psychological','business'] as const).map(sec => {
+                        const secData = t[sec] as Record<string, unknown> | undefined;
+                        if (!secData || Object.keys(secData).length === 0) return null;
+                        return (
+                          <div key={sec} style={{ marginBottom: "0.625rem" }}>
+                            <span style={{ color: "var(--primary)", fontWeight: 600, textTransform: "uppercase", fontSize: "0.65rem", letterSpacing: "0.08em" }}>{sec}</span>
+                            <div style={{ marginTop: "0.25rem" }}>
+                              {Object.entries(secData).map(([k, v]) => (
+                                <div key={k}><span style={{ color: "var(--dim)" }}>{k}:</span> {String(v)}</div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen, onToggleApp, onActivate, onSetStatus, onAssignProtocol, onProtocolGenerated, onProtocolStatusChange, onAccountStatusChange, onClientTypeChange, onCoachingTypeChange, onNicknameChange, onRemoveClient, onSuspendClient, onAddPayment, onRemovePayment }: {
   client: StoredUser;
   onBack: () => void;
@@ -2361,6 +2590,11 @@ function CrmPanel({ client, onBack, diagnosticOpen, onToggleDiagnostic, appOpen,
               Saves as a draft. Review it, then send.
             </p>
           </div>
+        </div>
+
+        {/* Weekly brief — call prep */}
+        <div id="crm-weekly" style={{ paddingTop: "1rem", borderTop: "1px solid var(--border)" }}>
+          <WeeklyBriefSection email={client.email} />
         </div>
 
         {/* Recent trackers */}
